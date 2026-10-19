@@ -139,8 +139,6 @@ public class ScribeAssignmentStoreTests
     [Fact]
     public void TryCreateAccepted_CanThenComplete_LikeAnyInRangeAssignment()
     {
-        // Post-accept behavior is otherwise unchanged: Discard is
-        // legal from Accepted exactly as it would be for a normal record.
         var store = new ScribeAssignmentStore();
         var id = Guid.NewGuid();
         Assert.True(store.TryCreateAccepted(id, Assigner, Assignee, "Chop 10 logs",
@@ -152,9 +150,6 @@ public class ScribeAssignmentStoreTests
     [Fact]
     public void Decline_CreatesNoRecord_NoStoreCallInvolved()
     {
-        // Declining a Task Notice consumes the item client/server-side with no ScribeAssignmentStore
-        // interaction at all — there is nothing for this store to do, so
-        // this test documents the invariant: an empty store stays empty.
         var store = new ScribeAssignmentStore();
         Assert.Empty(store.Sent(Assigner));
         Assert.Empty(store.Received(Assignee));

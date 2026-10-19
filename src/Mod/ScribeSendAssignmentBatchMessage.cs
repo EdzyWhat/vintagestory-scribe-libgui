@@ -4,24 +4,21 @@ using ProtoBuf;
 namespace Scribe;
 
 /// <summary>
-/// One selected row of a multi-item assignment batch.
-/// Carries the same full <c>ScribeBlock</c> shape <see cref="Scribe.Core.ScribeAssignmentStore.TryCreate"/>'s
-/// broadened signature accepts, so the server can build a Task/Tracker/Link/Craft assignment from it with
-/// no per-kind special-casing on the wire.
+/// One selected row of a multi-item assignment batch. Carries the full <c>ScribeBlock</c> shape that
+/// <see cref="Scribe.Core.ScribeAssignmentStore.TryCreate"/> accepts, so the server builds any kind
+/// without per-kind special-casing on the wire.
 /// </summary>
 [ProtoContract]
 public sealed class ScribeAssignmentBatchRow
 {
-    /// <summary>Fresh id for the NEW assignment this row becomes — client-minted, distinct from
-    /// <see cref="SourceTaskId"/> (this row's identity in the staged source document). Reusing the source
-    /// TaskId here would collide if the same staged row is ever sent again in a later batch (an
-    /// assignment id must be fresh — see <c>ScribeAssignmentStore.TryCreate</c>).</summary>
+    /// <summary>Fresh, client-minted id for the NEW assignment this row becomes. Distinct from
+    /// <see cref="SourceTaskId"/>: reusing the source id would collide if the same staged row is sent
+    /// again (an assignment id must be fresh, see <c>ScribeAssignmentStore.TryCreate</c>).</summary>
     [ProtoMember(1)]
     public byte[]? AssignmentId { get; set; }
 
-    /// <summary>This row's TaskId in the staged source document — used only when the batch's
-    /// <see cref="ScribeSendAssignmentBatchMessage.DeleteFromSource"/> is true, to find and remove the
-    /// exact row from the staged item's document. Null/absent is harmless when the flag is false.</summary>
+    /// <summary>This row's TaskId in the staged source document; used only when
+    /// <see cref="ScribeSendAssignmentBatchMessage.DeleteFromSource"/> is true, to remove the exact row.</summary>
     [ProtoMember(2)]
     public byte[]? SourceTaskId { get; set; }
 
@@ -55,25 +52,22 @@ public sealed class ScribeAssignmentBatchRow
 
 /// <summary>
 /// Client → server: send a multi-item assignment batch from the Create Assignments tab's staging slot.
-/// Addressed by the Assignment Desk's block position + staging slot
-/// index — like <see cref="ScribeTranscribeCopyMessage"/>, this operates on a whole item sitting in a
-/// specific block's inventory, not a DocId.
+/// Addressed by the Assignment Desk's block position + staging slot index (like
+/// <see cref="ScribeTranscribeCopyMessage"/>, it operates on a whole item in a block's inventory, not a DocId).
 ///
-/// The server creates one independent <see cref="Scribe.Core.ScribeAssignment"/> record per
-/// <see cref="Rows"/> entry, all addressed to <see cref="TargetPlayerUid"/> — no bundling identifier. When
-/// <see cref="DeleteFromSource"/> is true,
-/// every successfully-created row is also removed from the staged document afterward (a move, not a
-/// copy); when false (the default), the staged document is left untouched.
+/// The server creates one independent <see cref="Scribe.Core.ScribeAssignment"/> per <see cref="Rows"/>
+/// entry, all addressed to <see cref="TargetPlayerUid"/>. When <see cref="DeleteFromSource"/> is true each
+/// successfully-created row is also removed from the staged document (a move, not a copy).
 /// </summary>
 [ProtoContract]
 public sealed class ScribeSendAssignmentBatchMessage
 {
-    /// <summary>The Assignment Desk block position — the three coordinates of its <c>BlockPos</c>.</summary>
+    /// <summary>The Assignment Desk block position (<c>BlockPos</c> coordinates).</summary>
     [ProtoMember(1)] public int X { get; set; }
     [ProtoMember(2)] public int Y { get; set; }
     [ProtoMember(3)] public int Z { get; set; }
 
-    /// <summary>Inventory slot index of the staged item on that Assignment Desk.</summary>
+    /// <summary>Inventory slot index of the staged item on that Desk.</summary>
     [ProtoMember(4)]
     public int StagingSlot { get; set; }
 
@@ -81,28 +75,25 @@ public sealed class ScribeSendAssignmentBatchMessage
     [ProtoMember(5)]
     public string? TargetPlayerUid { get; set; }
 
-    /// <summary>Move-not-copy: remove every successfully-sent row from the staged document afterward.
-    /// UI-only session state client-side, defaulting false and reset every send — never a
-    /// saved preference.</summary>
+    /// <summary>Move-not-copy: remove every successfully-sent row from the staged document. Client-side
+    /// session state that resets every send, never a saved preference.</summary>
     [ProtoMember(6)]
     public bool DeleteFromSource { get; set; }
 
     [ProtoMember(7)]
     public List<ScribeAssignmentBatchRow>? Rows { get; set; }
 
-    /// <summary>Which document <see cref="DeleteFromSource"/> should remove rows from: false (default) — the staging slot's ItemStack-
-    /// embedded document, via the existing <c>TryRemoveStagedRows</c> path; true — the Assignment Desk
-    /// block entity's own persisted document (the Desk's Read/Editor tabs), via the
-    /// <c>TryRemoveDeskOwnRows</c> path. Ignored entirely when <see cref="DeleteFromSource"/> is false.</summary>
+    /// <summary>Which document <see cref="DeleteFromSource"/> removes rows from: false (default) is the
+    /// staging slot's ItemStack-embedded document (<c>TryRemoveStagedRows</c>); true is the Desk block
+    /// entity's own document (<c>TryRemoveDeskOwnRows</c>). Ignored when <see cref="DeleteFromSource"/> is false.</summary>
     [ProtoMember(8)]
     public bool SourceIsDeskDocument { get; set; }
 
-    /// <summary>The delivery-mode toggle's position at send time: <see cref="Scribe.Core.ScribeDeliveryChoice.LocalInboxes"/>
+    /// <summary>The delivery-mode toggle at send time: <see cref="Scribe.Core.ScribeDeliveryChoice.LocalInboxes"/>
     /// (0, default) or <see cref="Scribe.Core.ScribeDeliveryChoice.SendNotice"/> (1). The server never
-    /// trusts this alone — it re-derives whether a notice is actually required via
-    /// <see cref="Scribe.Core.ScribeDeliveryPolicy.RequiresNotice"/> against its OWN current
-    /// `DeliveryMode`, so a stale/spoofed client value can't bypass an `AlwaysPhysical` server or force a
-    /// notice on an `AlwaysInstant` one.</summary>
+    /// trusts it alone: it re-derives whether a notice is required via
+    /// <see cref="Scribe.Core.ScribeDeliveryPolicy.RequiresNotice"/> against its OWN `DeliveryMode`, so a
+    /// stale or spoofed value cannot bypass `AlwaysPhysical` or force a notice on `AlwaysInstant`.</summary>
     [ProtoMember(9)]
     public byte DeliveryChoice { get; set; }
 }

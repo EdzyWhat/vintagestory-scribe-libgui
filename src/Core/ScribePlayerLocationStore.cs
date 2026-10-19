@@ -3,29 +3,23 @@ using System.Text;
 namespace Scribe.Core;
 
 /// <summary>
-/// Server-side owner of every player's last-known world position, captured on logout
-/// (`assignment-delivery-mode` capability's logout-capture requirement) — the Hybrid range check's
-/// only source of position for an offline target. Overwritten on every subsequent logout; never
-/// updated while a player remains online, or while they remain offline between two logouts.
-///
-/// Game-agnostic (pure BCL, via <see cref="ScribeWorldPosition"/>) so it's unit-testable without a
-/// game install; the Mod layer's <c>OnPlayerDisconnect</c> hook calls into it and owns its savegame
-/// persistence, mirroring <see cref="ScribeAssignmentStore"/>/<c>ScribePinStore</c>'s pattern.
+/// Server-side owner of every player's last-known world position, captured on logout; the Hybrid range
+/// check's only position source for an offline target. Overwritten on each logout, never updated while
+/// online. Pure BCL; the Mod layer's <c>OnPlayerDisconnect</c> hook calls it and owns persistence,
+/// mirroring <see cref="ScribeAssignmentStore"/>/<c>ScribePinStore</c>.
 /// </summary>
 public sealed class ScribePlayerLocationStore
 {
     private readonly Dictionary<string, ScribeWorldPosition> _lastKnown = new();
 
-    /// <summary>Records <paramref name="playerUid"/>'s current position as their last-known one,
-    /// overwriting any prior value. A no-op for a blank uid.</summary>
+    /// <summary>Records the player's position as last-known, overwriting any prior value. No-op for a blank uid.</summary>
     public void SetLastKnown(string playerUid, ScribeWorldPosition position)
     {
         if (string.IsNullOrWhiteSpace(playerUid)) return;
         _lastKnown[playerUid] = position;
     }
 
-    /// <summary>The player's last-captured position, or false if they have never disconnected while
-    /// this store has been tracking them.</summary>
+    /// <summary>The player's last-captured position, or false if never recorded.</summary>
     public bool TryGetLastKnown(string playerUid, out ScribeWorldPosition position)
         => _lastKnown.TryGetValue(playerUid, out position);
 
@@ -34,7 +28,7 @@ public sealed class ScribePlayerLocationStore
     private static readonly byte[] Magic = "SPLC"u8.ToArray();
     private const byte Version = 1;
 
-    /// <summary>Serializes every tracked player's last-known position for the savegame blob.</summary>
+    /// <summary>Serializes every tracked position for the savegame blob.</summary>
     public byte[] Serialize()
     {
         using var ms = new MemoryStream();
@@ -54,8 +48,7 @@ public sealed class ScribePlayerLocationStore
         return ms.ToArray();
     }
 
-    /// <summary>Replaces the in-memory store from the persisted blob (called on world load). A
-    /// null/malformed blob leaves the store empty rather than throwing.</summary>
+    /// <summary>Replaces the store from the persisted blob; a null or malformed blob leaves it empty.</summary>
     public void LoadFrom(byte[]? bytes)
     {
         _lastKnown.Clear();

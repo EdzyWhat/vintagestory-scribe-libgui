@@ -1,21 +1,15 @@
-// Production multi-line editable field for the LibGUI lectern editor view
-// (LibGUI port of the native row input): LibGUI's stock TextField is single-line and
-// `internal`, so this REIMPLEMENTS a wrapping, auto-growing, focus-holding editable field on
-// LibGUI's PUBLIC API, mirroring LibGUI's own TextField/RenderTextField architecture:
-//   • ScribeMultilineFieldRender : RenderBox — wraps text to width, sizes height to line count
-//     (the auto-grow), and paints selection + lines + caret via PaintingContext.DrawBox/DrawText.
+// Production multi-line editable field for the LibGUI lectern editor view. LibGUI's stock TextField is
+// single-line and `internal`, so this reimplements a wrapping, auto-growing, focus-holding field on LibGUI's
+// PUBLIC API:
+//   • ScribeMultilineFieldRender : RenderBox — wraps text, sizes height to line count, paints selection/lines/caret.
 //   • ScribeMultilineFieldRenderWidget : RenderObjectWidget — the create/update bridge.
-//   • ScribeMultilineField : StatefulWidget, IFocusable + its State : IKeyCharHandler,
-//     IKeyDownHandler — owns the (text, caret, selection-anchor) model, focuses on click via a
-//     GestureDetector, and coordinates cross-row commit/navigation through callbacks.
+//   • ScribeMultilineField : StatefulWidget + its State — owns the (text, caret, selection-anchor) model.
 //
-// Keyboard model ported from the native ScribeRowTextInput: Enter = commit-and-advance (never a
-// newline), Shift+Enter = hard line break (grows the row), Shift+Tab = commit-and-retreat, Esc
-// bubbles (not handled → closes the dialog). Caret nav: Left/Right/Home/End, Ctrl/Alt word-skip,
-// Shift extends the selection. Clipboard: Ctrl+A/C/X/V. Because LibGUI's KeyboardEvent carries no
-// Command modifier (only Shift/Ctrl/Alt), the macOS Cmd combos (Cmd+Arrow line-ends, Cmd+C/V/X/A)
-// are translated into these Windows-style combos one layer up, in the dialog's OnKeyDown override
-// (see GuiDialogScribeLecternLibGui) — this widget stays platform-agnostic.
+// Keyboard model: Enter = commit-and-insert-task-below (never a newline), Shift+Enter = hard line break,
+// Tab / Shift+Tab = commit-and-advance / retreat, Esc bubbles (closes the dialog). Caret nav: Left/Right/
+// Home/End, Ctrl/Alt word-skip, Shift extends the selection. Clipboard: Ctrl+A/C/X/V. LibGUI's
+// KeyboardEvent has no Command modifier, so macOS Cmd combos are translated to Ctrl combos one layer up
+// (the dialog's OnKeyDown override); this widget stays platform-agnostic.
 
 using System;
 using System.Collections.Generic;
@@ -33,26 +27,18 @@ using Vintagestory.API.Client;    // GlKeys
 
 namespace Scribe;
 
-/// <summary>One wrapped display line: its text and the offset of its first character in the source
-/// text. <see cref="Start"/> + <see cref="Text"/>.Length gives the offset just past the line's last
-/// character; the source separator consumed by a soft wrap (a space) or a hard break (a '\n') sits
-/// between one line's end and the next line's <see cref="Start"/>.</summary>
+/// <summary>One wrapped display line: its text and the offset of its first character in the source text.
+/// The separator consumed by a soft wrap (space) or hard break ('\n') sits between one line's end and the
+/// next line's <see cref="Start"/>.</summary>
 internal readonly record struct ScribeVisualLine(string Text, int Start);
 
 /// <summary>The render object: wraps + paints multi-line text, a selection highlight, and a caret,
-/// auto-sizing its height to the wrapped line count. Implements <see cref="IScribeEditableTextRender"/>
-/// so the field State can drive it or the cuneiform render object through
-/// one contract.</summary>
+/// auto-sizing its height to the wrapped line count.</summary>
 internal sealed class ScribeMultilineFieldRender : Gui.Core.Framework.RenderBox, IScribeEditableTextRender
 {
-    /// <summary>Font family used for BOTH measuring and drawing this field's text. It MUST match the
-    /// family the read view's <see cref="Gui.Widgets.Basic.Text"/> uses for the same row, or the two views
-    /// resolve different typefaces with different line metrics and a single-line row ends up a couple of
-    /// pixels taller in one view than the other — which then also makes the pixel-based scroll-offset
-    /// restore across a view switch land on a slightly different row. Passing "" here resolves to a
-    /// DIFFERENT system typeface than "sans-serif" (a ~2px read/edit mismatch), so the
-    /// setter coalesces null/empty to the "sans-serif" default. The player's task-font choice flows in
-    /// here AND into the read row's TextStyle via the same resolver (<c>ScribeTaskFont.Resolve</c>), keeping the two views on one family.</summary>
+    /// <summary>Font family for BOTH measuring and drawing. It must match the read view's family for the same
+    /// row, or the views get different line metrics (row heights and scroll restore drift). "" resolves to a
+    /// different typeface than "sans-serif" (~2px mismatch), so the setter coalesces null/empty to it.</summary>
     private string fontFamily = "sans-serif";
 
     private string text = "";
@@ -69,26 +55,21 @@ internal sealed class ScribeMultilineFieldRender : Gui.Core.Framework.RenderBox,
     private float padX = 8f;
     private float padY = 6f;
 
-    // Cached wrap result from the last PerformLayout, reused by PaintInternal so layout and paint
-    // agree on the exact line breaks (and their source offsets).
+    // Wrap result from the last PerformLayout, reused by PaintInternal so both agree on line breaks.
     private readonly List<ScribeVisualLine> visualLines = new();
     private float lineHeight = 18f;
 
     public string Text { get => text; set => SetProperty(ref text, value ?? "", relayout: true); }
-    /// <summary>Ghost hint text painted (dimmed) only when the field is empty — a "New task…" affordance
-    /// for a freshly-created empty task. It is NOT part of the editable text (never wrapped, measured for
-    /// height, or committed); it is drawn in place of the (absent) real text on the first line.</summary>
+    /// <summary>Dimmed hint painted only when the field is empty; not part of the editable text.</summary>
     public string Placeholder { get => placeholder; set => SetProperty(ref placeholder, value ?? "", repaint: true); }
     public int Caret { get => caret; set => SetProperty(ref caret, value, repaint: true); }
     public int SelectionAnchor { get => selectionAnchor; set => SetProperty(ref selectionAnchor, value, repaint: true); }
     public bool FieldHasFocus { get => hasFocus; set => SetProperty(ref hasFocus, value, repaint: true); }
-    /// <summary>Blink gate: false paints no caret (the OFF half of the blink), driven by the shared caret
-    /// ticker in <see cref="ScribeMultilineFieldState"/>. Focus still gates whether a caret exists at all;
-    /// a live selection keeps the caret solid (the State pins this true), mirroring LibGUI's TextField.</summary>
+    /// <summary>Blink gate: false paints no caret (the OFF half of the blink). Focus still gates whether a
+    /// caret exists; a live selection keeps it solid.</summary>
     public bool CaretVisible { get => caretVisible; set => SetProperty(ref caretVisible, value, repaint: true); }
     public float FontSize { get => fontSize; set => SetProperty(ref fontSize, value, relayout: true); }
-    /// <summary>Task-text font family. Coalesces null/empty to "sans-serif" so an
-    /// unset value keeps the built-in body face; changing it relayouts (family changes line metrics).</summary>
+    /// <summary>Task-text font family; null/empty coalesces to "sans-serif". Changing it relayouts.</summary>
     public string FontFamily { get => fontFamily; set => SetProperty(ref fontFamily, string.IsNullOrEmpty(value) ? "sans-serif" : value, relayout: true); }
     public float PadX { get => padX; set => SetProperty(ref padX, value, relayout: true); }
     public float PadY { get => padY; set => SetProperty(ref padY, value, relayout: true); }
@@ -97,9 +78,7 @@ internal sealed class ScribeMultilineFieldRender : Gui.Core.Framework.RenderBox,
     public Vector4 CaretColor { get => caretColor; set => SetProperty(ref caretColor, value, repaint: true); }
     public Vector4 SelectionColor { get => selectionColor; set => SetProperty(ref selectionColor, value, repaint: true); }
 
-    /// <summary>Point size to draw/wrap at so glyphs match the player's optical size. Layout height
-    /// still uses <see cref="ScribeTaskFont.LineHeight"/> of the nominal size — optical must not go
-    /// into this field's laid-out height.</summary>
+    /// <summary>Point size to draw/wrap at (optical size). Layout height uses the nominal size only.</summary>
     private float DrawSize => ScribeTaskFont.EffectiveSize(fontFamily, fontSize);
 
     /// <summary>Glyph-only vertical nudge; caret and selection stay on the Caudex line-box.</summary>
@@ -114,13 +93,12 @@ internal sealed class ScribeMultilineFieldRender : Gui.Core.Framework.RenderBox,
         lineHeight = ScribeTaskFont.LineHeight(fontSize);
 
         float height = visualLines.Count * lineHeight + PadY * 2;
-        // Fill the available width (so it looks like a field); height follows content = auto-grow.
+        // Fill the available width; height follows content (auto-grow).
         Size = Constraints.Constrain(new Vector2(availWidth, height));
     }
 
     protected override void PaintInternal(PaintingContext context)
     {
-        // Draw the box (fill/border/corners) via the base, which reads Color/BorderThickness/etc.
         base.PaintInternal(context);
         if (context.Canvas == null)
         {
@@ -130,7 +108,7 @@ internal sealed class ScribeMultilineFieldRender : Gui.Core.Framework.RenderBox,
         int selStart = Math.Min(caret, selectionAnchor);
         int selEnd = Math.Max(caret, selectionAnchor);
 
-        // Selection highlight first, so it sits BEHIND the text (mirrors RenderTextField).
+        // Selection first, so it sits behind the text.
         if (hasFocus && selEnd > selStart)
         {
             for (int i = 0; i < visualLines.Count; i++)
@@ -151,12 +129,10 @@ internal sealed class ScribeMultilineFieldRender : Gui.Core.Framework.RenderBox,
             }
         }
 
-        // Text baseline: first line sits PadY down; DrawText's Y is the baseline, so add ascent.
+        // DrawText's Y is the baseline, so add ascent.
         float ascent = lineHeight * 0.8f;
 
-        // Ghost placeholder: when there is no real text, paint the dimmed hint on the first line in place
-        // of the (absent) content. Drawn before the real-text loop so a stray empty visual line can't
-        // overpaint it, and gated on empty text so it never sits behind typed characters.
+        // Drawn before the text loop and only when empty, so it never sits behind typed characters.
         if (text.Length == 0 && placeholder.Length > 0)
         {
             ScribeGlyphFallback.DrawLine(context, placeholder, new Vector2(PadX, PadY + ascent + GlyphOffsetY), DrawSize, placeholderColor, FontFamily, FontWeight.Normal);
@@ -165,12 +141,10 @@ internal sealed class ScribeMultilineFieldRender : Gui.Core.Framework.RenderBox,
         for (int i = 0; i < visualLines.Count; i++)
         {
             float y = PadY + i * lineHeight + ascent + GlyphOffsetY;
-            // DrawLine (not context.DrawText) so a stored ←/→ that the active font lacks renders in the
-            // fallback family instead of tofu; a no-arrow line takes DrawLine's single-draw fast path.
+            // DrawLine (not context.DrawText) so a stored ←/→ the active font lacks renders in the fallback family.
             ScribeGlyphFallback.DrawLine(context, visualLines[i].Text, new Vector2(PadX, y), DrawSize, textColor, FontFamily, FontWeight.Normal);
         }
 
-        // Caret: map the flat caret offset onto (line, column) of the wrapped text, then draw a bar.
         if (hasFocus && caretVisible)
         {
             (int line, int col) = CaretToLineCol(caret);
@@ -181,16 +155,13 @@ internal sealed class ScribeMultilineFieldRender : Gui.Core.Framework.RenderBox,
         }
     }
 
-    // Route through the same arrow-fallback split DrawLine uses, so a redirected ←/→ is measured in the
-    // font it is actually drawn in — otherwise caret/selection x would drift by the arrow's advance delta
-    // between the active font's (absent) arrow and the fallback font's. No-arrow strings hit the fast path
-    // and measure identically to TextLayoutHelper.MeasureText.
+    // Routes through the same arrow-fallback split DrawLine uses, so caret/selection x doesn't drift by the
+    // arrow's advance delta between the active and fallback fonts.
     private float MeasureWidth(string s) =>
         s.Length == 0 ? 0f : ScribeGlyphFallback.MeasureWidth(s, DrawSize, FontFamily, FontWeight.Normal);
 
-    // Greedy word-wrap to a pixel width, honoring explicit '\n', recording each visual line's source
-    // offset so the caret/selection can map flat offsets onto (line, column). Public API only
-    // (MeasureText); LibGUI's BreakIntoLines is internal.
+    // Greedy word-wrap to a pixel width honoring '\n', recording each line's source offset (LibGUI's
+    // BreakIntoLines is internal).
     private static void WrapInto(List<ScribeVisualLine> outLines, string s, float maxWidth, float fontSize, string fontFamily)
     {
         outLines.Clear();
@@ -239,9 +210,7 @@ internal sealed class ScribeMultilineFieldRender : Gui.Core.Framework.RenderBox,
         }
     }
 
-    // Map a flat caret offset in the source text onto a (visualLine, column). A caret that lands in a
-    // separator consumed between two lines (a soft-wrap space or a hard '\n') is attached to the end
-    // of the earlier line.
+    // Maps a source offset to (visualLine, column); a caret in a consumed separator attaches to the earlier line's end.
     private (int, int) CaretToLineCol(int offset)
     {
         offset = Math.Clamp(offset, 0, text.Length);
@@ -251,7 +220,6 @@ internal sealed class ScribeMultilineFieldRender : Gui.Core.Framework.RenderBox,
             int lineEnd = lineStart + visualLines[i].Text.Length;
             if (offset < lineStart)
             {
-                // In a consumed separator before this line → end of the previous line.
                 int prev = Math.Max(0, i - 1);
                 return (prev, visualLines[prev].Text.Length);
             }
@@ -264,9 +232,7 @@ internal sealed class ScribeMultilineFieldRender : Gui.Core.Framework.RenderBox,
         return (last, visualLines.Count > 0 ? visualLines[last].Text.Length : 0);
     }
 
-    /// <summary>Caret vertical extent in LOCAL space (top + line height), matching the bar
-    /// <see cref="PaintInternal"/> draws (<c>PadY + line * lineHeight</c>). Returns false before layout has
-    /// produced a line height.</summary>
+    /// <summary>Caret vertical extent in LOCAL space, matching the painted bar. False before layout.</summary>
     public bool TryGetCaretRect(out float localTop, out float height)
     {
         if (lineHeight <= 0f)
@@ -282,19 +248,13 @@ internal sealed class ScribeMultilineFieldRender : Gui.Core.Framework.RenderBox,
         return true;
     }
 
-    /// <summary>Inverse of the caret paint math: map a click point in the render object's LOCAL space
-    /// (post-<c>GlobalToLocal</c>) onto the nearest flat caret offset in the source text. Picks the
-    /// visual line by Y (clamped to the first/last line), then within that line walks characters and
-    /// returns the boundary nearest the click X (so clicking in the left half of a glyph lands the caret
-    /// before it, the right half after). Returns the source offset of that (line, column), so the caret
-    /// sits exactly where CaretToLineCol/PaintInternal would draw it. Uses the cached <see cref="visualLines"/>
-    /// from the last layout, so it must be called after a layout pass (always true for a click on a
-    /// mounted field).</summary>
+    /// <summary>Inverse of the caret paint math: maps a LOCAL-space click point to the nearest source offset
+    /// (line by clamped Y, then nearest character boundary by X). Uses the cached <see cref="visualLines"/>,
+    /// so call it after a layout pass.</summary>
     public int OffsetAtPosition(Vector2 local)
     {
         if (visualLines.Count == 0) return 0;
 
-        // Which wrapped line: the click Y minus the top pad, divided by line height, clamped in range.
         int line = (int)Math.Floor((local.Y - PadY) / lineHeight);
         line = Math.Clamp(line, 0, visualLines.Count - 1);
 
@@ -302,8 +262,6 @@ internal sealed class ScribeMultilineFieldRender : Gui.Core.Framework.RenderBox,
         int lineStart = visualLines[line].Start;
         float targetX = local.X - PadX;
 
-        // Left of the text → line start. Otherwise find the character boundary whose X is closest to the
-        // click, measuring the prefix width up to each boundary (same MeasureWidth the paint path uses).
         if (targetX <= 0f) return lineStart;
 
         int bestCol = 0;
@@ -319,8 +277,7 @@ internal sealed class ScribeMultilineFieldRender : Gui.Core.Framework.RenderBox,
             }
             else if (x > targetX)
             {
-                // Widths are monotonically increasing, so once we've passed the click and started
-                // getting farther, the nearest boundary is behind us — stop.
+                // Widths increase monotonically; once past the click and getting farther, stop.
                 break;
             }
         }
@@ -328,14 +285,9 @@ internal sealed class ScribeMultilineFieldRender : Gui.Core.Framework.RenderBox,
         return lineStart + bestCol;
     }
 
-    /// <summary>Move a caret offset one visual line up (<paramref name="direction"/> = -1) or down (+1),
-    /// landing on the column nearest the caret's current X — the vertical analogue of
-    /// <see cref="OffsetAtPosition"/>. Derives the caret's live X from the same paint math
-    /// (<c>PadX + MeasureWidth(prefix)</c>), then reuses <see cref="OffsetAtPosition"/> at that X on the
-    /// target line, so the caret lands exactly where a click there would. Edges follow desktop editors:
-    /// Up on the first line goes to the text start (0), Down on the last line to the text end. There is no
-    /// preferred-column memory across presses (the target X is read fresh each call) — see design.md.
-    /// Valid only after a layout pass (like the click path); a focused, painted field always satisfies this.</summary>
+    /// <summary>Moves a caret offset one visual line up (-1) or down (+1), landing on the column nearest the
+    /// caret's current X. Up on the first line goes to 0, Down on the last to the text end. No
+    /// preferred-column memory across presses. Valid only after a layout pass.</summary>
     public int CaretOffsetVertical(int fromCaret, int direction)
     {
         if (visualLines.Count == 0) return 0;
@@ -347,13 +299,13 @@ internal sealed class ScribeMultilineFieldRender : Gui.Core.Framework.RenderBox,
 
         string curText = visualLines[line].Text;
         float caretX = PadX + MeasureWidth(curText.Substring(0, Math.Min(col, curText.Length)));
-        // Aim at the vertical middle of the target line so OffsetAtPosition's Y→line pick lands on it.
+        // Aim at the target line's vertical middle.
         float targetY = PadY + (targetLine + 0.5f) * lineHeight;
         return OffsetAtPosition(new Vector2(caretX, targetY));
     }
 }
 
-/// <summary>RenderObjectWidget bridge: pushes text/caret/selection/focus/colors into the render object.</summary>
+/// <summary>RenderObjectWidget bridge into <see cref="ScribeMultilineFieldRender"/>.</summary>
 internal sealed class ScribeMultilineFieldRenderWidget : RenderObjectWidget
 {
     public ScribeMultilineFieldRenderWidget(string text, string placeholder, int caret, int selectionAnchor, bool hasFocus,
@@ -425,10 +377,9 @@ internal sealed class ScribeMultilineFieldRenderWidget : RenderObjectWidget
     }
 }
 
-/// <summary>Display-only Latin task/note text using the same render object as the editor field, so
-/// Read and Edit share wrap, Caudex line-box height, optical draw size, and <c>OffsetEm</c>. Stock
-/// <c>Text</c> plus a paint-only <c>Transform.Scale</c> scaled the whole block (glyphs <em>and</em>
-/// line gap) and crushed multi-line Read rows. No caret, no field chrome.</summary>
+/// <summary>Display-only Latin task/note text using the editor's render object, so Read and Edit share wrap,
+/// line-box height, optical draw size, and <c>OffsetEm</c> (a paint-only <c>Transform.Scale</c> would scale
+/// the line gap too and crush multi-line rows). No caret, no chrome.</summary>
 internal static class ScribeTaskTextDisplay
 {
     public static Widget Build(string text, ScribeRowStyle style, Vector4 ink) =>
@@ -454,9 +405,9 @@ internal static class ScribeTaskTextDisplay
 }
 
 /// <summary>
-/// A focusable multi-line editable field with a (text, caret, selection) model. Owns its text while
-/// alive (the editor's scratch document mirrors it via <see cref="OnChanged"/>); a full dialog
-/// rebuild recreates the field, re-seeding from <see cref="InitialText"/>.
+/// A focusable multi-line editable field with a (text, caret, selection) model. It owns its text while alive
+/// (the editor's scratch document mirrors it via <see cref="OnChanged"/>); a dialog rebuild re-seeds from
+/// <see cref="InitialText"/>.
 /// </summary>
 public sealed class ScribeMultilineField : StatefulWidget, IFocusable
 {
@@ -523,99 +474,63 @@ public sealed class ScribeMultilineField : StatefulWidget, IFocusable
     }
 
     public string InitialText { get; }
-    /// <summary>Ghost hint painted (dimmed) while the field is empty (e.g. "New task…"); empty string
-    /// disables it. Not part of the editable/committed text — see <see cref="ScribeMultilineFieldRender.Placeholder"/>.</summary>
+    /// <summary>Dimmed hint while empty; empty string disables it. Not part of the committed text.</summary>
     public string Placeholder { get; }
     public FocusNode? FocusNode { get; }
     public float FontSize { get; }
-    /// <summary>Task-text font family; defaults to "sans-serif" (the built-in
-    /// body face). Must match the read row's resolved family so the two views keep identical line metrics.</summary>
+    /// <summary>Task-text font family; must match the read row's resolved family for identical line metrics.</summary>
     public string FontFamily { get; }
-    /// <summary>Internal horizontal padding for the field's text box (pixels). Fed from
-    /// <see cref="ScribeRowStyle.FieldPadX"/> so the read view can match the same inset.</summary>
+    /// <summary>Horizontal text padding in pixels (<see cref="ScribeRowStyle.FieldPadX"/>, so the read view matches).</summary>
     public float PadX { get; }
-    /// <summary>Internal vertical padding for the field's text box (pixels). Fed from
-    /// <see cref="ScribeRowStyle.FieldPadY"/> so single-line row heights match across views.</summary>
+    /// <summary>Vertical text padding in pixels (<see cref="ScribeRowStyle.FieldPadY"/>, so row heights match across views).</summary>
     public float PadY { get; }
-    /// <summary>Optional override for this field's FOCUSED border color. Null → the field lights its focus
-    /// border with the theme's <c>Primary</c> accent (the default on every light surface). The Chalkboard
-    /// passes a chalk-white here (via <see cref="ScribeRowStyle.InputFocusBorderColor"/> / the dialog's
-    /// <c>InputFocusBorderColor</c> seam) so its focused inputs don't outline in the forest-green <c>Primary</c>.
-    /// At rest the border is unchanged (<c>Border</c>); only the focused color is overridden.</summary>
+    /// <summary>Optional FOCUSED border color; null uses the theme's <c>Primary</c>. The Chalkboard overrides it
+    /// (via <see cref="ScribeRowStyle.InputFocusBorderColor"/>) to avoid a forest-green outline.</summary>
     public Vector4? FocusBorderColor { get; }
-    /// <summary>Request focus as soon as this field mounts. LibGUI has no focus-traversal API, so the
-    /// editor content coordinates focus among rows manually; a freshly built row that should be
-    /// focused (e.g. after Add Task or entering editor mode) sets this to focus itself on mount.</summary>
+    /// <summary>Request focus on mount. LibGUI has no focus traversal, so the editor coordinates focus among rows manually.</summary>
     public bool AutoFocus { get; }
-    /// <summary>Optional maximum character count. When set, typing and paste are clamped so the field's
-    /// text never exceeds it (a maxlength affordance) — Task rows use <c>MaxTaskTextLength</c> (1,000) and
-    /// Note rows use the larger <c>MaxTextLength</c> (10,000). null leaves the field uncapped. The codec also
-    /// clips on read as the authoritative backstop, so this is the in-editor UX half; hitting it also fires
-    /// <see cref="OnMaxLengthReached"/> so the editor can explain the cap.</summary>
+    /// <summary>Optional max character count; typing and paste are clamped to it. Hitting it fires
+    /// <see cref="OnMaxLengthReached"/>. The codec also clips on read as the authoritative backstop.</summary>
     public int? MaxLength { get; }
-    /// <summary>When true (tablet only), the field paints its buffer as live cuneiform strokes with a
-    /// synthetic caret instead of the normal TTF text — the same State drives a cuneiform render object.
-    /// Default false keeps the Lectern/Notebook editors on the normal renderer, and the disable-cuneiform
-    /// fallback flows in as false so those surfaces revert to a legible editable field.</summary>
+    /// <summary>Tablet only: paints the buffer as live cuneiform strokes with a synthetic caret via a
+    /// cuneiform render object. False keeps the normal renderer (and is the disable-cuneiform fallback).</summary>
     public bool UseCuneiform { get; }
-    /// <summary>Parsed cuneiform glyph geometry for the <see cref="UseCuneiform"/> path; null renders no
-    /// strokes (asset not yet loaded). Ignored when <see cref="UseCuneiform"/> is false.</summary>
+    /// <summary>Cuneiform glyph geometry; null renders no strokes (asset not loaded). Ignored unless <see cref="UseCuneiform"/>.</summary>
     public GlyphBundle? CuneiformBundle { get; }
-    /// <summary>Hand-written jitter strength (0..1) for the cuneiform path; 0 = crisp. Ignored when
-    /// <see cref="UseCuneiform"/> is false.</summary>
+    /// <summary>Hand-written jitter strength (0..1); 0 = crisp. Ignored unless <see cref="UseCuneiform"/>.</summary>
     public float CuneiformJitter { get; }
-    /// <summary>Fixed per-field base seed for the cuneiform jitter, so this field's letters wobble
-    /// consistently and typing does not reseed the letters already on screen. Ignored when
-    /// <see cref="UseCuneiform"/> is false.</summary>
+    /// <summary>Fixed per-field jitter seed, so typing does not reseed letters already on screen.</summary>
     public int CuneiformJitterSeed { get; }
-    /// <summary>Whole-character rotation in degrees for the cuneiform path;
-    /// 0 = upright. Ignored when <see cref="UseCuneiform"/> is false. Applied after jitter, at paint time.</summary>
+    /// <summary>Whole-character rotation in degrees, applied after jitter at paint time.</summary>
     public float CuneiformRotation { get; }
-    /// <summary>Whether newly-typed cuneiform text presses in stroke-by-stroke (per-letter progression).
-    /// Ignored when <see cref="UseCuneiform"/> is false; off reproduces the instant reveal.</summary>
+    /// <summary>Whether newly-typed cuneiform presses in stroke-by-stroke; off reveals instantly.</summary>
     public bool CuneiformProgression { get; }
-    /// <summary>Per-material outer glow behind the cuneiform strokes; default
-    /// disabled. Ignored when <see cref="UseCuneiform"/> is false.</summary>
+    /// <summary>Per-material outer glow behind the strokes; default disabled.</summary>
     public CuneiformGlow CuneiformGlow { get; }
-    /// <summary>Per-view cuneiform stroke-weight scale; 1 = base weight.
-    /// Ignored when <see cref="UseCuneiform"/> is false.</summary>
+    /// <summary>Per-view cuneiform stroke-weight scale; 1 = base weight.</summary>
     public float CuneiformStrokeWeightScale { get; }
     public Action<string>? OnChanged { get; }
-    /// <summary>Tab (no Shift): the field has committed its text via <see cref="OnChanged"/>; the
-    /// parent should normalize + flush the row and move focus to the next row.</summary>
+    /// <summary>Tab: the text was committed via <see cref="OnChanged"/>; the parent normalizes and focuses the next row.</summary>
     public Action? OnCommitAndAdvance { get; }
-    /// <summary>Shift+Tab: same as advance but focus moves to the previous row.</summary>
+    /// <summary>Shift+Tab: as advance, but to the previous row.</summary>
     public Action? OnCommitAndRetreat { get; }
-    /// <summary>Enter (no Shift): commit this row, then insert a NEW task directly beneath it and focus
-    /// it. Shift+Enter still inserts a hard line break within the row.</summary>
+    /// <summary>Enter: commit this row, insert a NEW task beneath it and focus it.</summary>
     public Action? OnInsertTaskBelow { get; }
-    /// <summary>Focus lost without an Enter/Shift+Tab (e.g. click-away): commit the row's edit.</summary>
+    /// <summary>Focus lost without Tab/Enter (e.g. click-away): commit the row's edit.</summary>
     public Action? OnBlur { get; }
-    /// <summary>Fired when an insert is clamped by <see cref="MaxLength"/> — a paste truncated to fit, or a
-    /// keystroke that was a no-op because the field is already at the cap. The editor uses this to surface a
-    /// transient "row is limited to N characters" notice; null (no cap, or callers that don't care) is inert.</summary>
+    /// <summary>Fired when <see cref="MaxLength"/> clamps an insert (truncated paste, or a keystroke at the cap).</summary>
     public Action? OnMaxLengthReached { get; }
-    /// <summary>Fired when the caret MOVES by keyboard navigation (arrows / Home / End / word-jump) without
-    /// changing the text — the one caret change that does NOT go through <see cref="OnChanged"/>. The editor
-    /// uses it to follow an off-screen caret with the scroll view (<c>MoveCaret</c> notifies the dialog through
-    /// this callback). NOT fired on a mouse
-    /// click (that lands on a visible pixel and is handled by <see cref="OnPointerFocus"/> instead).</summary>
+    /// <summary>Fired when keyboard navigation moves the caret without changing text (the one caret change that
+    /// skips <see cref="OnChanged"/>), so the editor can scroll it into view. Not fired on a click (see
+    /// <see cref="OnPointerFocus"/>).</summary>
     public Action? OnCaretMoved { get; }
-    /// <summary>Fired when this field is focused by a POINTER PRESS (a click into the row), after the caret is
-    /// placed at the click point. The editor uses it to SUPPRESS the scroll-into-view on click: a click always
-    /// lands on a visible pixel, so the caret is already visible and auto-scrolling to the row top is unwanted.
-    /// Distinct from programmatic focus (Tab/Enter via
-    /// <c>FocusEditorRow</c>), which SHOULD scroll — hence the field, not the shared focus listener, is the seam.</summary>
+    /// <summary>Fired when a pointer press focuses this field, after the caret is placed. The editor uses it to
+    /// suppress scroll-into-view on click (the caret is already visible); programmatic focus (Tab/Enter) still scrolls.</summary>
     public Action? OnPointerFocus { get; }
-    /// <summary>Jump focus to the FIRST row of the note, caret at its start — document-top navigation.
-    /// Fired instead of the one-line <c>CaretVertical(-1)</c> move when Ctrl is held with Up (or with
-    /// Home): on Windows that's the native Ctrl+Up / Ctrl+Home, and on macOS the dialog remaps Cmd+Up
-    /// to Ctrl+Up first. The dialog commits this row, focuses row 0, and places its caret at the
-    /// document start. null on surfaces with a single field
-    /// (e.g. the title input).</summary>
+    /// <summary>Jump to the FIRST row of the note, caret at its start. Fired instead of a one-line move for
+    /// Ctrl+Up / Ctrl+Home (macOS Cmd+Up is remapped to Ctrl+Up by the dialog). Null on single-field surfaces.</summary>
     public Action? OnJumpToFirstRow { get; }
-    /// <summary>Mirror of <see cref="OnJumpToFirstRow"/> — jump focus to the LAST row of the note, caret
-    /// at its end (document-bottom navigation: Ctrl+Down / Ctrl+End, or Cmd+Down on macOS).</summary>
+    /// <summary>Mirror of <see cref="OnJumpToFirstRow"/> for the LAST row, caret at its end (Ctrl+Down / Ctrl+End).</summary>
     public Action? OnJumpToLastRow { get; }
 
     public override State CreateState() => new ScribeMultilineFieldState();
@@ -630,46 +545,36 @@ internal sealed class ScribeMultilineFieldState : State<ScribeMultilineField>, I
     private FocusNode? internalFocusNode;
     private bool hadFocus;
 
-    // ---- Caret blink (mirrors LibGUI's own TextField: a ticker toggles caretVisible on a fixed cadence,
-    // reset to solid on any edit/caret move, paused while a selection is active or focus is lost). Lives
-    // in the shared State so BOTH render paths — the normal field and the cuneiform tablet field — blink
-    // at the identical cadence. ----
-    /// <summary>Blink half-period in milliseconds, matching LibGUI <c>TextField.CursorBlinkMs</c>.</summary>
+    // ---- Caret blink: a ticker toggles caretVisible; reset to solid on any edit/caret move, paused while selecting or unfocused.
+    // Lives in the shared State so both render paths blink identically. ----
+    /// <summary>Blink half-period in ms, matching LibGUI <c>TextField.CursorBlinkMs</c>.</summary>
     private const double CaretBlinkMs = 500;
     private Ticker? caretTicker;
     private bool caretVisible = true;
     private DateTime caretLastToggle = DateTime.MinValue;
 
-    // ---- Cuneiform stroke-progression reveal. Only the newly-typed run
-    // presses in; already-revealed text never replays, and non-append edits (deletion, mid-line change)
-    // snap to fully revealed. Inactive unless UseCuneiform + CuneiformProgression are both on. ----
-    /// <summary>The reveal schedule — a pure stroke-count model (no per-letter slot). Its single speed knob,
-    /// <see cref="Scribe.Core.Cuneiform.CuneiformReveal.PerStrokeMs"/>, lives in Core so the rows and the
-    /// title band share one value and can't drift.</summary>
+    // ---- Cuneiform stroke-progression reveal: only the newly-typed run presses in; non-append edits snap to
+    // fully revealed. Inactive unless UseCuneiform + CuneiformProgression are both on. ----
+    /// <summary>The reveal schedule (pure stroke-count model); its speed knob lives in Core so rows and the title band share it.</summary>
     private static readonly Scribe.Core.Cuneiform.RevealSchedule RevealScheduleShared =
         new(Scribe.Core.Cuneiform.CuneiformReveal.PerStrokeMs);
     private AnimationController? revealController;
-    /// <summary>Whether a reveal is currently animating. When false the field paints every stroke.</summary>
+    /// <summary>Whether a reveal is animating; when false every stroke paints.</summary>
     private bool revealActive;
-    /// <summary>Characters already fully pressed (never re-animated) for the current reveal run.</summary>
+    /// <summary>Characters already fully pressed for the current reveal run.</summary>
     private int revealBaselineChars;
-    /// <summary>The buffer text as of the last reveal decision, so a commit can classify the edit
-    /// (append → animate the suffix; anything else → snap).</summary>
+    /// <summary>Buffer text at the last reveal decision, used to classify an edit as append vs snap.</summary>
     private string revealTrackedText = "";
-    /// <summary>True between an onPress and its onRelease: a click-drag is selecting text, so onMove
-    /// extends the selection to the cursor. The event dispatcher auto-captures the field on press, so
-    /// moves keep arriving even when the cursor leaves the field's bounds mid-drag. Cleared for a
-    /// double/triple click (which selects a word/line outright and should not then drag).</summary>
+    /// <summary>True between press and release: a click-drag is selecting. The dispatcher auto-captures the
+    /// press, so moves keep arriving outside the field. Cleared for double/triple click.</summary>
     private bool isSelecting;
 
-    // ---- Multi-click tracking (double-click = word select, triple-click = line select) ----
-    /// <summary>Max gap between clicks to count as part of the same multi-click, matching LibGUI's own
-    /// <c>TextField</c> (400ms).</summary>
+    // ---- Multi-click tracking ----
+    /// <summary>Max gap between clicks of one multi-click, matching LibGUI's <c>TextField</c> (400ms).</summary>
     private static readonly TimeSpan MultiClickWindow = TimeSpan.FromMilliseconds(400);
     private DateTime lastClickTime = DateTime.MinValue;
     private int lastClickOffset = -1;
-    /// <summary>1 = single, 2 = double (word), 3 = triple (line). Increments while clicks land at the
-    /// same offset within <see cref="MultiClickWindow"/>; resets to 1 otherwise, and caps at 3.</summary>
+    /// <summary>1 = single, 2 = double (word), 3 = triple (line); resets to 1 off-spot or out of window, caps at 3.</summary>
     private int clickCount;
 
     public override void InitState()
@@ -678,23 +583,19 @@ internal sealed class ScribeMultilineFieldState : State<ScribeMultilineField>, I
         text = Widget.InitialText;
         caret = text.Length;
         anchor = caret;
-        // The initial text is pre-existing content, not freshly typed, so it starts fully revealed (no
-        // animation on open). Only text added after this baseline presses in.
+        // Initial text is pre-existing content, so it starts fully revealed.
         revealTrackedText = text;
         focusNode = Widget.FocusNode ?? (internalFocusNode = new FocusNode());
-        // FocusNode.RequestFocus() resolves its manager via Owner?.Owner?.FocusManager; without an
-        // Owner it can't reach the manager, focus never takes, and the HasFocus-gated key handlers
-        // never fire (banked lesson from the change-1 spike). Element is set by the time InitState runs.
+        // RequestFocus resolves its manager via Owner?.Owner?.FocusManager; without an Owner focus never
+        // takes and the HasFocus-gated key handlers never fire.
         focusNode.Owner = Element;
         focusNode.AddListener(OnFocusChanged);
         hadFocus = focusNode.HasFocus;
 
-        // Caret-blink ticker (same provider LibGUI's TextField uses). Started only while focused with a
-        // collapsed selection; OnCaretTick toggles caretVisible every CaretBlinkMs and rebuilds.
+        // Runs only while focused with a collapsed selection (see RestartCaretBlink).
         caretTicker = Element.Owner!.GetTickerProvider().CreateTicker(OnCaretTick);
 
-        // Reveal driver (cuneiform stroke-progression). Built only when the feature is on; its Value (0→1)
-        // scales to elapsed-ms in the render each tick. Duration is reset per reveal to the run's length.
+        // Reveal driver; its Value (0→1) scales to elapsed-ms in the render, and Duration is reset per reveal.
         if (Widget.UseCuneiform && Widget.CuneiformProgression)
         {
             revealController = new AnimationController(
@@ -712,8 +613,7 @@ internal sealed class ScribeMultilineFieldState : State<ScribeMultilineField>, I
 
     private void OnFocusChanged()
     {
-        // A genuine focus loss (not a rebuild) commits the row's pending edit, mirroring the native
-        // editor's blur-commit. Guard so we only fire on a true has→hasn't transition.
+        // A genuine focus loss (not a rebuild) commits the pending edit.
         bool now = focusNode.HasFocus;
         if (hadFocus && !now)
         {
@@ -739,10 +639,8 @@ internal sealed class ScribeMultilineFieldState : State<ScribeMultilineField>, I
         base.Dispose();
     }
 
-    /// <summary>Show the caret solid and (re)start the blink cadence — called on focus gain and after any
-    /// edit or caret move, mirroring LibGUI's TextField (a moving/typing caret stays solid, then resumes
-    /// blinking). The ticker only runs while focused with a collapsed selection; otherwise it is stopped
-    /// and the caret is pinned solid (a selection shows no separate blinking caret).</summary>
+    /// <summary>Shows the caret solid and restarts the blink. The ticker runs only while focused with a
+    /// collapsed selection; otherwise it stops and the caret stays solid.</summary>
     private void RestartCaretBlink()
     {
         caretVisible = true;
@@ -760,9 +658,7 @@ internal sealed class ScribeMultilineFieldState : State<ScribeMultilineField>, I
         }
     }
 
-    /// <summary>Ticker callback: while focused with a collapsed selection, flip <see cref="caretVisible"/>
-    /// every <see cref="CaretBlinkMs"/> and rebuild so the caret bar blinks. Bails (caret solid, ticker
-    /// stopped) the moment focus is lost or a selection becomes active.</summary>
+    /// <summary>Ticker callback: toggles <see cref="caretVisible"/> every <see cref="CaretBlinkMs"/>; stops on focus loss or selection.</summary>
     private void OnCaretTick(TimeSpan frameDelta)
     {
         if (!focusNode.HasFocus || HasSelection)
@@ -789,11 +685,8 @@ internal sealed class ScribeMultilineFieldState : State<ScribeMultilineField>, I
         }
         e.Handled = true;
 
-        // Typed-arrow substitution: if this keystroke
-        // completes an ASCII arrow digraph (`->`/`<-`) with the character just before the caret, replace
-        // the two-char run with the single Unicode arrow (`→`/`←`) instead of inserting. Only on typing,
-        // never on paste; skipped while a selection is active (the "char before the caret" is ambiguous
-        // when typing over a selection). Length-neutral, so it bypasses the max-length clamp Insert applies.
+        // Typed-arrow substitution: completing `->`/`<-` with the char before the caret replaces the pair with
+        // the Unicode arrow. Typing only (never paste), not over a selection; length-neutral so it bypasses the max-length clamp.
         if (!HasSelection
             && Scribe.Core.ScribeArrowDigraph.TryApply(text, caret, e.KeyChar, out string substituted, out int newCaret))
         {
@@ -821,9 +714,7 @@ internal sealed class ScribeMultilineFieldState : State<ScribeMultilineField>, I
             case (int)GlKeys.A when e.Ctrl:
                 anchor = 0;
                 caret = text.Length;
-                MarkNeedsBuild(); // repaint the selection now — unlike MoveCaret/Commit paths, this one
-                                  // has no other rebuild trigger, so without it the select-all is
-                                  // invisible until the next hover/keystroke forces a rebuild.
+                MarkNeedsBuild(); // select-all has no other rebuild trigger
                 Handled(e);
                 break;
 
@@ -880,26 +771,23 @@ internal sealed class ScribeMultilineFieldState : State<ScribeMultilineField>, I
             case (int)GlKeys.KeypadEnter:
                 if (e.Shift)
                 {
-                    // Shift+Enter inserts a hard line break (grows the row).
                     Insert("\n");
                 }
                 else
                 {
-                    // Enter commits this row and inserts a NEW task directly beneath it (never a
-                    // newline within the row). Row navigation is Tab's job now.
+                    // Never a newline within the row.
                     Widget.OnInsertTaskBelow?.Invoke();
                 }
                 Handled(e);
                 break;
 
             case (int)GlKeys.Tab when e.Shift:
-                // Shift+Tab commits and retreats to the previous row.
                 Widget.OnCommitAndRetreat?.Invoke();
                 Handled(e);
                 break;
 
             case (int)GlKeys.Tab:
-                // Tab commits and advances to the next row (never inserts a tab glyph).
+                // Never inserts a tab glyph.
                 Widget.OnCommitAndAdvance?.Invoke();
                 Handled(e);
                 break;
@@ -915,11 +803,8 @@ internal sealed class ScribeMultilineFieldState : State<ScribeMultilineField>, I
                 break;
 
             case (int)GlKeys.Up:
-                // Ctrl+Up jumps to the FIRST row of the note (document-top navigation). On Windows
-                // that's the native Ctrl+Up; on macOS ScribeDialogBase.OnKeyDown remaps Cmd+Up (the
-                // Cocoa document-top gesture, which LibGUI would otherwise drop) to Ctrl+Up before we
-                // see it. Gated on Ctrl ALONE — Alt/Option+Up stays a plain one-line caret move, unlike
-                // the Left/Right word-jump which also honors Alt.
+                // Ctrl+Up = document top (macOS Cmd+Up is remapped to it in ScribeDialogBase.OnKeyDown).
+                // Ctrl alone: Alt/Option+Up stays a one-line move.
                 if (e.Ctrl)
                 {
                     Widget.OnJumpToFirstRow?.Invoke();
@@ -932,7 +817,7 @@ internal sealed class ScribeMultilineFieldState : State<ScribeMultilineField>, I
                 break;
 
             case (int)GlKeys.Down:
-                // Ctrl+Down jumps to the LAST row of the note (see Up); Cmd+Down is remapped to it on macOS.
+                // Ctrl+Down = last row (see Up).
                 if (e.Ctrl)
                 {
                     Widget.OnJumpToLastRow?.Invoke();
@@ -945,8 +830,7 @@ internal sealed class ScribeMultilineFieldState : State<ScribeMultilineField>, I
                 break;
 
             case (int)GlKeys.Home:
-                // Ctrl+Home = document top (the universal Windows document-nav convention); plain Home
-                // = line start. Cmd+Left is remapped to a plain Home by the dialog, so it stays line-start.
+                // Ctrl+Home = document top; plain Home = line start (Cmd+Left is remapped to plain Home).
                 if (e.Ctrl)
                 {
                     Widget.OnJumpToFirstRow?.Invoke();
@@ -959,7 +843,7 @@ internal sealed class ScribeMultilineFieldState : State<ScribeMultilineField>, I
                 break;
 
             case (int)GlKeys.End:
-                // Ctrl+End = document bottom; plain End = line end (see Home).
+                // Ctrl+End = document bottom; plain End = line end.
                 if (e.Ctrl)
                 {
                     Widget.OnJumpToLastRow?.Invoke();
@@ -971,8 +855,7 @@ internal sealed class ScribeMultilineFieldState : State<ScribeMultilineField>, I
                 Handled(e);
                 break;
 
-            // Esc intentionally NOT handled — it bubbles up and closes the dialog (panic-close);
-            // the blur-commit on close still saves the pending edit.
+            // Esc is intentionally unhandled: it bubbles and closes the dialog; the blur-commit saves the edit.
         }
     }
 
@@ -987,20 +870,15 @@ internal sealed class ScribeMultilineFieldState : State<ScribeMultilineField>, I
         {
             anchor = caret;
         }
-        RestartCaretBlink(); // a moving caret shows solid, then resumes blinking (pauses if now selecting)
+        RestartCaretBlink();
         MarkNeedsBuild();
-        // Keyboard caret moves don't touch the text, so they never fire OnChanged — the editor's only
-        // scroll-follow trigger. Notify explicitly so an arrow/Home/End/word-jump that carries
-        // the caret off-screen scrolls it back into view. Click-to-
-        // place goes through OnFieldPress, not MoveCaret, so this stays keyboard-only.
+        // Keyboard caret moves never fire OnChanged (the editor's scroll-follow trigger), so notify explicitly.
+        // Click-to-place goes through OnFieldPress, not here.
         Widget.OnCaretMoved?.Invoke();
     }
 
-    /// <summary>Programmatically snap the caret to the very start (<paramref name="atStart"/>) or end of the
-    /// buffer, collapsing any selection. The dialog calls this on the row it focuses for a Cmd/Ctrl+Up/Down
-    /// first-/last-row jump, so the caret lands at the document edge rather than wherever this field last left
-    /// it. Mirrors <see cref="MoveCaret"/>'s blink reset, repaint, and scroll-follow notify (so the newly
-    /// focused row's caret is scrolled into view).</summary>
+    /// <summary>Snaps the caret to the buffer start or end, collapsing any selection. The dialog calls it on the
+    /// row focused by a first-/last-row jump; mirrors <see cref="MoveCaret"/>'s blink reset, repaint and scroll-follow notify.</summary>
     public void PlaceCaretAtEdge(bool atStart)
     {
         caret = atStart ? 0 : text.Length;
@@ -1017,15 +895,11 @@ internal sealed class ScribeMultilineFieldState : State<ScribeMultilineField>, I
             DeleteSelection();
         }
         caret = Math.Clamp(caret, 0, text.Length);
-        // Enforce the optional maxlength (Task rows): clamp the inserted run to the room remaining after
-        // the current text, so a long paste is truncated rather than blocked wholesale. Typing at the cap
-        // becomes a no-op. The codec clips on read regardless, so this is the in-editor UX half only.
+        // Clamp the run to the remaining room, so a long paste truncates rather than being blocked.
         if (Widget.MaxLength is { } max)
         {
             int room = Math.Max(0, max - text.Length);
-            // Notify when the cap actually bites — either the run was truncated to fit, or there's no room at
-            // all (a no-op keystroke while already full). The editor turns this into a transient "limited to N
-            // characters" notice.
+            // Notify when the cap bites: truncated, or no room at all.
             if (s.Length > room)
             {
                 s = s.Substring(0, room);
@@ -1069,7 +943,7 @@ internal sealed class ScribeMultilineFieldState : State<ScribeMultilineField>, I
         Insert(clip);
     }
 
-    // Word-skip: from caret, skip any whitespace, then skip the run of non-whitespace.
+    // Word-skip: skip whitespace, then the run of non-whitespace.
     private int WordLeft(int from)
     {
         int i = from;
@@ -1086,7 +960,7 @@ internal sealed class ScribeMultilineFieldState : State<ScribeMultilineField>, I
         return i;
     }
 
-    // Home/End operate on the logical line (delimited by '\n'), matching desktop line-end idioms.
+    // Home/End operate on the logical line (delimited by '\n').
     private int LineStart(int from)
     {
         int i = Math.Clamp(from, 0, text.Length);
@@ -1105,16 +979,13 @@ internal sealed class ScribeMultilineFieldState : State<ScribeMultilineField>, I
     {
         UpdateReveal();
         Widget.OnChanged?.Invoke(text);
-        RestartCaretBlink(); // any edit shows the caret solid, then resumes blinking
+        RestartCaretBlink();
         MarkNeedsBuild();
     }
 
     /// <summary>
-    /// Decide how the just-committed <see cref="text"/> reveals, when cuneiform stroke-progression is on.
-    /// A pure APPEND to the previously-tracked text (typing at/after the end) animates only the newly-added
-    /// suffix: the prior length becomes the always-revealed baseline and the controller runs from 0. Any
-    /// other change (deletion, mid-line insert, paste that isn't a suffix) snaps to fully revealed with no
-    /// reverse animation, so earlier letters never replay. A no-op when the feature is off.
+    /// Decides how the committed <see cref="text"/> reveals when stroke-progression is on. A pure append animates
+    /// only the new suffix (prior length becomes the revealed baseline); any other change snaps to fully revealed.
     /// </summary>
     private void UpdateReveal()
     {
@@ -1123,19 +994,17 @@ internal sealed class ScribeMultilineFieldState : State<ScribeMultilineField>, I
             return;
         }
 
-        // Append iff the new text starts with the old text and is longer (Ordinal — exact code units).
+        // Append iff the new text starts with the old text and is longer.
         bool isAppend = text.Length > revealTrackedText.Length
             && text.StartsWith(revealTrackedText, StringComparison.Ordinal);
 
         if (isAppend)
         {
-            // Preserve the elapsed time already accumulated (so letters pressed mid-flight are NOT re-hidden
-            // when the run is extended by more typing). elapsed = Value × current Duration.
+            // Preserve accumulated elapsed time so mid-flight letters are not re-hidden (elapsed = Value × Duration).
             double elapsedMs = revealActive
                 ? revealController.Value * revealController.Duration.TotalMilliseconds
                 : 0.0;
 
-            // Starting a fresh run: everything present before this keystroke is the always-revealed baseline.
             if (!revealActive)
             {
                 revealBaselineChars = revealTrackedText.Length;
@@ -1147,14 +1016,12 @@ internal sealed class ScribeMultilineFieldState : State<ScribeMultilineField>, I
             {
                 revealActive = true;
                 revealController.Duration = TimeSpan.FromMilliseconds(durationMs);
-                // Resume from the same absolute elapsed against the NEW duration, so the frontier keeps
-                // moving forward and prior strokes stay pressed (the render gates on elapsed-vs-schedule).
+                // Resume from the same absolute elapsed against the NEW duration so prior strokes stay pressed.
                 revealController.Forward(from: Math.Clamp(elapsedMs / durationMs, 0.0, 1.0));
             }
         }
         else
         {
-            // Deletion / mid-line edit / non-suffix change: snap to fully revealed, no reverse animation.
             revealActive = false;
             revealController.Stop();
         }
@@ -1162,10 +1029,8 @@ internal sealed class ScribeMultilineFieldState : State<ScribeMultilineField>, I
         revealTrackedText = text;
     }
 
-    /// <summary>Prefix-sum of the per-character stroke-units for <paramref name="forText"/>, sizing the reveal
-    /// controller's duration to match the render object's per-stroke timing exactly. Uses the same bundle +
-    /// layout rules the renderer uses, so the duration covers precisely the strokes it will draw. When the
-    /// bundle isn't loaded yet, falls back to one unit per character so the duration is still non-zero.</summary>
+    /// <summary>Prefix-sum of per-character stroke-units, sizing the reveal duration to the renderer's per-stroke
+    /// timing. Falls back to one unit per character when the bundle isn't loaded.</summary>
     private int[] CumulativeRevealUnits(string forText)
     {
         if (Widget.CuneiformBundle is not { } bundle)
@@ -1183,7 +1048,6 @@ internal sealed class ScribeMultilineFieldState : State<ScribeMultilineField>, I
 
     private void OnRevealStatus(AnimationStatus status)
     {
-        // Reveal finished: drop out of reveal mode so the field paints every stroke (fully pressed) again.
         if (status == AnimationStatus.Completed)
         {
             revealActive = false;
@@ -1193,11 +1057,9 @@ internal sealed class ScribeMultilineFieldState : State<ScribeMultilineField>, I
 
     private void MarkNeedsBuild() => SetState(() => { });
 
-    /// <summary>Maps a pointer event to a flat caret offset in the source text, or null if the render
-    /// geometry isn't reachable. <c>Element.RenderObject</c> resolves (through the GestureDetector's
-    /// proxy box) to the proxy wrapping our text render object as its single child; the proxy lays the
-    /// child out at (0,0) with the same size, so the proxy-local point is directly usable by the child's
-    /// <see cref="ScribeMultilineFieldRender.OffsetAtPosition"/> (the inverse of the caret paint math).</summary>
+    /// <summary>Maps a pointer event to a source caret offset, or null if render geometry isn't reachable. The
+    /// GestureDetector proxy lays the text render out at (0,0) with the same size, so the proxy-local point is
+    /// usable directly by <see cref="ScribeMultilineFieldRender.OffsetAtPosition"/>.</summary>
     private int? OffsetAt(PointerEvent e)
     {
         if (Element?.RenderObject is not { } proxy) return null;
@@ -1208,21 +1070,15 @@ internal sealed class ScribeMultilineFieldState : State<ScribeMultilineField>, I
         return Math.Clamp(textRender.OffsetAtPosition(local), 0, text.Length);
     }
 
-    /// <summary>Resolve the field's editable text render object through the GestureDetector proxy. The
-    /// proxy wraps our render object as its single child; it may be the normal
-    /// <see cref="ScribeMultilineFieldRender"/> or the cuneiform <see cref="ScribeCuneiformFieldRender"/>,
-    /// so we resolve it by the shared <see cref="IScribeEditableTextRender"/> contract rather than a
-    /// concrete type — letting one State drive either render object.</summary>
+    /// <summary>Resolves the editable text render (normal or cuneiform) through the GestureDetector proxy via the
+    /// shared <see cref="IScribeEditableTextRender"/> contract.</summary>
     private static IScribeEditableTextRender? ResolveTextRender(RenderObject proxy)
     {
         if (proxy is IScribeEditableTextRender direct) return direct;
         return proxy.Children.Count > 0 ? proxy.Children[0] as IScribeEditableTextRender : null;
     }
 
-    /// <summary>Move the caret one visual line up (<paramref name="direction"/> = -1) or down (+1),
-    /// returning the new source offset, or null if the render geometry isn't reachable yet. Delegates the
-    /// column-nearest-X math to <see cref="ScribeMultilineFieldRender.CaretOffsetVertical"/> on the same
-    /// render object the click path uses (resolved through the GestureDetector proxy).</summary>
+    /// <summary>Moves the caret one visual line up (-1) or down (+1); null if render geometry isn't reachable yet.</summary>
     private int? CaretVertical(int direction)
     {
         if (Element?.RenderObject is not { } proxy) return null;
@@ -1232,18 +1088,14 @@ internal sealed class ScribeMultilineFieldState : State<ScribeMultilineField>, I
         return Math.Clamp(textRender.CaretOffsetVertical(caret, direction), 0, text.Length);
     }
 
-    /// <summary>Press: focus the field and act on the click. A single click moves the caret to the click
-    /// point (repositioning it in an already-focused field, not just focusing) and begins a click-drag
-    /// selection. A double click at the same spot selects the word under it; a triple click selects the
-    /// whole logical line. Mirrors LibGUI's own <c>TextField.OnPointerDown</c> (word select on
-    /// double-click), extended here with triple-click line select and multi-line word/line boundaries.</summary>
+    /// <summary>Press: focuses the field and moves the caret to the click point, starting a drag selection. A
+    /// double click at the same spot selects the word, a triple click the logical line.</summary>
     private void OnFieldPress(PointerEvent e)
     {
         focusNode.RequestFocus();
 
         if (OffsetAt(e) is not { } offset) return;
 
-        // Multi-click detection: same offset within the window bumps the count (capped at 3), else reset.
         var now = DateTime.Now;
         bool sameSpotInTime = lastClickOffset == offset && (now - lastClickTime) <= MultiClickWindow;
         clickCount = sameSpotInTime ? Math.Min(clickCount + 1, 3) : 1;
@@ -1268,17 +1120,14 @@ internal sealed class ScribeMultilineFieldState : State<ScribeMultilineField>, I
                 break;
         }
 
-        RestartCaretBlink(); // a fresh click resets the caret solid (or stops the blink if it selected a range)
+        RestartCaretBlink();
         MarkNeedsBuild();
-        // A click focuses this row AND places the caret at a visible pixel — so the editor must NOT auto-scroll
-        // it into view (the caret is already visible where the player clicked). Programmatic focus (Tab/Enter) still scrolls
-        // because it goes through FocusEditorRow, not this press path.
+        // The caret is already visible where clicked, so the editor must not auto-scroll (programmatic focus goes through FocusEditorRow).
         Widget.OnPointerFocus?.Invoke();
     }
 
     /// <summary>Word boundaries (start, end) around <paramref name="pos"/>, matching LibGUI's
-    /// <c>TextField.FindWordBoundary</c>: a word char (letter/digit/underscore) expands to the full run
-    /// of word chars; a non-word char selects just that one character. Returns (pos, pos) for empty text.</summary>
+    /// <c>TextField.FindWordBoundary</c>: a word char expands to its run; a non-word char selects just itself.</summary>
     private (int start, int end) WordBoundaryAt(int pos)
     {
         if (text.Length == 0) return (0, 0);
@@ -1300,9 +1149,7 @@ internal sealed class ScribeMultilineFieldState : State<ScribeMultilineField>, I
 
     private static bool IsWordChar(char c) => char.IsLetterOrDigit(c) || c == '_';
 
-    /// <summary>Drag while selecting: extend the selection by moving the caret to the cursor and leaving
-    /// the anchor at the press point. The dispatcher's press-capture keeps these firing even if the
-    /// cursor leaves the field's bounds.</summary>
+    /// <summary>Drag while selecting: moves the caret to the cursor, anchor stays at the press point.</summary>
     private void OnFieldMove(PointerEvent e)
     {
         if (!isSelecting) return;
@@ -1312,17 +1159,14 @@ internal sealed class ScribeMultilineFieldState : State<ScribeMultilineField>, I
         MarkNeedsBuild();
     }
 
-    /// <summary>Release: end the click-drag. The caret/anchor already hold the final selection.</summary>
+    /// <summary>Release: ends the drag; caret/anchor hold the final selection.</summary>
     private void OnFieldRelease(PointerEvent e) => isSelecting = false;
 
     public override Widget Build(BuildContext context)
     {
         var colors = Theme.Of(context).ColorScheme;
 
-        // The gesture/keyboard model is identical for both render paths (this State owns it); only the
-        // child render widget differs. When UseCuneiform is on, drive the cuneiform render object — it
-        // implements the same IScribeEditableTextRender geometry contract the click/vertical-nav helpers
-        // resolve through the proxy, so no State code changes between the two paths.
+        // Gesture/keyboard model is shared; only the child render widget differs (both implement IScribeEditableTextRender).
         Widget child = Widget.UseCuneiform
             ? new ScribeCuneiformFieldRenderWidget(
                 text: text,
@@ -1331,25 +1175,15 @@ internal sealed class ScribeMultilineFieldState : State<ScribeMultilineField>, I
                 hasFocus: focusNode.HasFocus,
                 fontSizeEm: Widget.FontSize,
                 inkColor: colors.OnSurface,
-                // Caret = the field's text color (OnSurface), the conventional "caret is ink" behavior and
-                // consistent with the stock numeric field, whose caret LibGUI hardwires to the light content
-                // tone — matching here removes the old accent-colored caret that read as a mismatched green on
-                // the chalkboard (refine-chalkboard field-consistency). Selection stays the accent wash.
+                // Caret = text color (OnSurface), consistent with the stock numeric field. Selection stays the accent wash.
                 caretColor: colors.OnSurface,
                 selectionColor: colors.Primary with { W = 0.35f },
                 bundle: Widget.CuneiformBundle,
                 padX: Widget.PadX,
-                // Cuneiform-only top/bottom inset reduction — the normal
-                // (non-cuneiform) branch below keeps Widget.PadY unscaled; only this cuneiform branch
-                // reads tighter to match the smaller synthetic caret.
+                // Cuneiform-only inset reduction to suit the smaller synthetic caret.
                 padY: Widget.PadY * CuneiformMetrics.FieldPadYScale,
-                // Focus box on the cuneiform (tablet) path, scoped to the INPUT — mirrors the normal path
-                // just below. At rest the fill+border are transparent so a
-                // resting cuneiform row shows no box over the clay; on focus they light to SurfaceHigh +
-                // Primary. Thickness and corner stay CONSTANT (only the colors toggle) so the content box
-                // never reflows focus↔unfocus, keeping read/edit row heights in parity. The enclosing row
-                // Container draws no focus chrome, so a focused input on a PINNED row reads as a
-                // small bordered input inside the row's pinned wash — two distinct shapes.
+                // Focus box scoped to the INPUT: transparent at rest, SurfaceHigh + Primary on focus. Thickness and
+                // corner stay constant so read/edit row heights keep parity.
                 boxColor: focusNode.HasFocus ? colors.SurfaceHigh : Vector4.Zero,
                 borderColor: focusNode.HasFocus ? (Widget.FocusBorderColor ?? colors.Primary) : Vector4.Zero,
                 borderThickness: 1f,
@@ -1378,8 +1212,7 @@ internal sealed class ScribeMultilineFieldState : State<ScribeMultilineField>, I
                 padY: Widget.PadY,
                 textColor: colors.OnSurface,
                 placeholderColor: colors.OnSurfaceVariant with { W = 0.55f },
-                // Caret = the field's text color (OnSurface) — see the cuneiform path above: matches the stock
-                // numeric field's caret and drops the mismatched accent-green caret on the chalkboard.
+                // Caret = text color (OnSurface), as on the cuneiform path.
                 caretColor: colors.OnSurface,
                 selectionColor: colors.Primary with { W = 0.35f },
                 boxColor: colors.SurfaceHigh,

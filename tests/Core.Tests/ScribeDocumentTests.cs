@@ -65,8 +65,7 @@ public class ScribeDocumentTests
     [InlineData("\t\n")]
     public void AddTask_AcceptsBlankText_StoredVerbatim(string blank)
     {
-        // A new task starts empty (the player types into it); the model does not reject
-        // blank task text. Removing an abandoned empty task is the editing layer's job.
+        // A new task starts empty; removing an abandoned empty task is the editing layer's job.
         var doc = new ScribeDocument();
 
         Assert.True(doc.AddTask(blank));
@@ -78,8 +77,7 @@ public class ScribeDocumentTests
     [Fact]
     public void AddTask_StoresTextVerbatim_WithoutTrimming()
     {
-        // The model stores task text verbatim; whitespace normalization is the editing layer's job
-        // (GuiDialogScribeLectern.NormalizeRowOnCommit), not the domain model's.
+        // Task text is stored verbatim; whitespace normalization is the editing layer's job.
         var doc = new ScribeDocument();
 
         doc.AddTask("  Find copper  ");
@@ -121,9 +119,7 @@ public class ScribeDocumentTests
     [InlineData("\n")]
     public void SetBlockText_AcceptsBlankForTask_StoredVerbatim(string blank)
     {
-        // Clearing a task to empty must succeed (the field writes through on every keystroke), so
-        // the task can go transiently empty while the player edits it. The editing layer removes a
-        // task left empty on blur; the model just stores the value.
+        // Clearing a task to empty must succeed (the field writes through on every keystroke); the editing layer removes it on blur.
         var doc = new ScribeDocument();
         doc.AddTask("Find copper");
 
@@ -137,9 +133,7 @@ public class ScribeDocumentTests
         var doc = new ScribeDocument();
         doc.AddTask("Find copper");
 
-        // The model stores task text verbatim -- surrounding whitespace (incl. a trailing newline
-        // from a just-typed Shift+Enter) is preserved so the live in-place editor's row can grow to
-        // fit it. Trimming happens later, on commit, in the editing layer.
+        // Surrounding whitespace (incl. a trailing newline from Shift+Enter) is preserved so the in-place editor row can grow; trimming happens on commit.
         doc.SetBlockText(0, "  Find tin\n");
 
         Assert.Equal("  Find tin\n", doc.Blocks[0].Text);
@@ -180,9 +174,7 @@ public class ScribeDocumentTests
     [InlineData("\t\n")]
     public void SetTaskText_RejectsBlankOrWhitespace_LeavesTaskUnchanged(string blank)
     {
-        // Unlike SetBlockText (which stores blanks verbatim), the identity-addressed pin edit honors
-        // the content invariant: a blank/whitespace-only edit is rejected and the task is untouched, so
-        // a pin edit can never blank a task out.
+        // Unlike SetBlockText, the identity-addressed edit rejects blank/whitespace-only text and leaves the task untouched.
         var doc = new ScribeDocument();
         doc.AddTask("Find copper");
         var id = doc.Blocks[0].TaskId;
@@ -232,8 +224,7 @@ public class ScribeDocumentTests
         doc.AddTask("Find copper");
         var id = doc.Blocks[0].TaskId;
 
-        // Non-blank text is stored verbatim (surrounding whitespace preserved) — the same no-trim rule
-        // as SetBlockText; only fully-blank input is rejected.
+        // Non-blank text is stored verbatim (no trim); only fully-blank input is rejected.
         doc.SetTaskText(id, "  Find tin  ");
 
         Assert.Equal("  Find tin  ", doc.Blocks[0].Text);
@@ -737,9 +728,7 @@ public class ScribeDocumentTests
     }
 
     // --- TaskCount (diagnostic task-only tally; NOT the cap measure) ---
-    // Distinct from CompletableCount (Task+Tracker+Link) and from BlockCount (all kinds). TaskCount counts
-    // ONLY Task-kind blocks. The tier cap counts ALL blocks (BlockCount), so
-    // TaskCount is not the cap/capacity measure — it exists only for diagnostics.
+    // Counts ONLY Task-kind blocks; diagnostic only, not the cap measure (BlockCount is).
 
     [Fact]
     public void TaskCount_CountsTaskKindOnly_NotTrackerLinkOrText()
@@ -768,8 +757,7 @@ public class ScribeDocumentTests
     }
 
     // --- BlockCount (the tier-cap measure: "N of anything") ---
-    // Every kind counts equally — tasks, notes, trackers, links, craft parents — so a finite tier
-    // (Tablet, Chalkboard: MaxBlocks = 15) is full at 15 blocks of ANY mix and refuses a 16th of any kind.
+    // Every kind counts equally, so a finite tier (MaxBlocks = 15) is full at 15 blocks of ANY mix.
 
     [Fact]
     public void BlockCount_CountsEveryKind()
@@ -793,8 +781,7 @@ public class ScribeDocumentTests
     [Fact]
     public void FiniteCap_CountsMixedKinds_RefusesSixteenthOfAnyKind()
     {
-        // A finite tier caps at 15 blocks of ANY kind. Fill to 15 with a deliberate mix, then confirm
-        // the policy (fed BlockCount) refuses the 16th regardless of what kind it would be.
+        // Fill to 15 with a deliberate mix; the policy (fed BlockCount) must refuse the 16th of any kind.
         var policy = ScribeDocumentPolicy.Tablet; // MaxBlocks = 15
         var doc = new ScribeDocument();
         doc.AddTask("t1");
@@ -1070,8 +1057,7 @@ public class ScribeDocumentTests
         doc.AppendAssignedBlock(new ScribeBlock(ScribeBlockKind.Task, "child", depth: 1,
             assignment: new ScribeAssignment("assigner", "Day 1", batchId: batchId)));
 
-        // Parent's owned run is [1, 2) — a third batch row lands after it (index 2), not wedged
-        // between parent and child.
+        // Parent's owned run is [1, 2): a third batch row lands at index 2, not between parent and child.
         Assert.Equal(2, doc.InsertIndexForBatch(batchId, ScribeNewTaskInsert.Top));
     }
 

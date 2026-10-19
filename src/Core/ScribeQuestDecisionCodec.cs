@@ -6,18 +6,13 @@ using System.Text;
 namespace Scribe.Core;
 
 /// <summary>
-/// Serializes the per-player quest-decision ledger to byte arrays and back, for both network sync and
-/// save-game persistence — mirrors <see cref="ScribePinCodec"/>'s shape exactly (same fail-safe,
-/// versioned binary form; a malformed/hostile payload returns false rather than throwing or
-/// over-allocating).
+/// Serializes the per-player quest-decision ledger for network sync and save-game persistence, in the
+/// same fail-safe versioned binary form as <see cref="ScribePinCodec"/> (malformed input returns false,
+/// never throws or over-allocates). See docs/CODEC-MIGRATION.md.
 ///
-/// Two blob shapes, each with its own 4-byte magic and 1-byte version:
-///   SQDL — one player's <see cref="ScribeQuestDecisionEntry"/> list (the server→client per-player push).
-///   SQDS — the whole store, <c>Dictionary&lt;playerUid, List&lt;ScribeQuestDecisionEntry&gt;&gt;</c>
-///          (savegame blob).
-///
-/// Version 1 is the only shipped version so far; future fields append the same progressive-read pattern
-/// <see cref="ScribePinCodec"/> documents (see docs/CODEC-MIGRATION.md).
+/// Two blobs, each with a 4-byte magic and 1-byte version:
+///   SQDL — one player's <see cref="ScribeQuestDecisionEntry"/> list (server→client push).
+///   SQDS — the whole store, <c>Dictionary&lt;playerUid, List&lt;ScribeQuestDecisionEntry&gt;&gt;</c> (savegame).
 /// </summary>
 public static class ScribeQuestDecisionCodec
 {
@@ -27,12 +22,10 @@ public static class ScribeQuestDecisionCodec
     private const byte Version = 1;
     private const byte MinVersion = 1;
 
-    /// <summary>Hard upper bound on the number of players in a persisted store blob — an allocation guard
-    /// for the save-game read path.</summary>
+    /// <summary>Upper bound on players in a store blob (allocation guard).</summary>
     public const int MaxPlayers = 10_000;
 
-    /// <summary>Hard upper bound on a player-uid/source/quest-code string length, in characters
-    /// (allocation guard).</summary>
+    /// <summary>Upper bound on a uid/source/quest-code string length, in characters (allocation guard).</summary>
     public const int MaxStringLength = 512;
 
     // ---- SQDL: one player's decision list (network) ----

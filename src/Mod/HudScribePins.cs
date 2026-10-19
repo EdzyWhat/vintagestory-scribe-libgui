@@ -25,150 +25,103 @@ using Vintagestory.GameContent;  // SystemTemporalStability, EnumTempStormStreng
 namespace Scribe;
 
 /// <summary>
-/// The on-screen pinned-task HUD, built on LibGUI (modid <c>gui</c>). It renders THIS player's own
-/// pins — from the server-pushed set cached in <see cref="ScribeModSystem.MyPins"/> — as a short,
-/// automatically-ordered checklist anchored to the top-right corner, legible over the world via a
-/// soft text glow rather than a background plate.
+/// The on-screen pinned-task HUD (LibGUI, modid <c>gui</c>): this player's pins from
+/// <see cref="ScribeModSystem.MyPins"/> as an ordered checklist anchored to a screen corner, legible via
+/// a text glow rather than a background plate.
 ///
-/// <para>HUD semantics come straight from <see cref="GuiBase"/> + <c>EnumDialogType.HUD</c> (the
-/// <c>GuiGlobalOverlay</c> precedent in the LibGUI source): it never steals keyboard focus, Escape
-/// never closes it, and it renders behind real dialogs (so the lectern dialog sits on top). Mouse
-/// events stay ON so the row checkboxes are clickable, but <see cref="ShouldReceiveKeyboardEvents"/>
-/// is false so gameplay keys still flow. The window is a shrink-wrap (content-sized), non-draggable,
-/// non-opaque overlay re-anchored to the corner each frame.</para>
+/// <para>A non-modal HUD: it never takes keyboard focus, Escape never closes it, and it renders behind
+/// dialogs. Mouse events stay on so row checkboxes are clickable. The window is a content-sized,
+/// non-draggable, non-opaque overlay re-anchored each frame.</para>
 ///
-/// <para><b>Visibility is self-managed</b> off <see cref="ScribeModSystem.MyPinsChanged"/>: the HUD
-/// opens itself when the player has ≥1 pin and closes at zero. The
-/// collapse preference (<see cref="ScribePlayerSettings.HudCollapsed"/>) minimizes it to a still-
-/// clickable header instead of hiding it; it is a client-local preference, so toggling it just mutates
-/// the held config (no network). <see cref="ScribeModSystem"/> constructs one of these in
-/// <c>StartClientSide</c>; the object owns its own event subscription + tick listener for its full
-/// lifetime and releases them in <see cref="Dispose"/>.</para>
+/// <para>Opens itself off <see cref="ScribeModSystem.MyPinsChanged"/> when there is something to show and
+/// closes when there is not. <see cref="ScribePlayerSettings.HudCollapsed"/> is client-local and minimizes
+/// to the header. Owns its event subscriptions and tick listener until <see cref="Dispose"/>.</para>
 ///
-/// <para><b>Completion</b> reuses the existing identity-addressed op: after a brief undo window
-/// (<see cref="PinHudWaitMs"/>) in which re-toggling a row's checkbox reverts it, the HUD sends
-/// <see cref="ScribeCompleteTaskMessage"/> carrying the player's completion policy (Sink/Keep/Unpin/
-/// Delete); the server applies it store-first and re-pushes the set, which lands back here as a
-/// rebuild.</para>
+/// <para>Completion: after an undo window (<see cref="PinHudWaitMs"/>) the HUD sends
+/// <see cref="ScribeCompleteTaskMessage"/> with the completion policy; the server's re-push rebuilds.</para>
 /// </summary>
 public sealed class HudScribePins : GuiBase
 {
     /// <summary>Logical-pixel margin between the HUD content and the anchored screen edge(s).</summary>
     private const float CornerMargin = 8f;
 
-    /// <summary>Fallback leftward nudge applied to the <see cref="ScribeHudAnchor.TopRight"/> anchor
-    /// when the live vanilla minimap HUD dialog isn't resolvable (see
-    /// <see cref="ResolveTopRightMinimapClearanceX"/>) — e.g. before it has composed, or the minimap is
-    /// off. The vanilla minimap is a 250×250 square anchored top-right with a 10px screen pad (decompiled
-    /// <c>GuiDialogWorldMap</c>), so ~260px clears it at the game's reference GUI Scale. It drifts at other
-    /// GUI Scale values, so it is a graceful-degradation value only.</summary>
+    /// <summary>Fallback leftward nudge for the <see cref="ScribeHudAnchor.TopRight"/> anchor when the live
+    /// minimap dialog isn't resolvable (see <see cref="ResolveTopRightMinimapClearanceX"/>). Clears the 250×250
+    /// vanilla minimap only at the reference GUI Scale.</summary>
     private const float DefaultTopRightMinimapClearanceX = 260f;
 
-    /// <summary>The shared "pin window": how long a just-checked completion is held on the
-    /// HUD before it is SENT to the server, during which unchecking the row is a true undo (nothing was
-    /// sent). All completion policies share this one duration (the user's <c>pinHudWaitTime</c>). Client
-    /// UI state only — never Core or server state.</summary>
+    /// <summary>How long a just-checked completion is held before it is sent; unchecking within it is a true
+    /// undo. Client UI state only.</summary>
     private const double PinHudWaitMs = 1500;
 
-    /// <summary>Low-frequency safety re-read / window cadence. The authoritative refresh is the
-    /// event-driven rebuild on <see cref="ScribeModSystem.MyPinsChanged"/>; this tick expires
-    /// the pin windows (firing the deferred sends) and re-reads defensively, so it can be cheap.</summary>
+    /// <summary>Safety re-read cadence; expires pin windows (firing deferred sends). The authoritative refresh
+    /// is event-driven.</summary>
     private const int TickIntervalMs = 250;
 
-    /// <summary>Hard cap on rendered rows regardless of the (clamped) preference, so a bad config value
-    /// can never ask the HUD to draw an unbounded list. The preference is already clamped on load; this
-    /// is belt-and-suspenders at the render site.</summary>
+    /// <summary>Hard render cap, independent of the (already clamped) preference.</summary>
     private const int MaxRenderedRows = ScribePlayerSettings.MaxHudMaxRows;
 
     private readonly ScribeModSystem modSystem;
 
-    /// <summary>Client-local monotonic clock, accumulated from the tick delta (Core/base elapsed clocks
-    /// aren't exposed), used to stamp and expire the per-pin windows in <see cref="pendingCompletions"/>.</summary>
+    /// <summary>Client-local monotonic clock accumulated from tick deltas; stamps and expires
+    /// <see cref="pendingCompletions"/>.</summary>
     private double elapsedMs;
 
     private long tickListenerId;
 
-    /// <summary>Optimistic done-state per pin, applied the instant a checkbox is clicked so the check
-    /// mark flips without waiting for the (deferred) server round-trip. Cleared for a pin once the server
-    /// push agrees (see <see cref="OnMyPinsChanged"/>), after which the snapshot alone drives the row.</summary>
+    /// <summary>Optimistic done-state per pin, applied on click; cleared once the server push agrees
+    /// (<see cref="OnMyPinsChanged"/>).</summary>
     private readonly Dictionary<(Guid, Guid), bool> optimisticDone = new();
 
-    /// <summary>A completion the player checked off but that has NOT yet been sent to the server:
-    /// the policy to apply and the <see cref="elapsedMs"/> value at which the window
-    /// expires and the send fires. While present-and-unexpired the pin is held in place (not sunk) and
-    /// animates its pending outcome; unchecking within the window removes the entry (a true undo — nothing
-    /// was sent); on expiry <see cref="OnTick"/> sends the completion and removes the entry.</summary>
+    /// <summary>Completions checked but not yet sent: the policy and the <see cref="elapsedMs"/> expiry. The pin
+    /// is held in place while pending; unchecking removes the entry (true undo); <see cref="OnTick"/> sends on
+    /// expiry.</summary>
     private readonly Dictionary<(Guid, Guid), PendingCompletion> pendingCompletions = new();
 
     /// <summary>A completion held on the HUD during its pin window: the player's chosen policy
     /// at click time and the clock value at which the deferred send fires.</summary>
     private readonly record struct PendingCompletion(ScribeCompletionPolicy Policy, double ExpiryMs);
 
-    /// <summary>Pins whose destructive completion (Unpin/Delete/UnpinSink) has been SENT and that are now
-    /// waiting for the server's removal push. Between the window
-    /// expiring (send) and the server re-pushing the pin set, the pin is still in
-    /// <see cref="ScribeModSystem.MyPins"/> but is no longer <see cref="IsFadingOut"/>, so without this it
-    /// would rebuild at FULL opacity for a frame — a visible flash. Pins in this set are filtered OUT of the
-    /// item set handed to <see cref="ScribeAnimatedList"/>: the pin's
-    /// identity leaving the container's item set is exactly what triggers the container's <c>Immediate</c>
-    /// collapse — it splices a frozen ghost at the row's slot and animates it closed, then self-retires it.
-    /// Reconciled against the live set on each server push (<see cref="ReconcileAwaitingRemoval"/>): an id the
-    /// server removed OR that the player re-pinned is dropped (the container's own reappear-cancels-departure
-    /// revives a re-pinned row mid-collapse).</summary>
+    /// <summary>Pins whose destructive completion (Unpin/Delete/UnpinSink) was SENT and await the server's
+    /// removal push. They are filtered OUT of the items handed to <see cref="ScribeAnimatedList"/>: an identity
+    /// leaving the item set triggers the container's <c>Immediate</c> collapse of a frozen ghost, and without the
+    /// filter the pin would flash back at full opacity. Reconciled on each push
+    /// (<see cref="ReconcileAwaitingRemoval"/>).</summary>
     private readonly HashSet<(Guid, Guid)> awaitingRemoval = new();
 
-    /// <summary>The Quest Accept prompt banner's 2+-candidate picker state — this widget's own session state, since <see cref="HudPinsContent"/> is
-    /// Stateless. Reset whenever the pending prompt list changes (<see cref="OnQuestPromptsChanged"/>) so a
-    /// resolved/dismissed prompt never leaves a stale picker open for the next one.</summary>
+    /// <summary>Quest Accept banner's 2+-candidate picker state (session state; the content widget is
+    /// stateless). Reset when the pending prompt list changes.</summary>
     private bool questAcceptPickerOpen;
     private int questAcceptSelectedIndex;
 
-    /// <summary>Per-pinned-Tracker LIVE "have" count, recomputed from the viewer's carried inventory on the
-    /// HUD's own 250ms tick, so a pinned Tracker's counter is live even with no Scribe dialog open — the
-    /// dialog-bound count engine (<see cref="ScribeDialogBase"/>'s <c>RecomputeTrackers</c>) only runs while
-    /// a surface is in its read view. Keyed by pin identity <c>(OwnerDocId, TaskId)</c>. Overrides the pin
-    /// snapshot's <see cref="ScribePinnedRef.CurrentQuantity"/> for display (<see cref="HudTrackerHave"/>) and
-    /// is the rising-edge baseline for the HUD-driven auto-completion. Pruned to the current pinned-Tracker
-    /// set each recompute so it can't leak entries for unpinned/removed tasks.</summary>
+    /// <summary>Per-pinned-Tracker LIVE "have" count from the viewer's carried inventory, recomputed on the HUD
+    /// tick so counters are live with no dialog open. Keyed by <c>(OwnerDocId, TaskId)</c>; overrides the
+    /// snapshot's <see cref="ScribePinnedRef.CurrentQuantity"/> for display (<see cref="HudTrackerHave"/>) and is
+    /// the rising-edge baseline for auto-completion. Pruned to the current pinned-Tracker set.</summary>
     private readonly Dictionary<(Guid, Guid), int> liveTrackerCounts = new();
 
-    /// <summary>Resolved <see cref="CraftingRecipeIngredient"/> per Tracker target code, cached because
-    /// resolving touches the item/block registries; the frequent recompute then re-runs only the cheap
-    /// carried-stack sum. A null value caches "this code doesn't resolve → counts as 0". Mirrors the dialog
-    /// engine's own <c>trackerIngredientCache</c>; an item code's resolution is stable for the session, so it
-    /// is never invalidated.</summary>
+    /// <summary>Resolved ingredient per Tracker target code (registry lookups are costly); null caches
+    /// "doesn't resolve, counts 0". Never invalidated: resolution is stable per session.</summary>
     private readonly Dictionary<string, CraftingRecipeIngredient?> hudTrackerIngredientCache = new();
 
-    /// <summary>Host-owned collapse (and entry) controllers, keyed by row identity, passed into
-    /// <see cref="ScribeAnimatedList"/> so a motion RESUMES (not restarts) across the HUD's tree rebuilds
-    /// The container drives it; the HUD only reads <c>AnyAnimating</c> (to
-    /// pin hover under a stationary cursor while the list reflows) and disposes it with the HUD.</summary>
+    /// <summary>Host-owned collapse/entry controllers keyed by row identity so motion RESUMES across HUD
+    /// rebuilds. The HUD only reads <c>AnyAnimating</c> (to keep hover fresh) and disposes it.</summary>
     private readonly ScribeAnimationRegistry collapseRegistry = new();
 
-    /// <summary>Keeps the collapse-time hover refresh running a few frames past the last animating frame so a
-    /// refresh lands AFTER the completion-triggered rebuild re-lays-out the tree.
-    /// See <see cref="ScribeHoverRefreshLatch"/>.</summary>
+    /// <summary>Keeps the hover refresh running a few frames past the last animating frame so it lands after
+    /// the rebuild's layout. See <see cref="ScribeHoverRefreshLatch"/>.</summary>
     private readonly ScribeHoverRefreshLatch hoverRefreshLatch = new();
 
-    /// <summary>Stable identity of the single persistent-root <see cref="ScribeDialogBody"/> that wraps the
-    /// HUD content. Allocated ONCE here (never in <see cref="Build"/>, per the <see cref="GlobalKey"/>
-    /// contract) so <see cref="RebuildHudBody"/> can reach the live body State and reconcile the row list in
-    /// place — REUSING each row's live State (its <see cref="ScribeFadeText"/> fade controller,
-    /// <see cref="AnimatedOpacity"/> sink tween, <see cref="ScribeHudGearButton"/> hover) rather than
-    /// remounting the tree with <see cref="GuiBase.ForceRebuild"/>, which would snap those animations and
-    /// drop hover. The 0⇄1 self-open/close stays a host concern (<c>TryOpen</c>/<c>TryClose</c>).</summary>
+    /// <summary>Identity of the persistent-root <see cref="ScribeDialogBody"/>. Allocated once (never in
+    /// <see cref="Build"/>) so <see cref="RebuildHudBody"/> can reconcile the row list in place, reusing each
+    /// row's State (fade controller, sink tween, gear hover) instead of remounting via
+    /// <see cref="GuiBase.ForceRebuild"/>, which would snap animations and drop hover.</summary>
     private readonly GlobalKey bodyKey = new();
 
-    /// <summary>Reconcile the HUD content in place; used at every in-place update site — a pin push, a
-    /// completion toggle, a tick-expiry, the collapse/corruption/timer repaints. A no-op <c>SetState</c> on
-    /// the persistent body State reconciles the subtree, REUSING matching rows (same type +
-    /// <c>ValueKey&lt;Guid&gt;(TaskId)</c>) so their animation State survives, rather than remounting them.
-    /// A no-op before the body has mounted (defensive) or while the HUD is closed. Also arms the
-    /// hover-refresh latch: unlike a <c>ForceRebuild</c> (which swaps <see cref="GuiBase.RootElement"/>,
-    /// caught by <see cref="ScribeHoverRefreshLatch.ArmIfRebuilt"/>), a reconcile leaves RootElement
-    /// unchanged, so a row-list reorder that slides a different row under a stationary cursor would
-    /// otherwise leave stale hover — arming here re-dispatches a synthetic pointer-move over the next few
-    /// frames.</summary>
+    /// <summary>Reconciles the HUD content in place (no-op when closed or unmounted), reusing rows keyed by
+    /// <c>ValueKey&lt;Guid&gt;(TaskId)</c> so their animation State survives. Also arms the hover-refresh latch:
+    /// a reconcile leaves <see cref="GuiBase.RootElement"/> unchanged, so
+    /// <see cref="ScribeHoverRefreshLatch.ArmIfRebuilt"/> can't catch a reorder under a stationary cursor.</summary>
     private void RebuildHudBody()
     {
         if (!IsOpened()) return;
@@ -176,12 +129,9 @@ public sealed class HudScribePins : GuiBase
         hoverRefreshLatch.Arm();
     }
 
-    /// <summary>A departing pin row's collapse finished and the list has shrunk (the container self-retired
-    /// its ghost). The HUD is shrink-wrapped (no scroll to clamp, unlike the
-    /// Pin Tab), so the only concern is hover: a row below the departed one slid up under a stationary cursor
-    /// while the window shrank, so re-arm the hover-refresh latch to re-dispatch a synthetic pointer-move over
-    /// the next few frames. The per-frame <c>AnyAnimating</c> arming in <see cref="OnRenderGUI"/> already
-    /// covers the animating frames; this is the belt-and-suspenders clamp for the settling frame.</summary>
+    /// <summary>A departing row's collapse finished. Re-arms the hover refresh because rows below slid up under
+    /// a stationary cursor; the per-frame <c>AnyAnimating</c> arming covers the animating frames, this covers the
+    /// settling frame.</summary>
     private void OnHudDepartureSettled() => hoverRefreshLatch.Arm();
 
     private record struct AnchorInputs(
@@ -189,65 +139,48 @@ public sealed class HudScribePins : GuiBase
         float MinimapClearanceX, Vector2 WindowSize);
     private AnchorInputs? _lastAnchorInputs;
 
-    /// <summary>Client-side interpolated remaining seconds for the timer, kept smooth between 1-second
-    /// server pushes. Resynced from <see cref="ScribeModSystem.MyTimer"/> on every push.</summary>
+    /// <summary>Interpolated remaining seconds, smooth between 1 s server pushes; resynced from
+    /// <see cref="ScribeModSystem.MyTimer"/> on each push.</summary>
     private double _timerLocalRemaining;
     private bool _timerResync = true;
 
-    /// <summary>Last timer status the HUD reacted to. The server pushes timer state every second while a
-    /// timer runs (each fires <see cref="OnMyTimerChanged"/>); the steady per-second countdown repaint is
-    /// the shared <see cref="ScribeModSystem.TimerDisplayTick"/>'s job, so OnMyTimerChanged only rebuilds
-    /// on a genuine Idle↔Running↔Fired transition — so the HUD does not rebuild twice a second (push +
-    /// display tick).</summary>
+    /// <summary>Last timer status reacted to. <see cref="OnMyTimerChanged"/> rebuilds only on a status
+    /// transition; the per-second countdown repaint belongs to <see cref="ScribeModSystem.TimerDisplayTick"/>.</summary>
     private Scribe.Core.TimerStatus _lastTimerStatus = Scribe.Core.TimerStatus.Idle;
 
-    /// <summary>Client-side accumulator for how long the current timer has been Fired, in real seconds. The
-    /// server does not time the 30 s auto-disappear (it's governed by the client-local
-    /// <see cref="ScribePlayerSettings.TimerAutoDisappear"/> preference, which only the client knows), so
-    /// this drives it. Seeded from the pushed <see cref="TimerStore.FiredElapsedSeconds"/> whenever a Fired
-    /// state arrives — 0 at the firing transition, or the persisted value when a fired timer is restored on
-    /// rejoin, so the window resumes rather than restarts — then advanced locally on the 1 Hz
-    /// <see cref="ScribeModSystem.TimerDisplayTick"/>.</summary>
+    /// <summary>Seconds the current timer has been Fired. The server doesn't time the auto-disappear (it depends
+    /// on the client-local <see cref="ScribePlayerSettings.TimerAutoDisappear"/>). Seeded from
+    /// <see cref="TimerStore.FiredElapsedSeconds"/> on a Fired push so a restored timer resumes, then advanced on
+    /// the 1 Hz tick.</summary>
     private double _firedElapsedLocal;
 
-    /// <summary>Guards against sending more than one auto-clear for the same fired timer (the clear request
-    /// and the server's Idle re-push are a round-trip apart, during which another 1 Hz tick could fire).
-    /// Reset each time a fresh Fired state arrives.</summary>
+    /// <summary>Ensures only one auto-clear is sent per fired timer; reset on each fresh Fired state.</summary>
     private bool _firedAutoClearSent;
 
     // ---------------- Temporal-storm corruption ----------------
 
-    /// <summary>Base corruption strengths per storm tier, sourced verbatim from vanilla's own
-    /// <c>stormGlitchStrength</c> bases in <see cref="SystemTemporalStability"/> (decompiled) so the HUD
-    /// corrupts at the same intensity the game's own storm chat would. Not scaled.</summary>
+    /// <summary>Base strengths per storm tier, copied from vanilla's <c>stormGlitchStrength</c> bases in
+    /// <see cref="SystemTemporalStability"/>. Not scaled.</summary>
     private const double StormLightStrength = 0.53;
     private const double StormMediumStrength = 0.67;
     private const double StormHeavyStrength = 0.90;
 
-    /// <summary>Personal-stability corruption ramp bounds: at/above <see cref="StabilityRampUpper"/> the
-    /// low-stability trigger contributes nothing; it ramps linearly to full strength at (or below)
-    /// <see cref="StabilityRampLower"/>.</summary>
+    /// <summary>Low-stability ramp: nothing at/above Upper, linear to full at/below Lower.</summary>
     private const double StabilityRampUpper = 0.50;
     private const double StabilityRampLower = 0.10;
 
-    /// <summary>Re-scramble cadence bounds (ms): while a trigger is active the corruption is recomputed on
-    /// a randomized interval in this range, so the marks writhe rather than sitting static.</summary>
+    /// <summary>Randomized re-scramble interval range (ms) while a trigger is active.</summary>
     private const long RescrambleMinMs = 0;
     private const long RescrambleMaxMs = 5000;
 
-    /// <summary>Seed handed to the Core corruptor each rebuild; advanced on the re-scramble cadence so the
-    /// injected marks change while the same text stays put. Deterministic per build so the whole HUD's
-    /// corruption is coherent within one frame.</summary>
+    /// <summary>Corruptor seed, advanced on the re-scramble cadence; fixed within a build so the whole HUD is
+    /// coherent.</summary>
     private int _corruptionSeed;
 
-    /// <summary><see cref="ICoreClientAPI.World"/>'s <c>ElapsedMilliseconds</c> at which the next
-    /// re-scramble is due; scheduled to a fresh random interval each time it fires (or when a trigger
-    /// first becomes active).</summary>
+    /// <summary>World elapsed ms at which the next re-scramble is due.</summary>
     private long _nextRescrambleMs;
 
-    /// <summary>Edge-detect state for the corruption trigger and the storm-active flag, so a transition
-    /// rebuilds the HUD immediately (prompt title swap + first corruption) rather than waiting for the
-    /// next re-scramble tick. Mirrors the server-side <c>_stormWasActive</c> pattern.</summary>
+    /// <summary>Edge-detect state so a trigger or storm transition rebuilds immediately.</summary>
     private bool _corruptionWasActive;
     private bool _stormWasActiveHud;
 
@@ -255,8 +188,7 @@ public sealed class HudScribePins : GuiBase
     {
         this.modSystem = modSystem;
 
-        // Own the subscription + tick for this object's whole lifetime (not per-open): the HUD must
-        // react to a pin arriving even while it is closed so it can open itself. Released in Dispose().
+        // Subscribed for the object's lifetime (not per-open) so a pin arriving while closed can open the HUD; released in Dispose().
         modSystem.MyPinsChanged += OnMyPinsChanged;
         modSystem.MyTimerChanged += OnMyTimerChanged;
         modSystem.TimerDisplayTick += OnTimerDisplayTick;
@@ -264,18 +196,14 @@ public sealed class HudScribePins : GuiBase
         tickListenerId = capi.Event.RegisterGameTickListener(OnTick, TickIntervalMs);
     }
 
-    /// <summary>Repaint the HUD timer countdown on the shared 1Hz tick so it stays in step with the
-    /// Notebook Timer tab (both fire from the same dispatch). Only rebuilds while a running/fired timer
-    /// is on screen and the HUD is open; the 250ms OnTick keeps _timerLocalRemaining interpolated.</summary>
+    /// <summary>Repaints the countdown on the shared 1 Hz tick so it matches the Notebook Timer tab; the 250 ms
+    /// OnTick only interpolates _timerLocalRemaining.</summary>
     private void OnTimerDisplayTick()
     {
         var timer = modSystem.MyTimer;
 
-        // Client-driven auto-disappear: while a timer is Fired, advance the
-        // local elapsed and — ONLY if the player's "Timer disappears" preference is on — clear it once the
-        // ~30 s window elapses. Re-reading the preference every tick is what makes turning it off mid-flash
-        // take effect live: the check simply stops passing, so no clear is ever sent and the fired row
-        // stays until the player dismisses it. The server does not time this.
+        // Client-driven auto-disappear while Fired. The preference is re-read each tick so turning it off
+        // mid-flash takes effect live.
         if (timer?.Status == Scribe.Core.TimerStatus.Fired)
         {
             _firedElapsedLocal += 1.0;
@@ -297,26 +225,20 @@ public sealed class HudScribePins : GuiBase
     /// <inheritdoc />
     public override EnumDialogType DialogType => EnumDialogType.HUD;
 
-    /// <summary>A HUD dialog is not a modal; Escape must fall through to the game (pause menu), never
-    /// close the HUD. (The base already returns false for HUD type; stated explicitly for clarity.)</summary>
+    /// <summary>Escape falls through to the game; a HUD never closes on it.</summary>
     public override bool OnEscapePressed() => false;
 
-    /// <summary>Render only while open (the base default, restated for clarity).</summary>
     public override bool ShouldReceiveRenderEvents() => IsOpened();
 
-    /// <summary>Never intercept keyboard events, so movement/hotbar/other keybinds keep working while
-    /// the HUD is on screen. Mouse events are left ON (base default) so the row checkboxes are
-    /// clickable; the non-opaque, content-sized window means clicks anywhere else fall through to the
-    /// world.</summary>
+    /// <summary>Keyboard stays with the game; mouse stays on so checkboxes are clickable and clicks outside the
+    /// content fall through.</summary>
     public override bool ShouldReceiveKeyboardEvents() => false;
 
     /// <inheritdoc />
     protected override WindowConfig CreateWindowConfig() => new()
     {
-        // Shrink-wrap to content (Size null) so the window is exactly as tall/wide as the rows; the
-        // corner anchor is applied post-layout (see AnchorTopRight). A concrete Position suppresses the
-        // base's first-frame auto-centering. Non-draggable/-resizable, and OpaqueHitTest off so a click
-        // outside the (small) content rect passes through to the world instead of being swallowed.
+        // Size null shrink-wraps to content (the anchor is applied post-layout). A concrete Position suppresses
+        // the base's first-frame auto-centering; OpaqueHitTest off lets clicks outside the content reach the world.
         Size = null,
         Position = Vector2.Zero,
         Draggable = false,
@@ -325,43 +247,28 @@ public sealed class HudScribePins : GuiBase
         Clip = false,
     };
 
-    /// <summary>Shrink-wrap layout just settled on a (possibly new) content size — re-anchor immediately
-    /// so a row-count change doesn't leave the window mis-positioned for a frame. Mirrors the
-    /// <c>GuiGlobalOverlay</c> re-anchor, adapted for a configurable corner/edge rather than fullscreen.</summary>
+    /// <summary>Re-anchors right after shrink-wrap layout settles so a row-count change doesn't mis-position
+    /// the window for a frame.</summary>
     protected override void OnShrinkWrapLayoutCompleted() => ApplyAnchor();
 
     /// <inheritdoc />
     public override void OnRenderGUI(float deltaTime)
     {
-        // Keep hover self-healing under a STATIONARY cursor (LibGUI only recomputes hover on real mouse
-        // motion). Three arming paths:
-        //  1. A collapse reflowing the list every frame (AnyAnimating).
-        //  2. Any reconcile that reorders rows — armed INSIDE RebuildHudBody, because a reconcile does NOT
-        //     swap RootElement, so ArmIfRebuilt below can't catch it. This is the unpin/complete case: a
-        //     row leaving slides a different row under the stationary cursor. (Reused elements KEEP their
-        //     hovered flag, so only a row that genuinely CHANGED slot needs the synthetic re-dispatch;
-        //     arming is harmless when it didn't.)
-        //  3. A genuine tree remount that DOES swap RootElement — the self-open (TryOpen) path — caught
-        //     here by identity.
-        // The latch re-dispatches a synthetic pointer-move for a few frames past any trigger so the
-        // reconciled/rebuilt tree (laid out a frame later) regains hover without a mouse wiggle. No-op idle.
+        // LibGUI recomputes hover only on real mouse motion, so arm the latch to re-dispatch a synthetic
+        // pointer-move for a few frames when: (1) a collapse is animating; (2) a reconcile reorders rows (armed in
+        // RebuildHudBody, since RootElement is unchanged); (3) a remount swaps RootElement (self-open).
         if (collapseRegistry.AnyAnimating) hoverRefreshLatch.Arm();
         hoverRefreshLatch.ArmIfRebuilt(RootElement);
         if (hoverRefreshLatch.Tick()) RefreshHoverAtCursor();
 
-        // Keep positioned every frame (handles a game-window resize, which needn't re-run layout). Uses
-        // the last laid-out WindowSize; on the very first frame that is the shrink-wrap estimate. WindowSize
-        // is part of AnchorInputs so the position self-corrects once real content lays out: a settled
-        // WindowSize must invalidate the anchor cache even when no other input changed.
+        // Re-anchor every frame (a window resize needn't re-run layout). WindowSize is part of AnchorInputs so the
+        // position self-corrects once real content lays out.
         ApplyAnchor();
         base.OnRenderGUI(deltaTime);
     }
 
-    /// <summary>Re-dispatch a synthetic pointer-move at the current cursor so LibGUI re-runs its hit-test
-    /// and refreshes hover — called each frame while an unpin collapse is
-    /// animating, since LibGUI otherwise only updates hover on real mouse motion. Mirrors the lectern
-    /// dialog's <c>RefreshHoverAtCursor</c>; shares the raw→window-local conversion in
-    /// <see cref="ScribeHoverRefresh"/>.</summary>
+    /// <summary>Re-dispatches a synthetic pointer-move at the cursor so LibGUI re-runs hit-testing; see
+    /// <see cref="ScribeHoverRefresh"/> for the coordinate conversion.</summary>
     private void RefreshHoverAtCursor()
     {
         if (RootElement?.RenderObject == null) return;
@@ -370,16 +277,10 @@ public sealed class HudScribePins : GuiBase
         EventDispatcher.DispatchPointerMove(RootElement, new PointerEvent(local.X, local.Y));
     }
 
-    /// <summary>Live minimap-clearance width for the <see cref="ScribeHudAnchor.TopRight"/> anchor.
-    /// The hardcoded <see cref="DefaultTopRightMinimapClearanceX"/> only clears the vanilla minimap at the
-    /// game's reference GUI Scale, so rather than guessing a GUIScale conversion this
-    /// reads the open vanilla minimap HUD dialog's actual rendered bounds (same
-    /// <c>capi.Gui.OpenedGuis.OfType&lt;T&gt;()</c> lookup pattern <see cref="DialogHeldTrackerDocs"/> already
-    /// uses for Scribe's own dialogs) and convert its width into this HUD's own GUIScale-normalized
-    /// logical units (dividing by <paramref name="scale"/>, mirroring how <c>screenW</c> is derived from
-    /// <c>capi.Render.FrameWidth</c>), plus the vanilla dialog-to-screen padding. Falls back to
-    /// <see cref="DefaultTopRightMinimapClearanceX"/> when the minimap HUD dialog isn't resolvable (not
-    /// yet composed, or the player has the full map open instead).</summary>
+    /// <summary>Minimap clearance width for the <see cref="ScribeHudAnchor.TopRight"/> anchor, read from the
+    /// open vanilla minimap HUD dialog's bounds, converted to this HUD's GUIScale-normalized units, plus the
+    /// vanilla dialog-to-screen padding. Falls back to <see cref="DefaultTopRightMinimapClearanceX"/> when the
+    /// dialog isn't resolvable (not composed yet, or the full map is open).</summary>
     private float ResolveTopRightMinimapClearanceX(float scale)
     {
         var minimapBounds = capi.Gui.OpenedGuis
@@ -399,10 +300,8 @@ public sealed class HudScribePins : GuiBase
 
     private float? _lastTracedMinimapClearance;
 
-    /// <summary>Diagnostic-only: logs the raw
-    /// inputs behind <see cref="ResolveTopRightMinimapClearanceX"/> whenever the computed result changes,
-    /// so a clearance problem can be diagnosed from the actual numbers.
-    /// Watch with <c>build/scribe-log.sh --client</c>, filter <c>[scribe-hud-anchor]</c>.</summary>
+    /// <summary>Diagnostic-only: logs the inputs behind <see cref="ResolveTopRightMinimapClearanceX"/> when the
+    /// result changes. Filter <c>[scribe-hud-anchor]</c> in <c>build/scribe-log.sh --client</c>.</summary>
     [Conditional("DEBUG")]
     private void TraceMinimapClearance(float scale, ElementBounds? minimapBounds, float result)
     {
@@ -423,15 +322,11 @@ public sealed class HudScribePins : GuiBase
     }
 
     /// <summary>
-    /// Position the shrink-wrapped window per the player's <see cref="ScribePlayerSettings.HudAnchor"/>
-    /// (one of seven corners/edges) plus their <see cref="ScribePlayerSettings.HudOffsetX"/>/
-    /// <see cref="ScribePlayerSettings.HudOffsetY"/> nudge. The offset always moves the window
-    /// toward screen-center along each axis from the anchored edge — +X pulls a right anchor leftward and
-    /// a left anchor rightward; +Y pulls a bottom anchor upward and a top anchor downward — so a positive
-    /// value reads as "further from the edge" regardless of which edge is anchored, and a middle anchor's
-    /// offset shifts from center. The <see cref="ScribeHudAnchor.TopRight"/> default, when the player
-    /// hasn't set their own X offset, applies <see cref="ResolveTopRightMinimapClearanceX"/> so the HUD
-    /// clears the minimap out of the box, at any GUI Scale.
+    /// Positions the shrink-wrapped window per <see cref="ScribePlayerSettings.HudAnchor"/> plus the
+    /// <see cref="ScribePlayerSettings.HudOffsetX"/>/<see cref="ScribePlayerSettings.HudOffsetY"/> nudge.
+    /// A positive offset always moves the window toward screen center from the anchored edge. The
+    /// <see cref="ScribeHudAnchor.TopRight"/> anchor adds <see cref="ResolveTopRightMinimapClearanceX"/> so the
+    /// HUD clears the minimap by default.
     /// </summary>
     private void ApplyAnchor()
     {
@@ -452,20 +347,13 @@ public sealed class HudScribePins : GuiBase
         if (_lastAnchorInputs == key) return;
         _lastAnchorInputs = key;
 
-        // Offsets are RELATIVE to the anchor's pre-baked offset: the player's stored value is ADDED to the
-        // anchor's sensible built-in default, so a stored 0 sits at that default (e.g. clear of the
-        // top-right minimap) and any value nudges further from it. Only TopRight has a non-zero pre-bake
-        // (the minimap clearance on X).
-        //
-        // The clearance applies only when the minimap is on. "showMinimapHud" is written by
-        // GuiDialogWorldMap — absent means the minimap was never explicitly toggled (i.e. on by default),
-        // so absent is treated as on and a fresh install still clears the minimap.
+        // Offsets are relative to the anchor's pre-baked offset (only TopRight has one: the minimap clearance on
+        // X). The clearance applies only when the minimap is on; "showMinimapHud" is written by GuiDialogWorldMap,
+        // so absent means never toggled, i.e. on by default.
         float offX = key.OffX;
         float offY = key.OffY;
 
-        // Left/center/right along X; top/center/bottom along Y. Left & top edges add the offset (moving
-        // inward = toward center); right & bottom edges subtract it (also toward center); center anchors
-        // shift by the raw offset from the midpoint.
+        // Left/top edges add the offset and right/bottom edges subtract it (both toward center); center anchors shift from the midpoint.
         float x = anchor switch
         {
             ScribeHudAnchor.TopLeft or ScribeHudAnchor.MiddleLeft or ScribeHudAnchor.BottomLeft
@@ -495,17 +383,14 @@ public sealed class HudScribePins : GuiBase
     // ---------------- Refresh / visibility ----------------
 
     /// <summary>
-    /// A fresh pin-set push arrived (added/removed/completed pin, or a snapshot refresh). Drop any
-    /// optimistic done-overrides the server has now confirmed, then apply the visibility rule: open when the player has ≥1 pin, close at zero, otherwise rebuild in place.
+    /// A pin-set push arrived. Drops confirmed optimistic overrides, then opens the HUD when there is something
+    /// to show, closes it at zero, otherwise rebuilds in place.
     /// </summary>
     private void OnMyPinsChanged()
     {
         _lastAnchorInputs = null;
         ReconcileOptimisticWithServer();
-        // Reconcile the sent-but-not-yet-removed set against the authoritative pin push: drop any id the
-        // server has now removed (its ghost is collapsing or already gone in the container) or that the
-        // player re-pinned (so it's handed back to the container as a live row and the container's own
-        // reappear-cancels-departure revives it mid-collapse).
+        // Drop ids the server removed (ghost collapsing or gone) or the player re-pinned (handed back to the container as a live row).
         ReconcileAwaitingRemoval();
 
         var rawTimer = modSystem.MyTimer;
@@ -525,9 +410,7 @@ public sealed class HudScribePins : GuiBase
             RebuildHudBody();
         }
 
-        // Refresh the live Tracker counts against the new pin set and rebuild once more if a displayed count
-        // moved, so a newly-pushed (or newly-opened) Tracker pin shows its live carried count at once rather
-        // than waiting for the next 250ms tick. No-op unless the HUD is open.
+        // Refresh live Tracker counts and rebuild once more if a displayed count moved, so a new Tracker pin shows its count without waiting for the next tick.
         if (IsOpened() && RecomputeHudTrackers()) RebuildHudBody();
     }
 
@@ -539,10 +422,8 @@ public sealed class HudScribePins : GuiBase
         bool statusChanged = status != _lastTimerStatus;
         _lastTimerStatus = status;
 
-        // A fresh Fired state (the firing transition, or a fired timer restored on rejoin) reseeds the
-        // client-side auto-disappear accumulator from the pushed elapsed and re-arms the one-shot clear, so
-        // the ~30 s window resumes from where the server left it rather than restarting. Any non-Fired state
-        // (Running/Idle/cleared) resets it so a later fire starts a clean window.
+        // A Fired state reseeds the auto-disappear accumulator from the pushed elapsed (so the window resumes, not
+        // restarts) and re-arms the one-shot clear; any other state resets it.
         if (status == Scribe.Core.TimerStatus.Fired)
         {
             _firedElapsedLocal = timer?.FiredElapsedSeconds ?? 0.0;
@@ -559,18 +440,14 @@ public sealed class HudScribePins : GuiBase
             TryOpen();
         else if (!hasTimer && !modSystem.MyPins.Any() && !HasBannerEligibleQuestPrompt && IsOpened())
             TryClose();
-        // Only rebuild here on a genuine status transition (start/fire/clear). The routine per-second
-        // running push does NOT rebuild — TimerDisplayTick owns the steady countdown repaint, so the HUD
-        // rebuilds once per second, not twice.
+        // Rebuild only on a genuine status transition; TimerDisplayTick owns the per-second repaint.
         else if (statusChanged && IsOpened())
             RebuildHudBody();
     }
 
-    /// <summary>A Quest Accept/Completion prompt was queued or resolved: apply the same self-open/close rule as pins/timer (a prompt alone, with zero pins and
-    /// no running timer, still opens the HUD so the player actually sees it) and rebuild. Uses
-    /// <see cref="HasBannerEligibleQuestPrompt"/> rather than the raw pending count so a
-    /// PromptPopup-only accept-prompt — rendered by the center modal instead
-    /// — doesn't pop the HUD open with nothing to show in it.</summary>
+    /// <summary>A Quest prompt was queued or resolved: self-open/close as for pins/timer (a prompt alone opens
+    /// the HUD) and rebuild. Uses <see cref="HasBannerEligibleQuestPrompt"/> so a PromptPopup-only accept prompt
+    /// (shown by the center modal) doesn't open an empty HUD.</summary>
     private void OnQuestPromptsChanged()
     {
         questAcceptPickerOpen = false;
@@ -588,22 +465,16 @@ public sealed class HudScribePins : GuiBase
             RebuildHudBody();
     }
 
-    /// <summary>Whether a pending prompt renders as the HUD BANNER (not the center modal) —
-    /// a completion-prompt always does; an accept-prompt does unless the player's Quest Accept Policy is
-    /// <see cref="Scribe.Core.ScribeQuestAcceptPolicy.PromptPopup"/>, in which case
-    /// <see cref="GuiDialogScribeQuestPrompt"/> shows it instead (routing
-    /// happens at render time, off the live policy — no style tag on the queued prompt).</summary>
+    /// <summary>Whether a pending prompt renders as the HUD banner: completion-prompts always; accept-prompts
+    /// unless the policy is <see cref="Scribe.Core.ScribeQuestAcceptPolicy.PromptPopup"/> (then
+    /// <see cref="GuiDialogScribeQuestPrompt"/> shows it). Decided at render time from the live policy.</summary>
     private bool BannerEligible(ScribeQuestPrompt p)
         => p.IsCompletion || modSystem.MySettings.QuestAcceptPolicy != Scribe.Core.ScribeQuestAcceptPolicy.PromptPopup;
 
-    /// <summary>Whether ANY pending prompt is currently banner-eligible (see <see cref="BannerEligible"/>) —
-    /// drives the HUD's self-open/close rule so a PromptPopup-only accept-prompt (shown by the modal
-    /// instead) doesn't pop an otherwise-empty HUD open.</summary>
+    /// <summary>Whether any pending prompt is banner-eligible; drives self-open/close.</summary>
     private bool HasBannerEligibleQuestPrompt => modSystem.PendingQuestPrompts.Any(BannerEligible);
 
-    /// <summary>The pending prompts eligible to render on the HUD banner right now (see
-    /// <see cref="BannerEligible"/>), oldest first — what <see cref="BuildHudTree"/> hands to
-    /// <see cref="HudPinsContent"/> instead of the raw pending set.</summary>
+    /// <summary>Banner-eligible pending prompts, oldest first, handed to <see cref="HudPinsContent"/>.</summary>
     private List<ScribeQuestPrompt> BannerEligibleQuestPrompts()
         => modSystem.PendingQuestPrompts.Where(BannerEligible).ToList();
 
@@ -623,19 +494,13 @@ public sealed class HudScribePins : GuiBase
         }
     }
 
-    /// <summary>Reconcile the sent-but-not-yet-removed set (<see cref="awaitingRemoval"/>) with a fresh
-    /// authoritative pin push. The collapse itself is owned by
-    /// <see cref="ScribeAnimatedList"/>: a pin held in this set is filtered OUT of the container's item
-    /// set, and the container splices a frozen ghost at its slot and animates it closed. This method only
-    /// keeps the suppression set from leaking: an id is dropped once the server confirms the pin GONE (absent
-    /// from <see cref="ScribeModSystem.MyPins"/>).
+    /// <summary>Drops ids from <see cref="awaitingRemoval"/> once the server confirms the pin GONE (absent from
+    /// <see cref="ScribeModSystem.MyPins"/>); the collapse itself belongs to <see cref="ScribeAnimatedList"/>.
     ///
-    /// <para>Dropping only on server-confirmed removal — not merely when <see cref="IsFadingOut"/> turns false
-    /// — is load-bearing for the rapid multi-complete case: several destructive completions can be pending
-    /// removal at once, and an intervening push (an unrelated pin change) must not un-suppress a still-present
-    /// sent pin and flash it back to full opacity. A destructive completion is guaranteed to produce a removal
-    /// push, so the removal always precedes any later re-pin of the same task — which is why a re-pin needs no
-    /// special case here: by the time the task can reappear it has already left this set.</para></summary>
+    /// <para>Dropping only on confirmed removal (not when <see cref="IsFadingOut"/> turns false) is load-bearing:
+    /// with several removals pending, an unrelated push must not un-suppress a still-present sent pin and flash it
+    /// back. A destructive completion always yields a removal push before any re-pin, so re-pins need no special
+    /// case.</para></summary>
     private void ReconcileAwaitingRemoval()
     {
         if (awaitingRemoval.Count == 0) return;
@@ -643,23 +508,16 @@ public sealed class HudScribePins : GuiBase
         awaitingRemoval.RemoveWhere(k => !live.Contains(k));
     }
 
-    /// <summary>Low-frequency tick: fire any pin windows that have elapsed — sending the deferred
-    /// completion to the server — and act as a cheap safety re-read. Only rebuilds when a
-    /// window actually expired and the HUD is open (the subsequent server re-push lands in
-    /// <see cref="OnMyPinsChanged"/> and rebuilds again with the authoritative result).</summary>
+    /// <summary>Low-frequency tick: sends completions whose window elapsed and rebuilds only if one did (the
+    /// server re-push then rebuilds with the authoritative result).</summary>
     private void OnTick(float dt)
     {
         elapsedMs += dt * 1000.0;
 
-        // Temporal-storm corruption: advance/re-scramble the corruption
-        // and rebuild on trigger/storm transitions or the 0–5 s cadence. Cheap when no trigger is active
-        // (a couple of null-safe reads) and only rebuilds while the HUD is open.
+        // Temporal-storm corruption: advance and rebuild on transitions or the 0–5 s cadence; cheap when idle.
         bool corruptionRebuilt = TickCorruption();
 
-        // Interpolate the timer countdown between server pushes (250ms tick, server pushes every 1s).
-        // InGame-mode timers drain at the world's in-game time rate (≈30 in-game s per real s by default),
-        // matching the server's decrement so the smooth local display doesn't diverge from the authoritative
-        // value. RealTime timers drain one-per-real-second.
+        // Interpolate the countdown between server pushes; InGame timers drain at the world time rate to match the server.
         var timer = modSystem.MyTimer;
         if (timer?.Status == Scribe.Core.TimerStatus.Running)
         {
@@ -669,15 +527,10 @@ public sealed class HudScribePins : GuiBase
                 double rate = timer.Mode == Scribe.Core.TimerMode.InGame ? ScribeTimeRate.InGamePerReal(capi) : 1.0;
                 _timerLocalRemaining = Math.Max(0, _timerLocalRemaining - dt * rate);
             }
-            // NOTE: the repaint is NOT triggered here. This 250ms tick only interpolates the local
-            // remaining seconds for accuracy; the actual repaint fires from the mod system's shared
-            // 1Hz TimerDisplayTick (see OnTimerDisplayTick) so the HUD and the Notebook Timer tab repaint
-            // in the exact same dispatch rather than up to 250ms apart.
+            // No repaint here: the shared 1 Hz TimerDisplayTick repaints so the HUD and Notebook Timer tab stay in step.
         }
 
-        // Live Tracker counts: recompute every pinned Tracker's carried-inventory
-        // "have" on this tick so the HUD counter is live with no Scribe dialog open. Rebuild if a displayed
-        // count actually moved (and the corruption tick didn't already rebuild this frame).
+        // Live Tracker counts; rebuild if a displayed count moved and the corruption tick didn't already rebuild.
         bool trackersRebuilt = false;
         if (RecomputeHudTrackers() && !corruptionRebuilt && IsOpened())
         {
@@ -694,16 +547,9 @@ public sealed class HudScribePins : GuiBase
             if (elapsedMs >= pending.ExpiryMs)
             {
                 pendingCompletions.Remove(key);
-                // A Sink completion needs no client-side bookkeeping on expiry: the deferred send fires below,
-                // the server flips LastKnownDone and re-pushes, and the shared ForDisplay partition sinks the
-                // now-done pin — the HUD and Pin Tab agree by construction.
-                // A destructive completion (Unpin/Delete/UnpinSink) removes the pin server-side. Add it to
-                // awaitingRemoval so it is filtered OUT of the item set handed to ScribeAnimatedList: the
-                // pin's identity leaving the container's set is exactly what triggers the container's
-                // Immediate collapse — the container splices a frozen ghost (BuildFrozenGhost) at the
-                // slot it left and animates it closed, then self-retires it.
-                // Its text faded to ~0 over the window, so the ghost closes empty space — no flash. No manual
-                // splice/cleanup is needed here.
+                // Sink needs no bookkeeping: the server flips LastKnownDone and ForDisplay sinks the pin.
+                // A destructive completion removes the pin server-side; awaitingRemoval filters it out of the animated
+                // list's items so the container collapses a frozen ghost (its text already faded, so no flash).
                 if (pending.Policy is ScribeCompletionPolicy.Unpin or ScribeCompletionPolicy.Delete
                                    or ScribeCompletionPolicy.UnpinSink)
                     awaitingRemoval.Add(key);
@@ -718,37 +564,26 @@ public sealed class HudScribePins : GuiBase
 
     // ---------------- Live Tracker count engine ----------------
 
-    /// <summary>Recompute every pinned Tracker's live "have" count from the viewer's carried inventory and
-    /// reconcile — the HUD's own count engine, so a pinned Tracker's counter is LIVE with no Scribe dialog
-    /// open. Mirrors <see cref="ScribeDialogBase"/>'s <c>RecomputeTrackers</c> but scoped to the pin set and
-    /// running off the HUD's existing 250ms <see cref="OnTick"/> (rather than a separate <c>SlotModified</c>
-    /// subscription): folding it into the tick the HUD already runs for its pin windows costs nothing and
-    /// avoids the subscribe/unsubscribe lifecycle the dialog engine needs. 250ms latency is imperceptible for
-    /// a HUD counter.
+    /// <summary>Recomputes every pinned Tracker's live "have" count from carried inventory so counters are live
+    /// with no dialog open. Mirrors <see cref="ScribeDialogBase"/>'s <c>RecomputeTrackers</c>, scoped to the pin
+    /// set and run on the existing tick (no <c>SlotModified</c> subscription lifecycle).
     ///
-    /// <para><b>Defer to an open dialog.</b> A pinned Tracker whose owning document is open in ANY Scribe
-    /// dialog (<see cref="ScribeDialogBase.OpenDocumentId"/>) is DISPLAY-ONLY here — the HUD does not send its
-    /// count or fire the rising-edge completion for it. That covers both hazards the dialog engine already
-    /// reasons about: in the read view the dialog itself owns the send + completion (double-driving would
-    /// double-send a quantity and double-fire the completion), and in the editor view an external count write
-    /// would fight the editor's scratch autosave flush. The live override is still computed while deferring so
-    /// the baseline stays current for the moment the dialog closes and the HUD becomes the sole driver.</para>
+    /// <para><b>Defers to an open dialog.</b> A Tracker whose document is open in any Scribe dialog
+    /// (<see cref="ScribeDialogBase.OpenDocumentId"/>) is display-only here: no count send and no rising-edge
+    /// completion, since the read view owns those and an external write would fight the editor's autosave. The
+    /// live value is still computed so the baseline is current when the dialog closes.</para>
     ///
-    /// <para>Returns true when a DISPLAYED count changed, so <see cref="OnTick"/> rebuilds. No-op (returns
-    /// false) when the HUD is closed, the player is unavailable, or no pinned task is a Tracker.</para></summary>
+    /// <para>Returns true when a displayed count changed. No-op (false) when closed, no player, or no Tracker
+    /// pins.</para></summary>
     private bool RecomputeHudTrackers()
     {
         if (!IsOpened()) return false;
         if (capi.World.Player is not { } player) return false;
-        // Both plain Trackers and Craft parents count the viewer's carried inventory against a target (a
-        // Craft parent counts its recipe OUTPUT), so drive both here — mirrors the dialog engine's
-        // IsCarriedCountTracked gate. Craft ingredient CHILDREN are themselves
-        // plain Trackers, so they're already included by Kind == Tracker.
+        // Plain Trackers and Craft parents (recipe output) both count carried inventory; Craft children are plain Trackers.
         var trackerPins = modSystem.MyPins
             .Where(p => p.Kind is ScribeBlockKind.Tracker or ScribeBlockKind.Craft).ToList();
 
-        // Prune live-count entries for pins that are gone (unpinned/removed) so the map can't leak. Done even
-        // when there are no Tracker pins left (clears the last one out).
+        // Prune entries for gone pins, even when no Tracker pins remain.
         if (liveTrackerCounts.Count > 0)
         {
             var liveKeys = trackerPins.Select(p => (p.OwnerDocId, p.TaskId)).ToHashSet();
@@ -774,24 +609,21 @@ public sealed class HudScribePins : GuiBase
             int counted = ingredient is null ? 0 : ScribeTrackerCounter.CountCarried(player, ingredient);
             int have = Math.Max(0, counted); // raw carried count; NOT capped at the target (overflow shows)
 
-            // Baseline for the rising edge AND the display diff: the last live value we computed for this pin,
-            // else the pin snapshot (first sight this tick / this session).
+            // Baseline for the rising edge and display diff: the last live value, else the pin snapshot.
             int baseline = liveTrackerCounts.TryGetValue(key, out var prev) ? prev : pin.CurrentQuantity;
             bool changed = have != baseline;
             liveTrackerCounts[key] = have; // always record so the display override is used consistently
             if (changed) anyDisplayChange = true;
 
-            // A dialog has this doc open → defer entirely (read view drives it; editor must not be fought).
-            // Display-only here; the baseline above is kept current for when the dialog closes.
+            // Dialog has this doc open: display-only (baseline kept current for when it closes).
             if (dialogHeld.Contains(pin.OwnerDocId)) continue;
             if (!changed) continue; // nothing moved → no send, no edge
 
             // Persist + converge through the server-authoritative path (the same op the dialog engine uses).
             SendTrackerQuantity(pin.OwnerDocId, pin.TaskId, have);
 
-            // Rising edge only (unmet → met): apply the tracker-completion setting exactly once. Because we
-            // skip unchanged counts and only fire on the rising edge — and Complete is guarded by !done below —
-            // a later shortfall neither re-fires nor un-completes, mirroring the dialog engine.
+            // Rising edge only (unmet → met): apply the tracker-completion setting once. Complete is guarded by !done,
+            // so a later shortfall neither re-fires nor un-completes.
             bool wasMet = baseline >= pin.TargetQuantity;
             bool nowMet = have >= pin.TargetQuantity;
             if (nowMet && !wasMet) ApplyHudTrackerCompletion(pin);
@@ -800,10 +632,8 @@ public sealed class HudScribePins : GuiBase
         return anyDisplayChange;
     }
 
-    /// <summary>The set of DocIds a Scribe dialog currently has open (in any view). The HUD skips the server
-    /// send + rising-edge completion for pinned Trackers in these docs so it never double-drives a doc a
-    /// dialog's read view owns, nor writes an external count into a doc being edited (see
-    /// <see cref="RecomputeHudTrackers"/> and <see cref="ScribeDialogBase.OpenDocumentId"/>).</summary>
+    /// <summary>DocIds a Scribe dialog has open in any view; the HUD skips send and completion for Trackers in
+    /// these (see <see cref="RecomputeHudTrackers"/>).</summary>
     private HashSet<Guid> DialogHeldTrackerDocs()
     {
         var set = new HashSet<Guid>();
@@ -819,18 +649,10 @@ public sealed class HudScribePins : GuiBase
             ? have
             : pin.CurrentQuantity;
 
-    /// <summary>Apply the player's tracker-completion setting when a pinned Tracker fills up with NO dialog
-    /// open — the HUD-driven sibling of <see cref="ScribeDialogBase"/>'s
-    /// <c>ApplyTrackerCompletion</c>:
-    /// <list type="bullet">
-    /// <item><b>Complete</b> — mark the task done through the same identity-addressed op a checkbox uses,
-    /// honoring the player's completion policy (<see cref="SendCompletion"/>). Guarded by
-    /// <see cref="DisplayedDone"/> so re-collecting after a drop can't un-complete an already-done Tracker; the
-    /// optimistic flag flips the check mark at once. Sent immediately (not via the undo window) exactly like
-    /// the dialog's auto-complete.</item>
-    /// <item><b>Delete</b> — remove the task via the standalone <see cref="ScribeDeleteTaskMessage"/>.</item>
-    /// <item><b>Nothing</b> — leave it satisfied.</item>
-    /// </list></summary>
+    /// <summary>Applies the tracker-completion setting when a pinned Tracker fills with no dialog open (sibling
+    /// of <see cref="ScribeDialogBase"/>'s <c>ApplyTrackerCompletion</c>). Complete sends via
+    /// <see cref="SendCompletion"/> immediately (no undo window), guarded by <see cref="DisplayedDone"/>; Delete
+    /// sends <see cref="ScribeDeleteTaskMessage"/>; Nothing leaves it.</summary>
     private void ApplyHudTrackerCompletion(ScribePinnedRef pin)
     {
         switch (modSystem.MySettings.TrackerCompletion)
@@ -855,11 +677,8 @@ public sealed class HudScribePins : GuiBase
         }
     }
 
-    /// <summary>Send a pinned Tracker's freshly-counted quantity to the server.
-    /// The server resolves the owning document (registry for a Lectern, or by scanning the acting player's
-    /// inventory for a Notebook/Tablet — the HUD viewer is that player), writes the clamped count lock-free,
-    /// and resyncs. Independent of any open dialog. The HUD's own <see cref="liveTrackerCounts"/> override
-    /// drives the display, so the counter is correct immediately without waiting for this round-trip.</summary>
+    /// <summary>Sends a pinned Tracker's counted quantity; the server resolves the owning document, clamps and
+    /// resyncs. The local <see cref="liveTrackerCounts"/> drives display without waiting.</summary>
     private void SendTrackerQuantity(Guid docId, Guid taskId, int quantity)
     {
         capi.Network.GetChannel(ScribeModSystem.NetworkChannelName).SendPacket(new ScribeSetTrackerQuantityMessage
@@ -881,38 +700,27 @@ public sealed class HudScribePins : GuiBase
     private PendingCompletion? PendingFor(ScribePinnedRef pin)
         => pendingCompletions.TryGetValue((pin.OwnerDocId, pin.TaskId), out var p) ? p : null;
 
-    /// <summary>Whether a row should render MUTED (the completed, resting-at-bottom look): displayed-done,
-    /// past its undo window (no pending send), under a sinking policy — exactly the pins the shared
-    /// <see cref="ScribePinOrdering.ForDisplay"/> partition has sunk to the bottom. Un-completing a sunk pin
-    /// flips <see cref="DisplayedDone"/> false, so it reads as an active row again and returns to its prior
-    /// position via that same partition — there is no session overlay
-    /// holding it at the bottom. Within its window a done pin is held in place (not muted) so the sink can
-    /// animate as it settles on expiry; under <see cref="ScribeCompletionPolicy.Keep"/> a done pin holds its
-    /// place and is not muted; Unpin/Delete pins are removed after the window.</summary>
+    /// <summary>Whether a row renders MUTED (completed, resting at the bottom): displayed-done, past its undo
+    /// window, under a sinking policy, i.e. the pins <see cref="ScribePinOrdering.ForDisplay"/> sinks. Within the
+    /// window a done pin holds its place; under Keep it is not muted; Unpin/Delete pins are removed.</summary>
     private bool SunkVisual(ScribePinnedRef pin)
         => DisplayedDone(pin)
            && PendingFor(pin) is null
            && modSystem.MySettings.CompletionPolicy is ScribeCompletionPolicy.Sink
                                                      or ScribeCompletionPolicy.UnpinSink;
 
-    /// <summary>Whether a pin is inside a pending window whose text should fade out as a countdown
-    /// preview: Unpin/Delete (destructive — row leaves the item set after the window and the container
-    /// collapses its ghost) and Sink/UnpinSink (row moves to the bottom after the window).
-    /// Keep doesn't fade. A row that has already left the set (past its window, in awaitingRemoval) is
-    /// not in the pin set this reads, so it never reports fading — the container's zero-opacity-text frozen
-    /// ghost renders the already-faded row as it collapses.</summary>
+    /// <summary>Whether a pin is in a pending window whose text fades as a countdown: Unpin/Delete (removal) and
+    /// Sink/UnpinSink (moves down). Keep doesn't fade. Rows past their window leave the set this reads, so the
+    /// ghost renders them.</summary>
     private bool IsFadingOut(ScribePinnedRef pin)
         => PendingFor(pin) is { } pending
            && pending.Policy is ScribeCompletionPolicy.Unpin or ScribeCompletionPolicy.Delete
                               or ScribeCompletionPolicy.Sink or ScribeCompletionPolicy.UnpinSink;
 
     /// <summary>
-    /// A row checkbox was clicked. Deferred-send model: checking a row does NOT send the
-    /// completion immediately — it flips optimistically and records a <see cref="PendingCompletion"/> with
-    /// the player's current policy, held for <see cref="PinHudWaitMs"/>. <see cref="OnTick"/> fires the
-    /// actual <see cref="ScribeCompleteTaskMessage"/> when the window expires. Unchecking within the
-    /// window removes the pending entry and clears the optimistic flag — a TRUE undo, because nothing was
-    /// sent to the server (important for the destructive Unpin/Delete policies).
+    /// A row checkbox was clicked. Checking flips optimistically and records a <see cref="PendingCompletion"/>
+    /// held for <see cref="PinHudWaitMs"/>; <see cref="OnTick"/> sends it on expiry. Unchecking in the window
+    /// cancels it, a TRUE undo since nothing was sent (matters for Unpin/Delete).
     /// </summary>
     private void OnToggleRow(Guid docId, Guid taskId, bool currentlyDone)
     {
@@ -921,24 +729,20 @@ public sealed class HudScribePins : GuiBase
 
         if (nowDone)
         {
-            // Complete: flip optimistically and hold the send until the window expires.
             optimisticDone[key] = true;
             pendingCompletions[key] = new PendingCompletion(
                 modSystem.MySettings.CompletionPolicy, elapsedMs + PinHudWaitMs);
         }
         else
         {
-            // Undo within the window (or unchecking an already-completed row). If a send was still
-            // pending, cancel it outright — nothing reached the server, so this fully reverts.
+            // Undo within the window: cancel the pending send; nothing reached the server.
             if (pendingCompletions.Remove(key))
             {
                 optimisticDone.Remove(key);
             }
             else
             {
-                // No pending send (the window already elapsed and the completion was sent): this is a
-                // genuine un-complete. Flip optimistically and send it immediately (there's no window to
-                // hold — the row is already done server-side).
+                // Window already elapsed (completion was sent): a genuine un-complete, sent immediately.
                 optimisticDone[key] = false;
                 SendCompletion(docId, taskId, modSystem.MySettings.CompletionPolicy);
             }
@@ -960,18 +764,14 @@ public sealed class HudScribePins : GuiBase
         });
     }
 
-    /// <summary>Collapse control (on-HUD chevron; the rebindable hotkey calls the same path): flip the
-    /// client-local <see cref="ScribePlayerSettings.HudCollapsed"/> preference and persist it.
-    /// <see cref="ScribeModSystem.UpdateMySettings"/> fires <see cref="ScribeModSystem.MyPinsChanged"/>,
-    /// so the HUD rebuilds into the collapsed/expanded form with no network round-trip.</summary>
+    /// <summary>Collapse control (chevron or hotkey): flips and persists the client-local
+    /// <see cref="ScribePlayerSettings.HudCollapsed"/>; <see cref="ScribeModSystem.UpdateMySettings"/> fires
+    /// <see cref="ScribeModSystem.MyPinsChanged"/>, so there is no network round-trip.</summary>
     public void ToggleCollapsed()
         => modSystem.UpdateMySettings(s => s.HudCollapsed = !s.HudCollapsed);
 
-    /// <summary>Open a pinned Link's referenced Handbook page: parse the
-    /// snapshotted <see cref="ScribePinnedRef.LinkTarget"/> and hand it to the same handbook-open helper the
-    /// Read/editor Link rows use. This is the row-click plumbing gated on kind == Link; it is
-    /// entirely separate from the row's completion checkbox, so opening the page never toggles done-state. A
-    /// no-op when the code doesn't resolve or the survival mod (handbook protocol) isn't loaded.</summary>
+    /// <summary>Opens a pinned Link's Handbook page from its snapshotted <see cref="ScribePinnedRef.LinkTarget"/>.
+    /// Separate from the completion checkbox. No-op if unresolved or the survival mod isn't loaded.</summary>
     private void OpenPinnedLink(string? linkTarget) => ScribeItemRef.OpenHandbookPage(capi, linkTarget);
 
     private void SendClearTimer()
@@ -983,28 +783,19 @@ public sealed class HudScribePins : GuiBase
     // ---------------- Temporal-storm corruption ----------------
 
     /// <summary>
-    /// Reads the two client-local instability triggers and returns the effective corruption strength
-    /// (0..1) plus whether a storm is active (which drives only the title swap). Both triggers are read
-    /// off <c>capi</c> each rebuild:
-    /// <list type="bullet">
-    /// <item>storm tier → vanilla's own glitch-strength bases (Light 0.53 / Medium 0.67 / Heavy 0.90)
-    /// when <see cref="SystemTemporalStability"/>'s <c>StormData.nowStormActive</c> is set;</item>
-    /// <item>low personal stability → a linear ramp from 0 at 0.50 stability to 1 at 0.10, read off the
-    /// player's <c>temporalStability</c> watched attribute.</item>
-    /// </list>
-    /// The effective strength is the greater of the two. When the player's storm-corruption preference is
-    /// off, or the temporal system can't be resolved (e.g. a non-survival server), this returns
-    /// <c>(0, false)</c> so both corruption and the title swap are suppressed — the graceful no-op.
+    /// Returns the effective corruption strength (0..1) and whether a storm is active (drives only the title
+    /// swap). Strength is the greater of the storm tier's vanilla glitch-strength base (while
+    /// <c>StormData.nowStormActive</c>) and a linear ramp from 0 at 0.50 to 1 at 0.10 of the player's
+    /// <c>temporalStability</c>. Returns <c>(0, false)</c> when the player's preference is off or the temporal
+    /// system can't be resolved.
     /// </summary>
     private (double strength, bool stormActive) ComputeCorruption()
     {
-        // Player opt-out (settings toggle) fully disables the effect — no corruption, no title swap.
         if (!modSystem.MySettings.StormCorruption) return (0.0, false);
 
         var stormSys = capi.ModLoader.GetModSystem<SystemTemporalStability>();
         if (stormSys is null) return (0.0, false);
 
-        // Storm trigger: tier → vanilla glitch-strength base, only while a storm is actually active.
         bool stormActive = stormSys.StormData.nowStormActive;
         double stormStrength = stormActive
             ? stormSys.StormData.nextStormStrength switch
@@ -1015,8 +806,7 @@ public sealed class HudScribePins : GuiBase
             }
             : 0.0;
 
-        // Low-stability trigger: linear ramp 0 at 0.50 → 1 at 0.10, clamped. Default 1.0 (fully stable)
-        // when the attribute is absent, so the trigger simply never fires.
+        // Linear ramp 0 at 0.50 → 1 at 0.10; default 1.0 (stable) when absent so the trigger never fires.
         double stability = capi.World.Player?.Entity?.WatchedAttributes?.GetDouble("temporalStability", 1.0) ?? 1.0;
         double stabilityStrength = Math.Clamp(
             (StabilityRampUpper - stability) / (StabilityRampUpper - StabilityRampLower), 0.0, 1.0);
@@ -1025,12 +815,9 @@ public sealed class HudScribePins : GuiBase
     }
 
     /// <summary>
-    /// The corruption re-scramble tick driven off the existing
-    /// 250 ms <see cref="OnTick"/>. While a trigger is active it advances the seed and rebuilds on a
-    /// randomized 0–5 s cadence so the marks writhe; it also edge-detects the trigger becoming active/
-    /// inactive and the storm flag flipping, rebuilding immediately on either transition so the title
-    /// swap and first corruption are prompt. Returns true when it triggered a rebuild (so the caller can
-    /// avoid a redundant one).
+    /// Corruption re-scramble tick from <see cref="OnTick"/>. While a trigger is active it advances the seed and
+    /// rebuilds on a random 0–5 s cadence; trigger or storm-flag transitions rebuild immediately. Returns true if
+    /// it rebuilt (so the caller skips a redundant one).
     /// </summary>
     private bool TickCorruption()
     {
@@ -1045,14 +832,12 @@ public sealed class HudScribePins : GuiBase
 
         if (transition)
         {
-            // A fresh trigger (or title-swap) transition: reschedule and rebuild now so the effect is prompt.
             _corruptionSeed++;
             _nextRescrambleMs = now + NextRescrambleInterval();
             if (IsOpened()) { RebuildHudBody(); return true; }
             return false;
         }
 
-        // Steady state: re-scramble on the randomized cadence while a trigger remains active.
         if (active && now >= _nextRescrambleMs)
         {
             _corruptionSeed++;
@@ -1063,34 +848,24 @@ public sealed class HudScribePins : GuiBase
         return false;
     }
 
-    /// <summary>A fresh randomized re-scramble interval in [0, 5000] ms. Uses the game's client RNG
-    /// (Mod-layer randomness is fine — unlike Core); index-free since order doesn't matter here.</summary>
+    /// <summary>Random re-scramble interval in [0, 5000] ms from the client RNG.</summary>
     private long NextRescrambleInterval()
         => RescrambleMinMs + (long)(capi.World.Rand.NextDouble() * (RescrambleMaxMs - RescrambleMinMs));
 
     // ---------------- Build ----------------
 
-    /// <summary>The live, ordered, capped rows to display — the authoritative pin set minus any rows whose
-    /// destructive completion was sent and are now collapsing out (in <see cref="awaitingRemoval"/>), ordered
-    /// by the SAME shared rule the Pin Tab uses (<see cref="ScribePinOrdering.ForDisplay"/> under a sinking
-    /// policy, else raw pin order) with no HUD-only overlay, then capped. The
-    /// collapsing rows themselves are the <see cref="ScribeAnimatedList"/>'s job (it splices a frozen ghost at
-    /// the slot a departed id left), so this returns ONLY the live rows the container diffs against.</summary>
+    /// <summary>The live, ordered, capped rows: pins minus <see cref="awaitingRemoval"/>, ordered like the Pin Tab
+    /// (<see cref="ScribePinOrdering.ForDisplay"/> under a sinking policy, else raw order). Collapsing rows are
+    /// <see cref="ScribeAnimatedList"/>'s job, so only live rows are returned.</summary>
     private List<HudPinRow> BuildOrderedRows()
     {
-        // Filter out rows whose destructive completion was sent and are now collapsing out. Their identity
-        // leaving this set is exactly what makes the container collapse them,
-        // so they must not appear here or they'd flash back at full opacity as a live row.
+        // Rows awaiting removal must not appear here or they'd flash back at full opacity; their identity leaving the set triggers the collapse.
         var pins = awaitingRemoval.Count == 0
             ? modSystem.MyPins
             : modSystem.MyPins.Where(p => !awaitingRemoval.Contains((p.OwnerDocId, p.TaskId))).ToList();
 
-        // Order matches the Pin Tab exactly: mirror OrderedPinsForDisplay —
-        // under a sinking policy done pins sink below not-done via the shared Core rule
-        // (ScribePinOrdering.ForDisplay); otherwise raw pin order. There is NO HUD-only ordering overlay: the
-        // two surfaces render one and the same per-player order, agreeing by construction. The in-window
-        // "hold in place" falls out for free — the HUD defers its send, so the server's LastKnownDone
-        // stays false during the window and ForDisplay keeps the just-checked pin in the not-done group.
+        // Same order as the Pin Tab (no HUD-only overlay). The in-window "hold in place" falls out because the send
+        // is deferred, so LastKnownDone stays false and ForDisplay keeps the pin in the not-done group.
         bool sinkOrder = modSystem.MySettings.CompletionPolicy
             is ScribeCompletionPolicy.Sink or ScribeCompletionPolicy.UnpinSink;
         IReadOnlyList<ScribePinnedRef> ordered = sinkOrder ? ScribePinOrdering.ForDisplay(pins) : pins;
@@ -1099,14 +874,9 @@ public sealed class HudScribePins : GuiBase
         return ordered.Take(max)
             .Select(p =>
             {
-                // A pinned Tracker/Link carries its item code in the snapshot (Tracker→TargetItemCode,
-                // Link→LinkTarget); resolve the icon + name here (where capi lives) so the row renders
-                // item-shaped, mirroring the Pin Tab / read view. A plain
-                // Task resolves to (null, null) and keeps its text.
+                // Tracker/Link snapshots carry an item code; resolve icon + name here (where capi lives). A plain Task gives (null, null).
                 var (stack, name) = ResolveHudPinItem(p);
-                // Same synthetic guide-page-scheme substitution as the dialog surfaces (ScribeDialogBase.
-                // Layout.cs / PinTab.cs) — routes a label-only QuestObjective's icon through the existing
-                // book-glyph fallback rather than a blank ItemStackDisplay. Display-only.
+                // Same guide-page-scheme substitution as the dialog surfaces: a label-only QuestObjective's icon uses the book-glyph fallback. Display-only.
                 bool isStaticVsQuestObjective = p.Kind == ScribeBlockKind.QuestObjective
                     && ScribeQuestCatalog.IsStaticObjectiveCode(p.LinkTarget);
                 string? iconLinkTarget = p.Kind == ScribeBlockKind.QuestObjective && stack is null
@@ -1150,12 +920,9 @@ public sealed class HudScribePins : GuiBase
     }
 
     /// <inheritdoc />
-    /// <remarks>Returns the ONE persistent-root <see cref="ScribeDialogBody"/> that owns the reconcilable
-    /// HUD subtree. <see cref="GuiBase"/> calls this once per open (and
-    /// once per <see cref="GuiBase.ForceRebuild"/>); the body then persists, and every in-place update goes
-    /// through <see cref="RebuildHudBody"/> (a reconciling <c>SetState</c>) which re-invokes
-    /// <see cref="BuildHudTree"/> to re-read the HUD's live state. The self-open/close rides
-    /// <c>TryOpen</c>/<c>TryClose</c>.</remarks>
+    /// <remarks>Returns the persistent-root <see cref="ScribeDialogBody"/> owning the reconcilable subtree; called
+    /// once per open and per <see cref="GuiBase.ForceRebuild"/>. In-place updates go through
+    /// <see cref="RebuildHudBody"/>, which re-invokes <see cref="BuildHudTree"/>.</remarks>
     protected override Widget Build() => new ScribeDialogBody(bodyKey, BuildHudTree);
 
     /// <summary>Builds the HUD widget subtree from the current live state (pin set, timer, corruption,
@@ -1167,19 +934,15 @@ public sealed class HudScribePins : GuiBase
 
         TraceHudRows(shown);
 
-        // Indicative "+N more" only: pins beyond the visible cap. Rows
-        // collapsing out (in awaitingRemoval) are already-completed removals, so — like the live-row filter
-        // in BuildOrderedRows — they don't count toward the overflow tally.
+        // "+N more" counts only live pins beyond the cap; rows collapsing out don't count.
         int liveCount = awaitingRemoval.Count == 0
             ? modSystem.MyPins.Count
             : modSystem.MyPins.Count(p => !awaitingRemoval.Contains((p.OwnerDocId, p.TaskId)));
         int max = Math.Min(modSystem.MySettings.HudMaxRows, MaxRenderedRows);
         int moreCount = Math.Max(0, liveCount - max);
 
-        // The HUD is NOT governed by Pixel-Art Display: only the Lectern dialog
-        // toggles between Scribe's light theme and the global one. The HUD pins always render on the
-        // player's global LibGUI theme, so there is deliberately NO Theme wrap here — HudPinsContent reads
-        // ThemeData.Default via Theme.Of(context) like any un-wrapped widget.
+        // The HUD is not governed by Pixel-Art Display: it always uses the global LibGUI theme, so there is
+        // deliberately no Theme wrap here.
         // Build a timer snapshot with interpolated remaining for smooth display.
         Scribe.Core.TimerStore? timerSnapshot = null;
         var rawTimer = modSystem.MyTimer;
@@ -1196,10 +959,7 @@ public sealed class HudScribePins : GuiBase
             };
         }
 
-        // Temporal-storm corruption signal: the effective strength + storm
-        // flag for this build, and the current seed so every corrupted string in the tree scrambles
-        // coherently within one frame. Recomputed here so a plain rebuild (e.g. the 1 Hz timer tick)
-        // reflects the live storm/stability state, not just the re-scramble tick.
+        // Corruption strength, storm flag and seed for this build; recomputed here so any rebuild reflects live state.
         var (corruptionStrength, stormActive) = ComputeCorruption();
 
         return new HudPinsContent(
@@ -1211,8 +971,7 @@ public sealed class HudScribePins : GuiBase
             collapseRegistry: collapseRegistry,
             onDepartureSettled: OnHudDepartureSettled,
             collapsed: modSystem.MySettings.HudCollapsed,
-            // Header/footer align toward the anchored edge: left for a left-anchored
-            // HUD, right otherwise. Same anchor classification the ApplyAnchor X-position switch uses.
+            // Header/footer align toward the anchored edge (same classification as ApplyAnchor).
             leftAligned: ScribePlayerSettings.NormalizeAnchor(modSystem.MySettings.HudAnchor).IsLeftAnchored(),
             rowWidth: ScribePlayerSettings.ClampHudRowWidth(modSystem.MySettings.HudRowWidth),
             rowFontSize: ScribeRowConstants.BaseHudFontSize
@@ -1261,25 +1020,12 @@ public sealed class HudScribePins : GuiBase
 
     // ---------------- DEBUG: blank-checkbox diagnostics ----------------
 
-    /// <summary>DEBUG-only HUD row trace for diagnosing a "blank checkbox / no text" row.
-    /// Compiled out entirely in Release (<see cref="ConditionalAttribute"/>),
-    /// so the call site in <see cref="BuildHudTree"/> vanishes too. Emits, per rendered row, everything
-    /// needed to tell the two failure modes APART without guessing:
-    /// <list type="bullet">
-    /// <item><b>text=""</b> (empty <c>LastKnownText</c>) → the pin's cached text was genuinely cleared —
-    /// a data/push problem, NOT a fade bug.</item>
-    /// <item><b>text non-empty but the row still renders blank</b> → an OPACITY problem: cross-reference
-    /// the flags — <c>Sunk</c> mutes the whole row to <see cref="SunkOpacity"/>; <c>FadingOut</c> drives the
-    /// text-only fade (the stale <see cref="ScribeFadeText"/> controller signature). The blank row's flags
-    /// say which mechanism is stuck.</item>
-    /// </list>
-    /// Also dumps the per-identity client state (<see cref="optimisticDone"/>, <see cref="pendingCompletions"/>,
-    /// <see cref="awaitingRemoval"/>) so a row that a Read-view completion drove into a state the HUD's own
-    /// toggle path never set up is visible directly. A row collapsing out is not in the traced set (it left
-    /// via <c>awaitingRemoval</c> and the container renders its ghost), so its identity shows up under
-    /// <c>awaitingRemoval</c> rather than as a traced row. Watch with
-    /// <c>build/scribe-log.sh --client</c>, filter <c>[scribe-hud]</c>. Reproduce: complete a PINNED task from
-    /// the Read view under Sink, then read the last frame's block.</summary>
+    /// <summary>DEBUG-only (compiled out in Release) per-row trace for diagnosing a blank-checkbox row.
+    /// <c>text=""</c> means the cached text was cleared (a data problem); non-empty text on a blank row is an
+    /// opacity problem, where <c>Sunk</c> mutes the row to <see cref="SunkOpacity"/> and <c>FadingOut</c> drives
+    /// the text-only fade (see <see cref="ScribeFadeText"/>). Also dumps <see cref="optimisticDone"/>,
+    /// <see cref="pendingCompletions"/> and <see cref="awaitingRemoval"/>; a collapsing row appears only under
+    /// <c>awaitingRemoval</c>. Filter <c>[scribe-hud]</c> in <c>build/scribe-log.sh --client</c>.</summary>
     [Conditional("DEBUG")]
     private void TraceHudRows(List<HudPinRow> shown)
     {
@@ -1326,22 +1072,15 @@ public sealed class HudScribePins : GuiBase
     }
 }
 
-// ============================================================================
-// HUD content tree
-// ============================================================================
+// ---------------- HUD content tree ----------------
 
-/// <summary>A value snapshot of one HUD row: identity, last-known text, its displayed done-state,
-/// whether it is currently sunk (muted, ordered at the bottom), and whether it is fading out inside a
-/// pending destructive-completion window (Unpin/Delete about to send). Carries no live pin
-/// reference. There is no "departing" flag: once a row's window expires and its completion is sent, its
-/// identity leaves the item set (via <c>awaitingRemoval</c>) and the <see cref="ScribeAnimatedList"/>
-/// collapses it from a frozen ghost it captured — the HUD row itself is simply gone from this set.</summary>
+/// <summary>A value snapshot of one HUD row. No "departing" flag: once a row's completion is sent its identity
+/// leaves the item set (via <c>awaitingRemoval</c>) and <see cref="ScribeAnimatedList"/> collapses a frozen
+/// ghost.</summary>
 internal readonly record struct HudPinRow(
     Guid DocId, Guid TaskId, string Text, bool Done, bool Sunk, bool FadingOut,
     ScribeBlockKind Kind = ScribeBlockKind.Task, string? LinkTarget = null,
-    // A pinned Tracker/Link carries its item's resolved icon + display name (snapshotted server-side and
-    // resolved client-side in BuildOrderedRows), plus a Tracker's have/need counts, so the HUD row can
-    // render the item icon + name instead of the (empty) task text.
+    // A pinned Tracker/Link carries its resolved item icon + name and have/need counts so the row renders item-shaped.
     ItemStack? DisplayStack = null, string? DisplayName = null,
     int TargetQuantity = 1, int CurrentQuantity = 0, int Depth = 0,
     bool IsStaticVsQuestObjective = false)
@@ -1350,14 +1089,10 @@ internal readonly record struct HudPinRow(
     public bool IsLink => Kind == ScribeBlockKind.Link;
     public bool IsCraft => Kind == ScribeBlockKind.Craft;
     public bool IsQuestObjective => Kind == ScribeBlockKind.QuestObjective;
-    /// <summary>A Tracker/Link/Craft/QuestObjective renders as an item row (icon + name), not the
-    /// editable-text shape. A Craft parent renders exactly like a Tracker — its recipe output icon + a
-    /// have/need counter — differing only in the "Craft {0}" label framing below.</summary>
+    /// <summary>Item rows (icon + name) rather than editable text. A Craft parent renders like a Tracker, with a "Craft {0}" label.</summary>
     public bool IsItemKind => IsTracker || IsLink || IsCraft || IsQuestObjective;
-    /// <summary>Kinds whose HUD row DISPLAYS a have/need counter: Tracker, the Craft parent, and a
-    /// QuestObjective — the latter's counter is fed by Progression Framework's own reported progress, never
-    /// carried inventory (unlike the other two), so this is a display-shape predicate only, deliberately NOT
-    /// the same as <see cref="ScribeBlock.IsCarriedCountTracked"/>.</summary>
+    /// <summary>Kinds that DISPLAY a have/need counter. A QuestObjective's counter comes from Progression
+    /// Framework, so this is deliberately not <see cref="ScribeBlock.IsCarriedCountTracked"/>.</summary>
     public bool HasCounterRow => IsTracker || IsCraft || IsQuestObjective;
     /// <summary>The label to show: the "Craft {0}" framing for a Craft parent, the plain resolved item
     /// name for a Tracker/Link, else the task text.</summary>
@@ -1367,16 +1102,13 @@ internal readonly record struct HudPinRow(
 }
 
 /// <summary>
-/// The HUD's widget tree: a collapse-header chevron over a column of pin rows (or, when collapsed,
-/// the header alone). Split from <see cref="HudScribePins"/> so it can read the LibGUI
-/// <see cref="Theme"/> off the <see cref="BuildContext"/> for its glow/mute colors — the same
-/// delegation the lectern dialog uses for its content widgets. All interaction is routed back up
-/// through the two callbacks; this widget holds no mutable state.
+/// The HUD widget tree: a collapse header over a column of pin rows (header alone when collapsed). Separate
+/// from <see cref="HudScribePins"/> to read the LibGUI <see cref="Theme"/> off the <see cref="BuildContext"/>;
+/// stateless, with interaction routed through callbacks.
 /// </summary>
 internal sealed class HudPinsContent : StatelessWidget
 {
-    /// <summary>Row text glow radius (fraction of font size) — a soft dark halo that keeps the light
-    /// text legible over any world background without a background plate.</summary>
+    /// <summary>Row text glow radius (fraction of font size); keeps text legible over the world with no background plate.</summary>
     private const float GlowWidth = 0.45f;
 
     /// <summary>Opacity of a sunk (completed, past-undo) row — muted but still readable/undoable.</summary>
@@ -1384,8 +1116,7 @@ internal sealed class HudPinsContent : StatelessWidget
 
     private readonly IReadOnlyList<HudPinRow> rows;
     private readonly int moreCount;
-    /// <summary>Effective temporal-corruption strength (0..1) for this build; 0 = no corruption.
-    /// Applied to every user-visible string via <see cref="Corrupt"/>.</summary>
+    /// <summary>Temporal-corruption strength (0..1); 0 = none. Applied via <see cref="Corrupt"/>.</summary>
     private readonly double corruptionStrength;
     /// <summary>Whether a temporal storm is active — drives only the title swap to "Survive the Storm".</summary>
     private readonly bool stormActive;
@@ -1405,28 +1136,22 @@ internal sealed class HudPinsContent : StatelessWidget
     /// Off omits the gear; the Lectern Settings tab remains reachable.</summary>
     private readonly bool showSettingsGear;
     private readonly Action<Guid, Guid, bool> onToggleRow;
-    /// <summary>Open a pinned Link's Handbook page by its snapshotted link-target.
-    /// Wired only for a Link row's label; null-safe target.</summary>
+    /// <summary>Opens a pinned Link's Handbook page; wired only to a Link row's label.</summary>
     private readonly Action<string?> onOpenLink;
     private readonly Action onToggleCollapsed;
     private readonly Action onOpenSettings;
     private readonly Scribe.Core.TimerStore? timerData;
     private readonly Action? onClearTimer;
     private readonly ICoreClientAPI? capiForTimer;
-    /// <summary>Pending Quest Accept/Completion notifications;
-    /// only the first is rendered as a banner at a time.</summary>
+    /// <summary>Pending Quest prompts; only the first renders as a banner.</summary>
     private readonly IReadOnlyList<ScribeQuestPrompt> questPrompts;
-    /// <summary>Accept action for the banner's accept-prompt case, naming the resolved destination
-    /// — the sole eligible carried Scribe document,
-    /// or the player's picker choice among 2+; null for a completion-prompt (nothing to place).</summary>
+    /// <summary>Accept action for an accept-prompt banner with the resolved destination (sole candidate or picker choice); null for a completion-prompt.</summary>
     private readonly Action<ScribeQuestPrompt, ScribeAcceptCandidate?>? onAcceptPrompt;
     private readonly Action<ScribeQuestPrompt>? onDismissPrompt;
     /// <summary>This player's current Accept-placement candidates for the banner's accept-prompt
     /// (<see cref="ScribeModSystem.ComputeQuestAcceptCandidates"/>) — irrelevant for a completion-prompt.</summary>
     private readonly IReadOnlyList<ScribeAcceptCandidate> questAcceptCandidates;
-    /// <summary>Whether the 2+-candidate picker is currently revealed (two-step tap, matching the Inbox
-    /// Accept control's own picker — <see cref="HudScribePins"/> owns this as session state since this
-    /// widget itself is Stateless).</summary>
+    /// <summary>Whether the 2+-candidate picker is revealed (owned by <see cref="HudScribePins"/> as session state).</summary>
     private readonly bool questAcceptPickerOpen;
     private readonly int questAcceptSelectedIndex;
     private readonly Action? onOpenQuestAcceptPicker;
@@ -1494,12 +1219,8 @@ internal sealed class HudPinsContent : StatelessWidget
         this.onDismissPrompt = onDismissPrompt;
     }
 
-    /// <summary>Run a user-visible string through the Core corruptor at this build's
-    /// <see cref="corruptionStrength"/>. A per-string
-    /// <paramref name="seedOffset"/> is added to <see cref="corruptionSeed"/> so different strings in the
-    /// same frame don't all inject the identical mark pattern, while the whole frame still advances
-    /// together on the re-scramble tick. A strength of 0 returns the input unchanged (the corruptor
-    /// short-circuits), so this is a no-op when no trigger is active.</summary>
+    /// <summary>Runs a user-visible string through the Core corruptor. <paramref name="seedOffset"/> varies the
+    /// pattern per string while the frame still advances together; strength 0 returns the input unchanged.</summary>
     private string Corrupt(string text, int seedOffset = 0)
         => ScribeTextCorruptor.Corrupt(text, corruptionStrength, corruptionSeed + seedOffset);
 
@@ -1511,14 +1232,8 @@ internal sealed class HudPinsContent : StatelessWidget
 
         var children = new List<Widget> { BuildHeader(colors, glow) };
 
-        // Quest Accept/Completion prompt banner: shown
-        // regardless of collapse state — a player who collapsed the HUD before a prompt arrived should
-        // still see it, not have to expand to notice. Wrapped in the same entry-slide infrastructure the
-        // pin list's row insertions use, keyed by the
-        // banner's OWN prompt identity (distinct from any row's TaskId key, so it can't collide in the
-        // shared collapseRegistry): a genuinely NEW banner prompt mounts a fresh element and slides in;
-        // the SAME prompt across repeat rebuilds (ticks, corruption, tracker recompute, …) reconciles
-        // onto the same element and stays settled rather than re-animating every rebuild.
+        // Quest prompt banner: shown regardless of collapse state so a collapsed HUD doesn't hide it. Wrapped in a
+        // slide-in keyed by the prompt's own identity: a new prompt slides in, the same prompt across rebuilds stays settled.
         if (questPrompts.Count > 0)
         {
             var bannerPrompt = questPrompts[0];
@@ -1533,21 +1248,12 @@ internal sealed class HudPinsContent : StatelessWidget
 
         if (!collapsed)
         {
-            // Route the pin rows through ScribeAnimatedList: the container diffs the TaskId-keyed set
-            // frame-to-frame, so a pin that leaves the set (its destructive completion sent → held in the
-            // HUD's awaitingRemoval → filtered out of `rows` upstream) collapses out via the Immediate
-            // policy — the same one path the editor / Read / Pin Tab use. The container abstracts MOTION +
-            // ORDER only; the HUD keeps its own chrome (header, "+N more", timer) OUTSIDE the animated set,
-            // as siblings in the outer Column below.
-            //
-            // Each live row is the interactive HudPinRow widget (BuildRow), keyed by TaskId so its live State
-            // — the ScribeFadeText countdown controller, the AnimatedOpacity sink tween — reconciles across
-            // the HUD's rebuilds instead of remounting (which would snap those animations). Each departing row
-            // supplies an explicit FROZEN ghost: the live row is unsafe to freeze in place (its checkbox stays
-            // clickable mid-collapse), so BuildFrozenGhost snapshots it as a static, zero-opacity-text twin of
-            // the HUD row shape — matching the already-faded row the window left behind, so the collapse just
-            // closes empty space. animateEntry defaults true: a newly-pinned row, or one crossing into the
-            // capped window because another collapsed out, SLIDES in like every other surface.
+            // Pin rows go through ScribeAnimatedList: it diffs the TaskId-keyed set, so a pin leaving it
+            // (awaitingRemoval, filtered upstream) collapses via Immediate. Chrome (header, "+N more", timer) stays
+            // outside as siblings. Live rows are keyed by TaskId so their State (fade controller, sink tween) survives
+            // rebuilds. The live row is unsafe to freeze (its checkbox stays clickable mid-collapse), so each supplies a
+            // static zero-opacity-text ghost matching the already-faded row. animateEntry defaults true: new or
+            // newly-capped-in rows slide in.
             var items = rows
                 .Select(r => new ScribeAnimatedListItem(
                     Id: r.TaskId,
@@ -1560,11 +1266,8 @@ internal sealed class HudPinsContent : StatelessWidget
                 registry: collapseRegistry,
                 policy: ScribeListRemovalPolicy.Immediate,
                 onDepartureSettled: onDepartureSettled,
-                // The layout wrapper is ours: the container hands us the ordered widget list (live
-                // rows + any collapsing ghosts spliced at their old slots) and we lay them out as the HUD's
-                // own column. Same 4px inter-row spacing the outer Column uses, so the gaps read identically
-                // whether a row is live or collapsing. Rows are Max-width, so Stretch just guarantees full
-                // width; an empty list renders nothing (the header/timer are outside this).
+                // We own the layout: the container supplies the ordered live rows plus collapsing ghosts; same 4px
+                // spacing as the outer Column so gaps read identically.
                 layoutBuilder: laidOut => new Column(
                     spacing: 4,
                     mainAxisSize: MainAxisSize.Min,
@@ -1577,9 +1280,7 @@ internal sealed class HudPinsContent : StatelessWidget
                     Corrupt(Lang.Get("scribe:scribe-hud-more", moreCount), seedOffset: 101),
                     new TextStyle
                     {
-                        // Desaturated 66% (keep 34% of the theme chroma) so the "+N more" footer and the
-                        // header gear — which share OnSurfaceVariant — read as a muted, near-grey HUD accent
-                        // rather than the theme's tinted variant.
+                        // Desaturated 66%: the "+N more" footer and header gear share OnSurfaceVariant and read as a muted near-grey accent.
                         Color = ScribeRowConstants.ShiftBrightness(colors.OnSurfaceVariant, 0f, saturationScale: 0.34f),
                         FontSize = 13,
                         GlowWidth = GlowWidth,
@@ -1587,8 +1288,7 @@ internal sealed class HudPinsContent : StatelessWidget
                     }));
             }
 
-            // Timer row: below the pins (and +N more), separated by a small divider, shown when
-            // a Clockmaker's Notebook timer is Running or Fired.
+            // Timer row below the pins, shown when a Notebook timer is Running or Fired.
             if (timerData is { Status: Scribe.Core.TimerStatus.Running or Scribe.Core.TimerStatus.Fired })
             {
                 children.Add(new Divider());
@@ -1596,12 +1296,8 @@ internal sealed class HudPinsContent : StatelessWidget
             }
         }
 
-        // Constrain the whole HUD to the configured fixed width via a SizedBox, so a long
-        // task wraps within that width instead of the shrink-wrap window growing arbitrarily wide. The
-        // Column aligns its rows within that fixed width toward the anchored edge — LEFT for a
-        // left-anchored HUD, RIGHT (End) otherwise — so the min-width header
-        // ("Pinned" + gear) and footer ("+N more") hug the correct side. The task rows are Max-width
-        // (they fill the column), so this alignment only visibly moves the header/footer.
+        // Fixed-width SizedBox so long tasks wrap instead of widening the shrink-wrap window. The Column aligns
+        // toward the anchored edge (only the min-width header/footer visibly move; task rows fill the width).
         return ScribeTextDefaults.WrapChrome(new SizedBox(
             width: rowWidth,
             child: new Padding(
@@ -1613,10 +1309,8 @@ internal sealed class HudPinsContent : StatelessWidget
                     children: children))));
     }
 
-    /// <summary>The collapse-toggle header: a clickable chevron (▾ expanded, ▸ collapsed) plus a small
-    /// title, and a gear that opens the settings surface. Present in both states
-    /// so a collapsed HUD stays re-expandable AND its settings stay reachable. The gear sits
-    /// in its own GestureDetector so tapping it opens settings without also toggling the collapse.</summary>
+    /// <summary>The collapse header: clickable chevron + title, and a gear opening settings. Present collapsed
+    /// too. The gear has its own GestureDetector so tapping it doesn't toggle collapse.</summary>
     private Widget BuildHeader(ColorScheme colors, Vector4 glow)
     {
         var titleStyle = new TextStyle
@@ -1627,11 +1321,9 @@ internal sealed class HudPinsContent : StatelessWidget
             GlowColor = glow,
         };
 
-        // The chevron is Scribe's own scribetriangleright/scribetriangledown SVG icon (the same slim
-        // triangle the Inbox row's expand/collapse toggle uses), not a raw Unicode character: no bundled OR
-        // system font on Linux reliably carries a ▸/▾ glyph. A texture-based icon has no font/glyph-coverage
-        // dependency at all, so it can't tofu on any platform. VsIcon has no text-style glow, so match the
-        // halo with a Container BoxShadow instead, mirroring ScribeHudGearButton's identical tradeoff.
+        // The chevron is a texture icon (same as the Inbox expand toggle), not a Unicode ▸/▾: no font on Linux
+        // reliably carries those glyphs. VsIcon has no text glow, so a Container BoxShadow matches the halo (as
+        // ScribeHudGearButton does).
         Widget chevronIcon = new Container(
             new BoxStyle
             {
@@ -1645,8 +1337,7 @@ internal sealed class HudPinsContent : StatelessWidget
                 rowFontSize * 0.6f, // scaled down ~40%: a full em reads too large next to the title
                 titleStyle.Color));
 
-        // Chevron + title toggle collapse; the trailing gear opens settings. Separate GestureDetectors
-        // so the two targets don't overlap (a gear tap must not also flip the collapse state).
+        // Separate GestureDetectors so a gear tap doesn't also toggle collapse.
         var collapseToggle = new GestureDetector(
             onTap: _ => onToggleCollapsed(),
             child: new Row(
@@ -1664,12 +1355,8 @@ internal sealed class HudPinsContent : StatelessWidget
         var headerChildren = new List<Widget> { collapseToggle };
         if (showSettingsGear)
         {
-            // Gear sized to sit proportionally with the chevron/title beside it: 0.75em reads right against
-            // the title. Its base color is pure opaque white to match the header title (the +10 V hover
-            // brighten is a no-op at full white, which is fine — white is the intended resting look);
-            // ScribeHudGearButton owns the nudge + tap. Sized and nudged in em units off rowFontSize so it
-            // scales with the "HUD text size" setting instead of staying a fixed pixel size. It is
-            // self-stateful so its state survives the HUD's rebuilds (mirroring ScribeFadeText).
+            // Gear sized/nudged in em units off rowFontSize so it scales with the HUD text size; white resting color
+            // matches the title. Self-stateful so hover survives rebuilds.
             headerChildren.Add(new ScribeHudGearButton(
                 baseColor: new Vector4(1f, 1f, 1f, 1f),
                 fontSize: rowFontSize,
@@ -1683,22 +1370,14 @@ internal sealed class HudPinsContent : StatelessWidget
             children: headerChildren);
     }
 
-    /// <summary>The Quest Accept/Completion prompt banner: an interactive Link/Dismiss + a Settings shortcut, since a plain chat line
-    /// alone isn't an actionable way to opt in under <see cref="Scribe.Core.ScribeQuestAcceptPolicy.PromptHud"/>/
-    /// <see cref="Scribe.Core.ScribeQuestCompletionPolicy.Prompt"/>). Renders only the OLDEST banner-eligible
-    /// prompt (<c>questPrompts[0]</c> — a completion-prompt, or an accept-prompt when the policy isn't
-    /// <see cref="Scribe.Core.ScribeQuestAcceptPolicy.PromptPopup"/>, per <c>BuildHudTree</c>'s filter); a
-    /// second prompt queued behind it appears once the first is resolved. Plays a brief on-appear
-    /// draw-attention animation and renders Link/Dismiss/Settings as bordered, color-coded buttons
-    /// via the shared <see cref="ScribeQuestPromptActions"/>
-    /// helper — the same one the center-modal presentation style (<see cref="GuiDialogScribeQuestPrompt"/>)
-    /// uses, so the two styles' button colors/behavior can't drift apart.
+    /// <summary>The Quest prompt banner: Link/Dismiss/Settings buttons for the OLDEST banner-eligible prompt
+    /// (<c>questPrompts[0]</c>; later prompts appear once it resolves). Buttons come from the shared
+    /// <see cref="ScribeQuestPromptActions"/>, which <see cref="GuiDialogScribeQuestPrompt"/> also uses, so the
+    /// styles can't drift.
     ///
-    /// <para>An accept-prompt's Link action follows the same 0/1/2+ destination rule as the Inbox Accept
-    /// control: 0 eligible carried Scribe documents
-    /// disables the link (no destination to place onto); exactly 1 accepts immediately; 2+ reveals a small
-    /// picker above the link row on the first tap, naming each candidate, before a second tap confirms. A
-    /// completion-prompt never shows a picker — marking an already-linked task done needs no destination.</para></summary>
+    /// <para>An accept-prompt's Link follows the Inbox Accept 0/1/2+ rule: 0 carried documents disables it, 1
+    /// accepts immediately, 2+ reveals a candidate picker on first tap and confirms on the second. A
+    /// completion-prompt never shows a picker.</para></summary>
     private Widget BuildQuestPromptBanner(ColorScheme colors, Vector4 glow)
     {
         var prompt = questPrompts[0];
@@ -1710,8 +1389,7 @@ internal sealed class HudPinsContent : StatelessWidget
             GlowColor = glow,
             SoftWrap = true,
         };
-        // The quest name itself renders as ordinary HUD text (off-white), on its own line below the gold
-        // label — distinguishing "this is a prompt" (label) from "this is the quest's own name" (data).
+        // The quest name renders as ordinary HUD text below the gold label.
         var titleNameStyle = new TextStyle
         {
             FontSize = rowFontSize,
@@ -1733,13 +1411,9 @@ internal sealed class HudPinsContent : StatelessWidget
             crossAxisAlignment: leftAligned ? CrossAxisAlignment.Start : CrossAxisAlignment.End,
             children: new Widget[] { new Text(titleLabel, titleLabelStyle), new Text(titleName, titleNameStyle) });
 
-        // "Track Quest"/"Not Now"/Settings render as bordered, color-coded buttons — accept green,
-        // dismiss red, Settings near-white/neutral — via the shared helper the center-modal presentation
-        // style also uses, so the two can never drift apart.
-        // The accept/dismiss labels render in the HUD's own standard near-white row-text color (plus its
-        // glow), decoupled from their own accent color, so the label reads as ordinary HUD text sitting
-        // atop the colored button fill rather than either the accent color or pure white
-        // (which would hit the TextStyle.Merge landmine — see ScribeRowConstants.HudStandardTextColor).
+        // Bordered, color-coded buttons (accept green, dismiss red, Settings neutral) from the shared helper. Labels
+        // use the standard HUD row-text color, not the accent or pure white (TextStyle.Merge landmine; see
+        // ScribeRowConstants.HudStandardTextColor).
         Vector4 promptActionTextColor = ScribeRowConstants.HudStandardTextColor;
         var (picker, linkButton) = ScribeQuestPromptActions.BuildLinkControl(
             prompt, questAcceptCandidates, questAcceptPickerOpen, questAcceptSelectedIndex,
@@ -1782,22 +1456,16 @@ internal sealed class HudPinsContent : StatelessWidget
     /// window so the ramp reads as a countdown to removal.</summary>
     private const int FadeWindowMs = 1500;
 
-    /// <summary>One LIVE HUD row: [checkbox][text], the lectern read row minus chrome (no grip spacer, no
-    /// pinned tint, no per-row buttons). Opacity animates by state: a destructive-pending row
-    /// (Unpin/Delete in its window) fades its text LINEARLY from fully opaque to fully transparent over the
-    /// window (a visible countdown); a sunk row mutes to
-    /// <see cref="SunkOpacity"/>; else full. The checkbox stays fully opaque and clickable so undo is
-    /// always available — only the TEXT fades, via a nested AnimatedOpacity.
+    /// <summary>One LIVE HUD row: [checkbox][text]. A destructive-pending row's text fades linearly to
+    /// transparent over the window (countdown); a sunk row mutes to <see cref="SunkOpacity"/>. The checkbox stays
+    /// opaque and clickable so undo is available.
     ///
-    /// <para>The row's height-collapse-on-removal is not wired here: when the window expires and the
-    /// completion is sent, the row's identity leaves the item set and <see cref="ScribeAnimatedList"/>
-    /// collapses a frozen ghost (<see cref="BuildFrozenGhost"/>) in its place.
-    /// This method only ever builds the interactive, present-in-the-set row.</para></summary>
+    /// <para>Collapse on removal is not here: the departed identity leaves the set and
+    /// <see cref="ScribeAnimatedList"/> collapses a <see cref="BuildFrozenGhost"/>.</para></summary>
     private Widget BuildRow(HudPinRow row, ColorScheme colors, Vector4 glow)
     {
-        // HUD text is explicitly near-white rather than theme.OnSurface — the HUD always renders over
-        // the live game world on the global (dark) theme and needs the legibility contrast. Sunk rows use
-        // a more muted near-white; active rows are brighter.
+        // HUD text is explicit near-white rather than theme.OnSurface: it always renders over the world and needs
+        // the contrast. Sunk rows are more muted.
         var textStyle = new TextStyle
         {
             FontSize = rowFontSize,
@@ -1809,10 +1477,7 @@ internal sealed class HudPinsContent : StatelessWidget
             SoftWrap = true,
         };
 
-        // Corrupt the row text. A per-row seed offset (derived from the
-        // task identity) keeps two rows from injecting the identical mark pattern, while the whole HUD still
-        // re-scrambles together on the host's cadence. No-op when no trigger is active (strength 0). Unused
-        // by the item-kind branch (it corrupts the resolved name in BuildHudItemContent instead).
+        // Per-row seed offset keeps rows from sharing a mark pattern. Unused by the item-kind branch, which corrupts the name in BuildHudItemContent.
         string rowText = Corrupt(row.Text, seedOffset: row.TaskId.GetHashCode());
 
         Widget rowBody;
@@ -1832,8 +1497,7 @@ internal sealed class HudPinsContent : StatelessWidget
         }
         else if (row.IsQuestObjective)
         {
-            // Not player-completable (mirrors ScribeBlock.IsCompletable) — render the item icon/name/counter
-            // shape with NO checkbox, matching the read/editor/Pin-Tab surfaces' QuestObjective rendering.
+            // Not player-completable (mirrors ScribeBlock.IsCompletable): item shape with no checkbox.
             rowBody = new Row(
                 spacing: 6,
                 mainAxisSize: MainAxisSize.Max,
@@ -1846,11 +1510,8 @@ internal sealed class HudPinsContent : StatelessWidget
             value: row.Done,
             onChanged: _ => onToggleRow(row.DocId, row.TaskId, row.Done),
             size: checkboxSize,
-            // Grayscale, not the theme default. The stock CheckboxStyle
-            // maps CheckColor←Primary, which is the parchment theme's brown ochre — out of place on
-            // the HUD, which deliberately renders theme-independent near-white text over the world
-            // glow (see textStyle above). Override to a light-grey box + near-white check so the
-            // checkbox reads as part of the same grayscale HUD as its text.
+            // Grayscale, not the theme default: the stock CheckColor←Primary is the parchment theme's brown, out of
+            // place on the theme-independent HUD.
             style: new CheckboxStyle
             {
                 CheckColor = new Vector4(0.867f, 0.867f, 0.867f, 1f),   // #dddddd — softer than white, less blinding
@@ -1863,15 +1524,10 @@ internal sealed class HudPinsContent : StatelessWidget
 
         if (row.IsItemKind)
         {
-            // A pinned Tracker/Link renders the referenced item's icon + name (+ a have/need counter on the
-            // LEFT for a Tracker) instead of the editable-text shape, mirroring the Pin Tab / read view
-            // The name is a Handbook hyperlink; the counter is not.
-            //
-            // A Quest Link's checkbox is misleading (toggling it doesn't affect the quest), so its slot
-            // renders the quest-marker icon instead. Swapped inline here, not
-            // via ScribeRowControlNudge.BuildLeadingControl, because the HUD's checkbox above is a bespoke
-            // grayscale style rather than BuildTaskCheckbox's theme-derived default — routing a non-quest row
-            // through the shared helper would silently replace that grayscale style.
+            // Tracker/Link rows show the item icon + name (+ have/need counter on the left for a Tracker); the name is
+            // a Handbook hyperlink. A Quest Link's checkbox would mislead (it doesn't affect the quest), so the quest-marker
+            // icon replaces it. Swapped inline, not via ScribeRowControlNudge.BuildLeadingControl, which would replace this
+            // bespoke grayscale checkbox style.
             Widget leadingControl = ScribeLinkTarget.IsQuest(row.LinkTarget)
                 ? new ScribeVsIconGlyph("scribequest", checkboxSize, ScribeTheme.HudQuestLinkAccent)
                 : checkbox;
@@ -1887,39 +1543,29 @@ internal sealed class HudPinsContent : StatelessWidget
         }
         else
         {
-            // A plain Task's text fades LINEARLY toward full transparency over the window for a
-            // destructive-pending row (a countdown preview of removal).
-            // ScribeFadeText owns its own ticker (see its remarks): a stock implicitly-animated widget would
-            // snap to its target across the HUD's rebuilds, so this self-ticks instead. A non-fading row is
-            // fully opaque. Only the text fades — the checkbox stays clickable for undo.
+            // A plain Task's text fades linearly while destructive-pending (countdown preview). ScribeFadeText self-ticks
+            // because a stock implicitly-animated widget would snap across rebuilds. Only text fades; the checkbox stays clickable.
             Widget text = new ScribeFadeText(
                 fading: row.FadingOut,
                 durationMs: FadeWindowMs,
                 text: rowText,
                 style: textStyle);
 
-            // A pinned Link's label is a Handbook hyperlink: tapping it opens
-            // the referenced page and NEVER toggles the row's checkbox (opening the page is separate from
-            // completion). (Handled here for the item-kind branch above; a plain Task's text is
-            // never a hyperlink.)
+            // Link hyperlinks are handled in the item-kind branch; a plain Task's text is never a hyperlink.
             rowBody = new Row(
                 spacing: 6,
-                // Fill the fixed-width column so the Expanded text wraps within HudRowWidth minus
-                // the checkbox, rather than the row sizing to its (unwrapped) content and overflowing.
+                // Max width so the Expanded text wraps within HudRowWidth minus the checkbox.
                 mainAxisSize: MainAxisSize.Max,
                 crossAxisAlignment: CrossAxisAlignment.Start,
                 children: new Widget[]
                 {
                     checkbox,
-                    // Expanded so the (SoftWrap) text wraps within the remaining fixed width.
                     new Expanded(child: text),
                 });
         }
         }
 
-        // A Depth-1 subtask adds a left inset so a pinned subtask reads as nested — the HUD analog of the
-        // dialog surfaces' indent, using the same 10px + 3%×width formula against the
-        // HUD's own row width. Depth-0 rows are unchanged.
+        // A Depth-1 subtask is inset (10px + 3% of width, as on the dialog surfaces).
         if (row.Depth > 0)
         {
             rowBody = new Padding(
@@ -1927,10 +1573,8 @@ internal sealed class HudPinsContent : StatelessWidget
                 child: rowBody);
         }
 
-        // A sunk row mutes the WHOLE row (checkbox + text) to SunkOpacity, faded rather than snapped so a
-        // completing task reads as a gentle settle. The ValueKey stabilizes row identity across rebuilds
-        // for the animation. The container wraps this in its own entry/collapse animation (keyed by the same
-        // TaskId) as needed; this returns just the styled interactive row.
+        // A sunk row mutes the whole row, faded not snapped. The ValueKey stabilizes identity for the animation;
+        // the container adds its own entry/collapse animation.
         return new AnimatedOpacity(
             opacity: row.Sunk ? SunkOpacity : 1f,
             duration: TimeSpan.FromMilliseconds(250),
@@ -1939,25 +1583,15 @@ internal sealed class HudPinsContent : StatelessWidget
             key: new ValueKey<Guid>(row.TaskId));
     }
 
-    /// <summary>The content of a pinned Tracker/Link HUD row: the referenced item's icon + name, with a
-    /// have/need counter on the LEFT for a Tracker. Mirrors the Pin Tab / read
-    /// view (<c>ScribePinRowState.BuildItemContent</c>) so all surfaces render item rows identically —
-    /// counter-left, name as a Handbook hyperlink — but in the HUD's theme-independent near-white/glow ink
-    /// (the passed <paramref name="textStyle"/>) rather than the parchment <c>ColorScheme</c>, matching the
-    /// rest of the HUD. A non-interactive ghost passes <paramref name="interactive"/> false (no hyperlink).</summary>
+    /// <summary>A pinned Tracker/Link row's content: item icon + name, with a have/need counter on the left for a
+    /// Tracker (mirrors <c>ScribePinRowState.BuildItemContent</c>). Uses the HUD's near-white/glow ink via
+    /// <paramref name="textStyle"/>. A ghost passes <paramref name="interactive"/> false (no hyperlink).</summary>
     private Widget BuildHudItemContent(HudPinRow row, TextStyle textStyle, bool interactive)
     {
-        // The item's 3D icon — theme-independent, so it renders identically here and on every other surface.
-        // The book glyph keeps the HUD's near-white ink (not the parchment Primary the notebook uses);
-        // both the item icon (grown) and the book glyph (shrunk) render row-height-neutral.
-        // Icons are optional on the HUD (client-local preference): when HudShowIcons is off, Tracker/Link
-        // rows drop the item icon / book glyph and read as text-only, for a leaner HUD.
+        // Icons are optional (HudShowIcons); when off, rows read as text-only. The book glyph keeps the HUD's near-white ink.
         float iconSize = rowFontSize * 1.4f;
         float lineHeight = ScribeRowControlNudge.TextLineHeight(rowFontSize);
-        // A Quest Link's icon renders in the row's leading slot instead, and its
-        // name uses the distinct HUD-only quest accent rather than the ambient textStyle.Color —
-        // the HUD has no per-material theme seam (it's theme-independent, per the doc-comment above), so it
-        // reads ScribeTheme.HudQuestLinkAccent directly rather than a ScribeRowStyle override.
+        // A Quest Link's icon renders in the leading slot and its name uses the HUD-only quest accent (the HUD has no per-material theme seam).
         bool isQuestLink = ScribeLinkTarget.IsQuest(row.LinkTarget);
         Widget? icon = showIcons && row.IsStaticVsQuestObjective
             ? ScribeLinkIcon.BuildObjective(row.DisplayStack, iconSize, textStyle.Color, lineHeight)
@@ -1966,13 +1600,9 @@ internal sealed class HudPinsContent : StatelessWidget
                 : (Widget?)null;
         if (isQuestLink) textStyle = textStyle with { Color = ScribeTheme.HudQuestLinkAccent };
 
-        // Name (corrupted like every HUD string). A Handbook hyperlink when interactive: tapping opens the
-        // item's page and NEVER toggles the checkbox — same open path as the live Link row. The
-        // Tracker's code isn't carried on the row, so derive it from the resolved stack (a Link uses its
-        // snapshotted LinkTarget directly); either resolves the same page the Pin Tab / read view open. The
-        // resolved stack keeps any attribute-encoded variant (a copper lantern), so re-encode it rather than
-        // reduce to the bare collectible code — otherwise the tap would open the generic page, not the variant
-        // page.
+        // Name is a Handbook hyperlink when interactive and never toggles the checkbox. A Tracker's code isn't on the
+        // row, so it is re-encoded from the resolved stack (keeping attribute variants, e.g. a copper lantern) to open
+        // the variant's page rather than the generic one; a Link uses its LinkTarget.
         string nameText = Corrupt(row.Label, seedOffset: row.TaskId.GetHashCode());
         Widget name = new Text(nameText, textStyle);
         bool canOpen = !row.IsStaticVsQuestObjective || row.DisplayStack is not null;
@@ -1988,9 +1618,7 @@ internal sealed class HudPinsContent : StatelessWidget
         var children = new List<Widget>();
         if (row.HasCounterRow)
         {
-            // A "have / need" counter on the LEFT (future Crafting tasks inherit this). Emphasis: an in-progress count reads STRONG (the row's bright near-white, bold — still collecting);
-            // a satisfied count reads FADED (muted grey) with a faint strikethrough over the number.
-            // Shared helper so the HUD matches the read/Pin counters (in the HUD's near-white ink, and corrupted).
+            // "have / need" counter on the left: strong (bold) while collecting, faded with a faint strikethrough once satisfied.
             bool satisfied = row.CurrentQuantity >= row.TargetQuantity;
             children.Add(ScribeTrackerCounterText.Build(
                 row.CurrentQuantity, row.TargetQuantity, satisfied,
@@ -1999,7 +1627,6 @@ internal sealed class HudPinsContent : StatelessWidget
                 corrupt: s => Corrupt(s, seedOffset: 404)));
         }
         if (icon != null) children.Add(icon);
-        // Expanded so the (SoftWrap) name wraps within the remaining fixed width, matching the Task row.
         children.Add(new Expanded(child: name));
 
         return new Row(
@@ -2009,14 +1636,10 @@ internal sealed class HudPinsContent : StatelessWidget
             children: children);
     }
 
-    /// <summary>A static, non-interactive snapshot of a HUD row for <see cref="ScribeAnimatedList"/> to
-    /// collapse when the row departs. The live row is unsafe to freeze in
-    /// place — its checkbox would stay clickable mid-collapse and its per-identity client state is gone once
-    /// the pin leaves the set — so this renders a frozen twin of the [checkbox][text] shape with the text at
-    /// ZERO opacity. That matches the already-faded row the destructive-completion window left behind (its
-    /// <see cref="ScribeFadeText"/> ramped the text to ~0 over the window), so the collapse closes empty space
-    /// with no flash-back of the text. No <see cref="AnimatedOpacity"/> and no ValueKey: the
-    /// container owns this ghost's lifetime and keys it by the row id.</summary>
+    /// <summary>A static snapshot of a HUD row for <see cref="ScribeAnimatedList"/> to collapse on departure. The
+    /// live row can't be frozen (clickable checkbox, client state gone), so this twin has the text at ZERO opacity,
+    /// matching the already-faded row (<see cref="ScribeFadeText"/> ramped it to ~0) so the collapse closes empty
+    /// space. No ValueKey: the container owns the ghost's lifetime.</summary>
     private Widget BuildFrozenGhost(HudPinRow row, ColorScheme colors, Vector4 glow)
     {
         var textStyle = new TextStyle
@@ -2030,9 +1653,7 @@ internal sealed class HudPinsContent : StatelessWidget
             SoftWrap = true,
         };
 
-        // Text at fixed zero opacity — the window already faded it out; a departing row collapses an empty
-        // space. Corrupt with the same per-row seed so the (invisible) text still matches the live row's
-        // metrics exactly as it collapses.
+        // Zero-opacity text; corrupted with the same seed so its metrics match the live row.
         string rowText = Corrupt(row.Text, seedOffset: row.TaskId.GetHashCode());
 
         Widget body = row.IsItemKind
@@ -2082,7 +1703,7 @@ internal sealed class HudPinsContent : StatelessWidget
             GlowWidth = GlowWidth,
             GlowColor = glow,
         };
-        // Countdown or blinking 00:00 — corrupted like the rest of the HUD. Distinct per-string seed offsets so the label and countdown don't share a mark pattern.
+        // Distinct seed offsets so the label and countdown don't share a mark pattern.
         string timeText = Corrupt(
             fired ? "00:00" : FormatTimerDuration(timer.RemainingSeconds),
             seedOffset: 202);
@@ -2096,9 +1717,7 @@ internal sealed class HudPinsContent : StatelessWidget
             ? new ScribeTimerIcon(rowFontSize * 1.1f, new Vector4(0.93f, 0.93f, 0.93f, 1f), capi)
             : new ScribeVsIconGlyph("scribetimer", rowFontSize * 1.1f, new Vector4(0.93f, 0.93f, 0.93f, 1f));
 
-        // Label (if any) next to the icon, full-strength like the rest of the row (not muted like a
-        // completed/sunk row — a live timer's label is primary information, not secondary) — corrupted
-        // with its own seed offset.
+        // Label is full-strength: a live timer's label is primary information.
         string label = Corrupt(
             timer.Label.Length > 0 ? timer.Label : Lang.Get("scribe:scribe-hud-timer-label"),
             seedOffset: 303);
@@ -2114,7 +1733,6 @@ internal sealed class HudPinsContent : StatelessWidget
                 timeWidget,
             });
 
-        // Clicking the timer row when fired sends a clear.
         if (fired && onClearTimer is not null)
             row = new GestureDetector(onTap: _ => onClearTimer(), child: row);
 
@@ -2132,23 +1750,16 @@ internal sealed class HudPinsContent : StatelessWidget
 }
 
 /// <summary>
-/// A text widget that fades its own opacity from 1→0 over <paramref name="durationMs"/> when
-/// <c>fading</c> is set, using a self-owned <see cref="AnimationController"/> that it drives frame-by-frame.
+/// Text that fades 1→0 over <paramref name="durationMs"/> when <c>fading</c> is set, via a self-owned
+/// <see cref="AnimationController"/>.
 ///
-/// <para><b>Why not <see cref="AnimatedOpacity"/>?</b> A stock implicitly-animated widget only animates
-/// across a reconciling <c>UpdateWidget</c> (retarget tween → <c>Forward()</c>); freshly created, its tween
-/// inits <c>Begin=End=target</c> and evaluates to the target instantly, so the text would snap straight to
-/// 0. This widget instead owns its controller and ticks itself, so it ramps correctly regardless of the
-/// host's rebuild strategy.</para>
+/// <para>Not <see cref="AnimatedOpacity"/>: a freshly created implicitly-animated widget evaluates its tween
+/// to the target instantly, so the text would snap to 0.</para>
 ///
-/// <para><b>Reconcile-safety.</b> The HUD rebuilds via a reconciling <c>SetState</c>, so a row element is
-/// REUSED across a rebuild rather than remounted — <see cref="InitState"/> does NOT re-run when a row's
-/// <see cref="Fading"/> flips <c>false→true</c> (the checkbox-click → destructive-pending transition).
-/// Starting the fade only in <c>InitState</c> would therefore silently never fire on a reused row. So the
-/// fade is (re)started from a single <c>SyncFadeController</c> helper called from BOTH <c>InitState</c>
-/// (fresh mount — e.g. a row that mounts already-pending) AND <see cref="UpdateWidget"/> (reused element
-/// whose prop just flipped). Idempotent: it no-ops if a controller is already running, so a plain repaint
-/// doesn't restart the ramp.</para>
+/// <para><b>Reconcile-safety.</b> The HUD reuses row elements across rebuilds, so <see cref="InitState"/> does
+/// not re-run when <see cref="Fading"/> flips <c>false→true</c>. The fade is therefore synced from
+/// <c>SyncFadeController</c> in both <c>InitState</c> and <see cref="UpdateWidget"/>; it is idempotent, so a
+/// repaint doesn't restart the ramp.</para>
 /// </summary>
 internal sealed class ScribeFadeText : StatefulWidget
 {
@@ -2175,50 +1786,35 @@ internal sealed class ScribeFadeTextState : State<ScribeFadeText>
     public override void InitState()
     {
         base.InitState();
-        // Fresh mount: if this row mounts already in the fading state (e.g. reconcile added a new row that
-        // is already destructive-pending), start the fade now.
+        // Fresh mount already fading (e.g. a newly added destructive-pending row).
         SyncFadeController();
     }
 
     public override void UpdateWidget(ScribeFadeText oldWidget)
     {
         base.UpdateWidget(oldWidget);
-        // Reused element (reconcile): InitState did NOT re-run, so a Fading flip must be reconciled here —
-        // false→true (re)starts the fade, true→false (an undo within the window) clears it so the text
-        // reappears. Idempotent in both directions.
+        // Reused element: InitState didn't re-run, so reconcile a Fading flip here (false→true starts, true→false clears on undo).
         SyncFadeController();
     }
 
-    /// <summary>Reconcile the self-owned fade controller with the widget's current <see cref="ScribeFadeText.Fading"/>
-    /// flag, in BOTH directions. Called from <see cref="InitState"/> (mount) and <see cref="UpdateWidget"/>
-    /// (reconcile reuse):
-    /// <list type="bullet">
-    /// <item><b>Fading</b>: start the ramp if one isn't already running (idempotent — a plain repaint won't
-    /// restart it).</item>
-    /// <item><b>Not fading</b>: DISPOSE any controller so <see cref="Build"/> returns to full opacity. This is
-    /// the undo path: a destructive-pending row whose window
-    /// the player cancels late has a nearly-complete fade controller (<c>Value ≈ 1</c>). Because the reconcile
-    /// path REUSES the element rather than remounting it, without this the stale controller would keep the text
-    /// at ~0 opacity forever — a "checkbox with no text".</item>
-    /// </list></summary>
+    /// <summary>Syncs the fade controller with <see cref="ScribeFadeText.Fading"/> in both directions. Fading
+    /// starts the ramp if not already running. Not fading DISPOSES any controller so <see cref="Build"/> returns to
+    /// full opacity; without this, an undo late in the window would leave a reused element's stale controller
+    /// holding the text at ~0 opacity (a "checkbox with no text").</summary>
     private void SyncFadeController()
     {
         if (Widget.Fading)
         {
             if (controller != null) return; // already fading
 
-            // Own ticker: ramp 0→1 over the window; opacity is 1 − value so the text fades 1→0. Repaint each
-            // tick via MarkNeedsBuild (SetState) — the reconciling rebuild path, so this animates itself
-            // regardless of the host's rebuild strategy.
+            // Ramp 0→1 over the window (opacity = 1 − value), repainting via MarkNeedsBuild.
             controller = new AnimationController(TimeSpan.FromMilliseconds(Widget.DurationMs), Element.Owner!.GetTickerProvider());
             controller.OnValueChanged += _ => Element.MarkNeedsBuild();
             controller.Forward();
         }
         else
         {
-            // Undo / un-fade: drop the (possibly completed) fade so opacity snaps back to 1 and the text is
-            // visible again. Safe to dispose here — UpdateWidget/InitState run during the build phase, not
-            // from inside the ticker callback.
+            // Undo / un-fade: snap back to full opacity. Safe here: runs in the build phase, not inside the ticker callback.
             controller?.Dispose();
             controller = null;
         }
@@ -2238,12 +1834,10 @@ internal sealed class ScribeFadeTextState : State<ScribeFadeText>
     }
 }
 
-/// <summary>The HUD header's settings gear: a self-stateful icon button that brightens +10 HSV Value on
-/// hover and opens the settings surface on tap. Stateful (not a bare GestureDetector) so the hover state
-/// survives the HUD's rebuilds — the same reason <see cref="ScribeFadeText"/> is.
-/// The nudge lives here, in em units off <see cref="FontSize"/>: left comes off the leading pad, and the
-/// y-offset is a <c>Transform.Translate</c> wrapping the GestureDetector so the CLICKABLE region moves
-/// with the paint (<c>RenderTransform.GlobalToChild</c>), not just the drawn glyph.</summary>
+/// <summary>The HUD header's settings gear: an icon button that brightens +10 HSV Value on hover and opens
+/// settings on tap. Stateful so hover survives rebuilds (like <see cref="ScribeFadeText"/>). The nudge is in em
+/// units off <see cref="FontSize"/>; the y-offset is a <c>Transform.Translate</c> around the GestureDetector so
+/// the clickable region moves with the paint.</summary>
 internal sealed class ScribeHudGearButton : StatefulWidget
 {
     public ScribeHudGearButton(Vector4 baseColor, float fontSize, Action onTap, Gui.Widgets.Framework.Key? key = null)
@@ -2267,8 +1861,7 @@ internal sealed class ScribeHudGearButtonState : State<ScribeHudGearButton>
 
     public override Widget Build(BuildContext context)
     {
-        // Hover brightens the gear +10 HSV Value (reusing ShiftBrightness, matching the lectern nav/row
-        // buttons' hover feel); saturation/hue/alpha unchanged, just lighter.
+        // Hover: +10 HSV Value, matching the lectern nav/row buttons.
         var color = hovered
             ? ScribeRowConstants.ShiftBrightness(Widget.BaseColor, +10f)
             : Widget.BaseColor;
@@ -2280,17 +1873,13 @@ internal sealed class ScribeHudGearButtonState : State<ScribeHudGearButton>
         // Down nudge of 0.0625em (1px at baseline).
         float offsetY = 0.0625f * em;
 
-        // VsIcon has no text-style glow (it's a tinted texture, not Skia text), so match the HUD text's
-        // dark halo with a Container BoxShadow instead — black, zero-offset, blurred — the same mechanism
-        // the lectern sidebar nav buttons use. It halos the icon's box rather than the glyph outline the
-        // way text glow hugs letterforms, but reads as the same legibility halo over a busy world.
+        // VsIcon has no text glow, so a Container BoxShadow (black, zero-offset, blurred, as on the lectern nav buttons) halos the icon's box.
         var haloed = new Container(
             new BoxStyle
             {
                 BoxShadows = new[]
                 {
                     new BoxShadow(
-                        // Black halo: blur 2.25, alpha 0.3 — a tight, faint glow so the white gear reads cleanly.
                         Color: new Vector4(0f, 0f, 0f, 0.3f),
                         Offset: new Vector2(0f, 0f),
                         BlurRadius: 2.25f),

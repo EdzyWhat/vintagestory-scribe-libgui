@@ -4,10 +4,8 @@ namespace Scribe;
 
 /// <summary>
 /// Server -&gt; client: delivers the recipient player their own full pin set (never another player's).
-/// The payload is a <c>ScribePinCodec</c> SPIN list blob — the same fail-safe, versioned binary form
-/// used everywhere else — so the client decodes it with <c>ScribePinCodec.TryDeserializeList</c>.
-/// Sent on join (initial delivery) and re-sent whenever the player's set changes (a pin added,
-/// removed, orphaned, or its snapshot refreshed), mirroring the vanilla waypoints resend discipline.
+/// Sent on join and re-sent whenever the set changes; the client decodes with
+/// <c>ScribePinCodec.TryDeserializeList</c>.
 /// </summary>
 [ProtoContract]
 public sealed class ScribePinnedSetMessage

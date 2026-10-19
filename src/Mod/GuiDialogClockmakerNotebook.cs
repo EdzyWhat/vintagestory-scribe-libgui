@@ -25,24 +25,20 @@ using Alignment = Gui.Widgets.Layout.Alignment;
 namespace Scribe;
 
 /// <summary>
-/// The Clockmaker's Notebook dialog — extends <see cref="GuiDialogScribeNotebook"/> with a
-/// Timer tab. All other tabs (Read, Edit, Pinned, History) are inherited unchanged.
+/// The Clockmaker's Notebook dialog: <see cref="GuiDialogScribeNotebook"/> plus a Timer tab; other tabs are inherited.
 /// </summary>
 public sealed class GuiDialogClockmakerNotebook : GuiDialogScribeNotebook
 {
-    // ── Timer tab local state ──────────────────────────────────────────────────
+    // Timer tab state
 
-    /// <summary>Client-side interpolated remaining seconds, updated every tick for smooth display
-    /// between authoritative server pushes.</summary>
+    /// <summary>Client-interpolated remaining seconds, for smooth display between server pushes.</summary>
     private double _localRemaining;
 
-    /// <summary>Whether to reseed _localRemaining from MyTimer on the next rebuild (set when a
-    /// server push arrives).</summary>
+    /// <summary>Reseed _localRemaining from MyTimer on the next rebuild (set when a server push arrives).</summary>
     private bool _resyncRemaining = true;
 
-    // Seeded from the player's remembered PreferredTimerMode in the ctor body (NOT here — field
-    // initializers run before base(...) assigns modSystem). Defaults to RealTime for a first-time player.
-    // Persisted back on every selection so it survives close/reopen.
+    // Seeded from the remembered PreferredTimerMode in the ctor body, not here: field initializers run before
+    // base(...) assigns modSystem. Persisted back on every selection.
     private TimerMode _pendingMode;
     private int _pendingHours;
     private int _pendingMinutes;
@@ -52,23 +48,19 @@ public sealed class GuiDialogClockmakerNotebook : GuiDialogScribeNotebook
     private readonly ScribeNumericFocusRegistry _timerFocus = new();
     private long _timerTickId;
 
-    /// <summary>Last-seen timer status — used to detect transitions so we only call ForceRebuild
-    /// when the status actually changes (Idle↔Running↔Fired), not on every 1-second server push.
-    /// The countdown text updates itself via ScribeCountdownText's own tick.</summary>
+    /// <summary>Last-seen timer status; ForceRebuild runs only on a status transition, not on every server push.</summary>
     private TimerStatus _lastKnownStatus = TimerStatus.Idle;
 
-    /// <summary>Monotonic-clock timestamps (ms, <c>capi.World.ElapsedMilliseconds</c>) of the last
-    /// Idle→Running (engage) and →Fired (lock) transitions. Captured HERE on the host — which survives
-    /// <c>ForceRebuild</c> — rather than in the gearworks widget's State (which is torn down + remounted on
-    /// every transition, so a State-held timestamp would reset and the slide/lock would snap). The gearworks
-    /// derives its start-slide progress and its frozen lock angle from these. 0 = "not yet".</summary>
+    /// <summary>Monotonic-clock timestamps (ms, <c>capi.World.ElapsedMilliseconds</c>) of the last Idle-to-Running
+    /// (engage) and to-Fired (lock) transitions; 0 = not yet. Held on the host because the gearworks State is torn
+    /// down on every transition, which would reset the slide/lock.</summary>
     private long _engageStartMs;
     private long _fireLockMs;
 
     public GuiDialogClockmakerNotebook(IScribeDocumentHost host, ICoreClientAPI capi)
         : base(host, capi)
     {
-        // Seed the "set timer" form's mode from the player's remembered choice (default RealTime).
+        // Seed the form's mode from the player's remembered choice.
         _pendingMode = modSystem.MySettings.PreferredTimerMode;
         modSystem.MyTimerChanged += OnTimerChanged;
         _timerTickId = capi.Event.RegisterGameTickListener(OnTimerTick, 250);
@@ -86,11 +78,11 @@ public sealed class GuiDialogClockmakerNotebook : GuiDialogScribeNotebook
         base.OnGuiClosed();
     }
 
-    // ── Extra nav button ───────────────────────────────────────────────────────
+    // Extra nav button
 
     protected override IEnumerable<Widget> GetExtraNavButtons()
     {
-        // History (inherited from GuiDialogScribeNotebook)
+        // History (inherited)
         foreach (var w in base.GetExtraNavButtons()) yield return w;
 
         // Timer
@@ -105,7 +97,7 @@ public sealed class GuiDialogClockmakerNotebook : GuiDialogScribeNotebook
             activeColor: IsTimerView ? ScribeRowConstants.NavActiveTimer : null);
     }
 
-    // ── Timer tab content ──────────────────────────────────────────────────────
+    // Timer tab content
 
     protected override Widget BuildTimerContent()
     {
@@ -119,10 +111,8 @@ public sealed class GuiDialogClockmakerNotebook : GuiDialogScribeNotebook
         float small   = body * 0.8f;
         string taskFont = ScribeTaskFont.Resolve(modSystem.MySettings.TaskFontFamily);
 
-        // bodyStyle KEEPS its explicit FontFamily: it is threaded into non-Text widgets (the label
-        // TextField's TextFieldStyle and the numeric steppers) which do NOT read the DefaultTextStyle
-        // ancestor, so dropping it would make those inputs fall back to sans-serif. big/label/small flow only
-        // into Text widgets, so their family is inherited from the wrap below.
+        // bodyStyle keeps its explicit FontFamily: it feeds the label TextField and numeric steppers, which do not
+        // read the DefaultTextStyle ancestor. big/label/small go only into Text widgets and inherit the family.
         var bodyStyle  = new TextStyle { FontSize = ScribeTaskFont.LayoutSize(taskFont, body),  Color = colors.OnSurface, FontFamily = taskFont };
         var bigStyle   = new TextStyle { FontSize = ScribeTaskFont.LayoutSize(taskFont, big),   Color = colors.OnSurface };
         var labelStyle = new TextStyle { FontSize = ScribeTaskFont.LayoutSize(taskFont, body),  Color = colors.OnSurface with { W = colors.OnSurface.W * 0.7f } };
@@ -142,8 +132,7 @@ public sealed class GuiDialogClockmakerNotebook : GuiDialogScribeNotebook
         }
         else
         {
-            // Running or Fired: show countdown/00:00 + Stop button.
-            // ScribeCountdownText self-ticks every 250ms — no ForceRebuild needed during the run.
+            // Running or Fired: countdown (or 00:00) + Stop. ScribeCountdownText self-ticks, so no ForceRebuild.
             Widget timeWidget = status == TimerStatus.Fired
                 ? new ScribeBlinkText("00:00", bigStyle, capi)
                 : new ScribeCountdownText(
@@ -175,31 +164,23 @@ public sealed class GuiDialogClockmakerNotebook : GuiDialogScribeNotebook
                 children: activeChildren);
         }
 
-        // The ambient gearworks sits ABOVE the form/countdown in its own vertical region, decoupled from
-        // timer state (shown Idle/Running/Fired) — a peek into the mechanism behind the page.
-        // Non-interactive so it can't intercept
-        // control input. A Row (not Center) centers it horizontally while consuming only the
-        // gears' own height — a bare Center in this Column would expand to fill the main axis and starve the
-        // Expanded(content) below it of height (the timer form/countdown would vanish).
-        // The gearworks scales off Pixel Art Size, NOT the text scale used elsewhere on the tab:
-        // 540px is pegged to 100% and it grows/shrinks proportionally. The ScribeResetPaintColor wrapper kills
-        // the SharedPaint DrawMaskedBox fade — the same fix the dialog backdrops use.
+        // The ambient gearworks sits above the form/countdown, shown in every timer state and non-interactive.
+        // A Row (not Center) centers it while consuming only its own height; a bare Center would expand and starve
+        // the Expanded(content) below. Scale follows Pixel Art Size (540px = 100%), not the text scale.
+        // ScribeResetPaintColor kills the SharedPaint DrawMaskedBox fade, as for the dialog backdrops.
         float gearScale = ScribePlayerSettings.ClampPixelArtSize(modSystem.MySettings.PixelArtSize) / 540f;
         Widget gearworks = new ScribeResetPaintColor(new Row(
             mainAxisAlignment: MainAxisAlignment.Center,
             mainAxisSize: MainAxisSize.Max,
             children: new Widget[] { new ScribeGearworks(capi, modSystem, gearScale, status, _engageStartMs, _fireLockMs) }));
 
-        // Shared Row 2 subtitle + durable divider; no Row 3, mirroring the Editor/History tabs (which also have none).
+        // Shared Row 2 subtitle + divider; no Row 3, like the Editor/History tabs.
         Widget header = ScribeTabHeader.Build(colors, RowStyle, "scribe:scribe-gui-nav-timer", "scribe:scribe-gui-subtitle-timer",
             modSystem.VisualTuning.ShowSubtitleRow);
 
-        // Root the tab subtree in the player's Task Text Font + window-scaled base size.
-        // big/label/small Text widgets inherit the family from here;
-        // bodyStyle keeps its explicit family for the non-inheriting label field + numeric steppers; the
-        // Stop/Start buttons keep their explicit Caudex button font. The mode radios take the task font.
-        // Top inset is 4 (a tight gap between the title bar and the Row 2 subtitle); left/right/bottom are 10
-        // like every other tab.
+        // Root the tab in the Task Text Font + window-scaled size. Text widgets inherit the family; bodyStyle keeps
+        // its explicit family for the non-inheriting inputs; buttons keep the Caudex button font. Top inset is 4
+        // (tight gap under the title bar); the other sides are 10 like every tab.
         return ScribeTextDefaults.Wrap(modSystem.MySettings.TaskFontFamily, body, new Padding(
             EdgeInsets.Ltrb(10, 4, 10, 10),
             new Column(
@@ -214,7 +195,7 @@ public sealed class GuiDialogClockmakerNotebook : GuiDialogScribeNotebook
         float fieldH = 34f * scale;
         float fieldW = 70f * scale;
 
-        // Label field (plain text input).
+        // Label field.
         var labelController = new TextEditingController(_pendingLabel);
 
         var inputFieldStyle = new TextFieldStyle
@@ -252,12 +233,10 @@ public sealed class GuiDialogClockmakerNotebook : GuiDialogScribeNotebook
                 BuildTimeUnit("ts", _pendingSecs,    0, 55, 5,  "s", v => _pendingSecs    = v, inputFieldStyle, smallStyle),
             });
 
-        // Mode toggle: a single stateful widget that owns the visual toggle state so it can
-        // call SetState on itself without remounting the sibling Button.
+        // Mode toggle: one stateful widget owns the toggle state so it can SetState without remounting the Button.
         Widget modeRow = new ScribeTimerModeRow(
             selected: _pendingMode,
-            // Remember the choice: persist it as the player's PreferredTimerMode so the form pre-selects it
-            // on the next close/reopen.
+            // Persisted as PreferredTimerMode so the form pre-selects it next time.
             onSelect: m =>
             {
                 _pendingMode = m;
@@ -273,8 +252,8 @@ public sealed class GuiDialogClockmakerNotebook : GuiDialogScribeNotebook
             Color      = colors.OnPrimary,
         };
 
-        // Always provide a non-null onTap — guard inside SendStartTimer instead. A null onTap still
-        // mounts ButtonState which may crash on press-sound in the shipped Gui.dll 3.1.0.
+        // Always pass a non-null onTap (guard inside SendStartTimer): a null onTap still mounts ButtonState,
+        // which may crash on press-sound in the shipped Gui.dll 3.1.0.
         Widget startBtn = new Button(
             child: new Text(Lang.Get("scribe:scribe-gui-timer-start"), btnStyle),
             onTap: _ => SendStartTimer());
@@ -296,7 +275,7 @@ public sealed class GuiDialogClockmakerNotebook : GuiDialogScribeNotebook
         string suffix, Action<int> onSet,
         TextFieldStyle inputFieldStyle, TextStyle smallStyle)
     {
-        // Derive a BoxStyle for the ScribeNumericField outer container matching the input fill.
+        // BoxStyle for the numeric field's outer container, matching the input fill.
         var stepperBoxStyle = new BoxStyle
         {
             Color           = inputFieldStyle.FillColor,
@@ -332,7 +311,7 @@ public sealed class GuiDialogClockmakerNotebook : GuiDialogScribeNotebook
             });
     }
 
-    // ── Network sends ──────────────────────────────────────────────────────────
+    // Network sends
 
     private void SendStartTimer()
     {
@@ -352,18 +331,17 @@ public sealed class GuiDialogClockmakerNotebook : GuiDialogScribeNotebook
         capi.Network.GetChannel(ScribeModSystem.NetworkChannelName).SendPacket(new ScribeClearTimerMessage());
     }
 
-    // ── Tick & event ───────────────────────────────────────────────────────────
+    // Tick & event
 
-    /// <summary>Only rebuild when the timer status changes — not on every 1-second server push.
-    /// The countdown text is a self-ticking StatefulWidget, so mid-run pushes don't need a rebuild.</summary>
+    /// <summary>Rebuilds only when the timer status changes; the countdown text self-ticks, so mid-run pushes
+    /// need no rebuild.</summary>
     internal new void RefreshTimerView()
     {
         var newStatus = modSystem.MyTimer?.Status ?? TimerStatus.Idle;
         if (newStatus == _lastKnownStatus) return;
 
-        // Stamp the transitions the gearworks animates off. These live on the host so they
-        // survive the ForceRebuild below (a widget-State timestamp would reset on remount and the slide/lock
-        // would snap). Engage = anything→Running (the escape wheel slides in). Lock = →Fired (freeze angle).
+        // Stamp the transitions the gearworks animates off. They live on the host so they survive the ForceRebuild
+        // below. Engage = anything to Running; lock = to Fired.
         long now = capi.World.ElapsedMilliseconds;
         if (newStatus == TimerStatus.Running && _lastKnownStatus != TimerStatus.Running) _engageStartMs = now;
         if (newStatus == TimerStatus.Fired) _fireLockMs = now;
@@ -381,11 +359,10 @@ public sealed class GuiDialogClockmakerNotebook : GuiDialogScribeNotebook
 
     private void OnTimerTick(float dt)
     {
-        // No per-tick logic needed in the dialog — ScribeCountdownText handles its own display.
-        // The listener stays registered for status-transition checks.
+        // The countdown text handles its own display; the listener stays registered for status checks.
     }
 
-    // ── Helpers ────────────────────────────────────────────────────────────────
+    // Helpers
 
     private static string FormatDuration(double seconds)
     {
@@ -399,15 +376,11 @@ public sealed class GuiDialogClockmakerNotebook : GuiDialogScribeNotebook
     }
 }
 
-// ── ScribeCountdownText ──────────────────────────────────────────────────────
+// ScribeCountdownText
 
-/// <summary>Self-ticking countdown display. Seeds from <paramref name="initialSeconds"/> and
-/// decrements every 250 ms without triggering a parent ForceRebuild, so sibling widgets
-/// (e.g. the Stop Timer button) are never remounted while the timer is running.
-///
-/// <para>An InGame-mode timer drains at the world's in-game time rate (≈30 in-game s per real s by
-/// default), matching the server's authoritative decrement; RealTime drains one-per-real-second. The
-/// rate is read live each tick so a mid-run world time-speed change tracks.</para></summary>
+/// <summary>Self-ticking countdown display, seeded from <paramref name="initialSeconds"/>. Decrements without a
+/// parent ForceRebuild so siblings (the Stop button) are not remounted. InGame timers drain at the world's
+/// in-game time rate (read live each tick), RealTime at one per real second, matching the server.</summary>
 internal sealed class ScribeCountdownText : StatefulWidget
 {
     public readonly double InitialSeconds;
@@ -430,11 +403,8 @@ internal sealed class ScribeCountdownTextState : State<ScribeCountdownText>
     {
         base.InitState();
         _remaining = Widget.InitialSeconds;
-        // Decrement AND repaint off the mod system's shared 1Hz tick — no dedicated 250ms listener. The
-        // display only ever shows whole seconds, so finer interpolation was invisible; one tick per real
-        // second advances the countdown by one real second's worth (rate for InGame ≈ 30). Sharing the
-        // tick also keeps this countdown and the HUD timer row in the exact same dispatch (they'd drift if
-        // driven by two independent listeners). See ScribeModSystem.TimerDisplayTick.
+        // Decrement and repaint off the mod system's shared 1Hz tick (see ScribeModSystem.TimerDisplayTick), so
+        // this countdown and the HUD timer row stay in the same dispatch.
         Widget.ModSystem.TimerDisplayTick += OnDisplayTick;
     }
 
@@ -461,12 +431,11 @@ internal sealed class ScribeCountdownTextState : State<ScribeCountdownText>
     }
 }
 
-// ── ScribeTimerModeRow ────────────────────────────────────────────────────────
+// ScribeTimerModeRow
 
 /// <summary>
-/// A self-stateful row of two RadioButtons for In-game / Real-time mode selection.
-/// Owns its own SetState so toggling the selection redraws only this widget, never
-/// the sibling Button (which would crash ButtonState.PlaySound on remount).
+/// A self-stateful pair of RadioButtons for In-game / Real-time mode. Owns its SetState so toggling does not
+/// redraw the sibling Button (remounting it would crash ButtonState.PlaySound).
 /// </summary>
 internal sealed class ScribeTimerModeRow : StatefulWidget
 {
@@ -500,17 +469,14 @@ internal sealed class ScribeTimerModeRowState : State<ScribeTimerModeRow>
 
     public override Widget Build(BuildContext context)
     {
-        // Use the theme's default radio style; the mode labels take the player's Task Text Font
-        // (BodyStyle already carries the resolved task font), not the fixed Caudex button face.
+        // Theme radio style; labels use BodyStyle, which carries the player's task font.
         var radioStyle = Theme.Of(context).RadioButtonStyle with
         {
             LabelStyle = Widget.BodyStyle,
         };
 
-        // Stack the two options vertically. A horizontal row of both Caudex-Bold labels overflows the
-        // narrow notebook page, pushing "Real time" off the right edge (behind the Settings nav button,
-        // which then swallows its clicks). Vertical stacking keeps both on the page and selectable.
-        // crossAxisAlignment.Start aligns the two dots; the parent form centers the whole group.
+        // Vertical stack: a horizontal row of both Caudex-Bold labels overflows the narrow page and pushes
+        // "Real time" behind the Settings nav button, which swallows its clicks.
         return new Column(
             spacing: 8,
             mainAxisSize: MainAxisSize.Min,
@@ -535,12 +501,11 @@ internal sealed class ScribeTimerModeRowState : State<ScribeTimerModeRow>
     }
 }
 
-// ── ScribeBlinkText ──────────────────────────────────────────────────────────
+// ScribeBlinkText
 
 /// <summary>
-/// Blinks text on/off at 500 ms intervals using a VS game tick listener injected at
-/// construction. Avoids AnimationController + Element.Owner so there's no mount-order
-/// dependency that can silently crash in the shipped LibGUI build.
+/// Blinks text at 500 ms via a VS game tick listener; avoids AnimationController + Element.Owner, whose
+/// mount-order dependency can silently crash in the shipped LibGUI build.
 /// </summary>
 internal sealed class ScribeBlinkText : StatefulWidget
 {
@@ -578,12 +543,11 @@ internal sealed class ScribeBlinkTextState : State<ScribeBlinkText>
             child: new Gui.Widgets.Basic.Text(Widget.Text, Widget.Style));
 }
 
-// ── ScribeTimerIcon ──────────────────────────────────────────────────────────
+// ScribeTimerIcon
 
 /// <summary>
-/// Oscillates the timer icon ±30° using AnimatedRotation driven by a VS game tick listener.
-/// Uses AnimatedRotation (implicit tween) rather than Transform.Rotate + a custom controller
-/// to avoid a Skia matrix NaN/GPU crash when the icon size is zero at first layout.
+/// Oscillates the timer icon +-30 degrees via AnimatedRotation on a game tick listener. AnimatedRotation is used
+/// instead of Transform.Rotate to avoid a Skia matrix NaN/GPU crash when the icon size is zero at first layout.
 /// </summary>
 internal sealed class ScribeTimerIcon : StatefulWidget
 {
@@ -607,7 +571,7 @@ internal sealed class ScribeTimerIconState : State<ScribeTimerIcon>
     public override void InitState()
     {
         base.InitState();
-        // Toggle every 100ms: +30° → -30° → +30° …
+        // Toggle every 100ms between +30 and -30 degrees.
         _tickId = Widget.Capi.Event.RegisterGameTickListener(_ =>
             SetState(() => _angle = _angle > 0 ? AngleB : AngleA), 100);
     }
@@ -626,88 +590,61 @@ internal sealed class ScribeTimerIconState : State<ScribeTimerIcon>
             child: new ScribeVsIconGlyph("scribetimer", Widget.Size, Widget.Color));
 }
 
-// ── ScribeGearworks ───────────────────────────────────────────────────────────
+// ScribeGearworks
 
 /// <summary>
-/// The Timer-tab ambient clockwork gear-train. Two layers:
+/// The Timer-tab ambient clockwork gear-train.
 ///
-/// <para><b>The temporal pair (always moving).</b> A large + small interlocking toothed gear that advance
-/// in a spring-wound per-tooth tick the whole time the Timer tab is open, decoupled from timer state —
-/// they turn under Idle, Running, AND Fired. This is the lore hook: the temporal gears rotate eternally,
-/// and that perpetual motion is what the timer mechanism <i>harnesses</i> for power. So they NEVER stop,
-/// not even on fire.</para>
+/// <para><b>Temporal pair (always moving).</b> A large and a small interlocking gear tick one tooth per second
+/// whenever the tab is open, in every timer state; they never stop, not even on fire.</para>
 ///
-/// <para><b>The escape wheel (the regulator).</b> A big, mostly-hidden wheel that peeks up from behind the
-/// pair. It is the clock's <i>escapement</i>: it engages only while a timer runs — latching into view when
-/// a timer starts (powered by the always-turning pair), rotating while Running, and on Fired it briefly
-/// <b>shudders then locks</b> (the escapement catching), while the pair keeps turning behind it. Cleared →
-/// it slides back out. This latch-in/lock is the ONLY coupling between timer state and the gears.</para>
+/// <para><b>Escape wheel.</b> A big, mostly hidden wheel peeking up from behind the pair. It slides into view when
+/// a timer starts, rotates while Running, and on Fired shudders then locks while the pair keeps turning. This is
+/// the only coupling between timer state and the gears.</para>
 ///
-/// <para><b>Rebuild-stable tick:</b> the tick phase is DERIVED from a monotonic clock
-/// (<see cref="IClientWorldAccessor.ElapsedMilliseconds"/>), not accumulated in <see cref="State"/>.
-/// <c>toothIndex = floor(elapsedMs / TickPeriodMs)</c>, and each gear targets
-/// <c>toothIndex × stepAngle × ratio</c>. The Timer tab calls <c>ForceRebuild</c> on status
-/// transitions (<c>RefreshTimerView</c>), which remounts this subtree; a phase kept only in State
-/// would reset and make the gears jump. Deriving the target from the monotonic clock means the gears
-/// resume at exactly the right angle no matter how often the tab rebuilds. The escape wheel's LOCK angle
-/// is derived from the host-owned fire timestamp so it freezes even as the monotonic clock rolls on.</para>
+/// <para><b>Rebuild-stable tick:</b> the phase is derived from a monotonic clock
+/// (<see cref="IClientWorldAccessor.ElapsedMilliseconds"/>), <c>toothIndex = floor(elapsedMs / TickPeriodMs)</c>,
+/// not accumulated in <see cref="State"/>, because the Timer tab's <c>ForceRebuild</c> on status transitions
+/// remounts this subtree and a State-held phase would reset. The lock angle derives from the host-owned fire
+/// timestamp.</para>
 ///
-/// <para><b>Mesh via a single driver:</b> the pair is driven by the one <c>toothIndex</c>. Each
-/// gear's angle = <c>direction × ratio × toothIndex × stepAngle</c>, where <c>ratio = ReferenceTeeth /
-/// thisGearTeeth</c> and the direction alternates so neighbours counter-rotate. Positions are hand-tuned so
-/// painted teeth interlock — a faked constant, not a physics solver (the Gearlock Firearms technique this
-/// art is derived from).</para>
+/// <para><b>Mesh:</b> each gear's angle = <c>direction x ratio x toothIndex x stepAngle</c>, with
+/// <c>ratio = ReferenceTeeth / thisGearTeeth</c> and alternating direction. Positions are hand-tuned so painted
+/// teeth interlock; this is faked, not a physics solver.</para>
 ///
-/// <para>Art: the gears are rasters loaded from the asset locations below. The escape wheel is the
-/// procedurally generated great wheel, falling back to the small-gear raster when generation is
-/// unavailable. This widget renders whatever bitmaps the asset locations resolve to; swapping art needs no
-/// code change.</para>
-///
-/// <para>Non-interactive: the gears are paint-only Containers with no gesture handlers, in their
-/// own vertical region above the timer controls, so they cannot swallow a click or keystroke meant for a
-/// control.</para>
+/// <para>Gears are rasters from the asset locations below (the escape wheel is the procedural great wheel, with a
+/// small-gear fallback). Non-interactive: paint-only Containers with no gesture handlers.</para>
 /// </summary>
 internal sealed class ScribeGearworks : StatefulWidget
 {
-    // Filed under textures/gui/ like the mod's other GUI rasters (VS only scans its fixed AssetCategory
-    // folders; there is no "gui" category, but "textures" is scanned — same reasoning as the backdrops /
-    // SVG icons).
-    // The teal temporal gear is a 512² raster; its on-screen size is `largeSize` in Build, independent of
-    // source pixels, so it is downsampled.
+    // Filed under textures/gui/ like the mod's other GUI rasters (VS scans "textures" but has no "gui" category).
+    // The temporal gear is a 512px raster downsampled to largeSize in Build.
     public static readonly AssetLocation LargeGearAsset = new("scribe", "textures/gui/gear-temporal-large-512.png");
     public static readonly AssetLocation SmallGearAsset = new("scribe", "textures/gui/gear-temporal-small.png");
     // Fallback for the escape wheel when the procedural great wheel is unavailable.
     public static readonly AssetLocation EscapeGearAsset = SmallGearAsset;
 
-    // Authored framing art for the gearworks trim box (drawn separately from the gears). Both are optional:
-    // if an asset is missing/unloadable the gearworks still renders (backdrop → nothing behind the gears;
-    // border → the 1px fallback Container border). Author sizing (logical box is TrimBoxWidth×TrimBoxHeight =
-    // 252×138): BACKDROP fills the trim box exactly, so author at a 2–3× multiple of 252×138 (e.g. 756×414) to
-    // downsample crisply. BORDER-TRIM frames OUTSIDE the box with an even 8px margin → 268×154 logical, so
-    // author at the matching multiple (e.g. 804×462) with a transparent 252×138 centre hole.
+    // Optional framing art for the trim box; if missing, the backdrop is omitted and the border falls back to a 1px
+    // Container border. The logical box is TrimBoxWidth x TrimBoxHeight (252x138): the BACKDROP fills it exactly
+    // (author at 2-3x, e.g. 756x414); the BORDER-TRIM frames it OUTSIDE with an even 8px margin (268x154 logical,
+    // e.g. 804x462) with a transparent 252x138 centre hole.
     public static readonly AssetLocation TrimBackdropAsset = new("scribe", "textures/gui/gearworks-backdrop.png");
     public static readonly AssetLocation TrimBorderAsset   = new("scribe", "textures/gui/gearworks-border.png");
-    /// <summary>Very-nearly-transparent glass pane painted OVER the gears + backdrop (topmost child INSIDE the
-    /// HardEdge clip), so the mechanism reads as seen through glass. Derived from vanilla clear glass
-    /// (<c>glass/plain.png</c>, its flat cool-gray tint minus the leaded dark border), dropped to ~6% alpha
-    /// with a soft diagonal sheen streak. Fills the trim box exactly like the backdrop → author at the same
-    /// 2–3× multiple of 252×138 (756×414). Optional: absent → no glass overlay.</summary>
+    /// <summary>Nearly transparent glass pane painted over the gears and backdrop (topmost child inside the
+    /// HardEdge clip). Fills the trim box exactly; author at 2-3x (756x414). Optional.</summary>
     public static readonly AssetLocation TrimGlassAsset    = new("scribe", "textures/gui/gearworks-glass.png");
-    /// <summary>Even border margin (LOGICAL px) the trim-border art adds on EACH side of the trim box, so the
-    /// border PNG is (TrimBoxWidth + 2×this) × (TrimBoxHeight + 2×this) = 268×154 at the 252×138 box. Must match
-    /// how the border art is drawn.</summary>
+    /// <summary>Even border margin (logical px) the border art adds on each side of the trim box; must match how the
+    /// border art is drawn.</summary>
     public const float TrimBorderMargin = 8f;
 
     public readonly ICoreClientAPI Capi;
     public readonly ScribeModSystem ModSystem;
     public readonly float Scale;
     public readonly TimerStatus Status;
-    /// <summary>Monotonic-clock timestamp (ms) of the last Idle→Running transition, or 0 if never/Idle.
-    /// The escape wheel's start-slide progress is derived from this so it survives the ForceRebuild remount
-    /// — a State-held flag would reset on remount and the slide would snap.</summary>
+    /// <summary>Monotonic-clock ms of the last Idle-to-Running transition, or 0. Host-owned so the engage slide
+    /// survives the ForceRebuild remount.</summary>
     public readonly long EngageStartMs;
-    /// <summary>Monotonic-clock timestamp (ms) of the last →Fired transition, or 0. The wheel freezes at the
-    /// angle it had reached at this instant instead of rewinding.</summary>
+    /// <summary>Monotonic-clock ms of the last to-Fired transition, or 0. The wheel freezes at the angle it had then.</summary>
     public readonly long FireLockMs;
 
     public ScribeGearworks(ICoreClientAPI capi, ScribeModSystem modSystem, float scale, TimerStatus status,
@@ -719,63 +656,42 @@ internal sealed class ScribeGearworks : StatefulWidget
 
 internal sealed class ScribeGearworksState : State<ScribeGearworks>
 {
-    // Tooth counts MUST match the actual art or the faked mesh drifts: the teal temporal gear
-    // (gear-temporal-large-512.png) has 12 teeth (a 30°/tooth step). Each tick advances
-    // BOTH gears by one of their OWN teeth, so the large steps 2π/12 (= 30°) and the small steps 2π/8 per tick
-    // (see the Ratio derivation below).
+    // Tooth counts must match the art or the faked mesh drifts. The 12-tooth temporal gear steps 2pi/12 per tick
+    // and the small gear 2pi/8 (see Ratio).
     private const int ReferenceTeeth = 12;   // large teal gear (counted from gear-temporal-large-512.png)
     private const int SmallTeeth     = 8;    // small gear
-    // Escape wheel: steps by the great wheel's OWN teeth so one tick advances exactly one tooth. DEV: the
-    // count is .geartune-tunable, so the step is derived at paint time from the live tuning value
-    // (GearTuning.WheelTeeth) in Build — see `escapeStep` there — not from a compile-time constant.
+    // The escape wheel steps by its own tooth count, which is .geartune-tunable, so its step is derived in Build.
 
-    // One discrete tooth-step every TickPeriodMs. Set to 1000 so a tooth-step lands once per REAL
-    // second — matching the visible cadence of a RealTime countdown. InGame-mode timers drain faster
-    // (≈30 in-game s per real s), so their displayed number moves quicker than one tooth/sec — an
-    // accepted mismatch (ticking one tooth/sec stays readable rather than blurring). The
-    // AnimatedRotation tween settles within SettleMs (< TickPeriodMs) so each step visibly
-    // snaps-and-settles before the next fires.
+    // One tooth-step per real second, matching a RealTime countdown. InGame timers drain faster, an accepted
+    // mismatch. The tween settles within SettleMs (< TickPeriodMs) so each step snaps and settles before the next.
     private const long TickPeriodMs = 1000;
     private const int  SettleMs     = 520;
-    // How often we re-check the monotonic clock for a tooth-index change. Small so the snap starts within a
-    // few ms of the real-second boundary (the idle dwell + the SettleMs snap should sum to the
-    // 1000 ms period and begin on the second mark). At 16 ms the perceived phase error is ~one frame.
+    // Clock re-check interval; small so the snap begins within a frame of the second boundary.
     private const int  PollMs = 16;
 
-    // Escape-wheel engage slide: on Idle→Running the wheel slides from its resting peek up to its
-    // live peek over this duration. Progress is derived from Widget.EngageStartMs (host-owned, survives the
-    // ForceRebuild remount) rather than a State flag, so it does NOT snap on the remount that delivers Running.
+    // Engage slide: on Idle-to-Running the wheel slides from its resting peek to its live peek over this duration,
+    // derived from Widget.EngageStartMs so it does not snap on the remount.
     private const long EngageSlideMs = 420;
-    // Escape-wheel fire retract: on Running→Fired the wheel slides its peek back DOWN from the
-    // live position to the resting position over this duration — the mirror of the engage slide — so the
-    // mechanism visibly disengages as the timer completes. Progress derived from Widget.FireLockMs (host-owned,
-    // survives the ForceRebuild remount) for the same rebuild-stability reason as the engage slide.
+    // Fire retract: on Running-to-Fired the wheel slides back down to the resting peek (mirror of the engage
+    // slide), derived from Widget.FireLockMs for the same rebuild-stability reason.
     private const long FireRetractMs = 420;
 
     private long _tickId;
     private long _toothIndex;
 
-    // Fire → shudder → lock. The lock ANGLE is derived from the host-owned Widget.FireLockMs timestamp (the
-    // exact escape-tooth index the running wheel had reached at the fire instant), NOT re-captured in State.
-    // This is what stops the wheel REWINDING on fire: State is torn down + remounted on the
-    // Running→Fired ForceRebuild, and AnimatedRotation seeds Begin==End on a fresh mount (it only tweens
-    // across a reconcile), so any angle that isn't exactly the
-    // last running angle makes the fresh mount SNAP there — visible as a rewind. Deriving the lock angle from
-    // the same clock formula the running wheel used guarantees it freezes precisely where it was.
-    // The shudder is a short decaying oscillation added ON TOP via a RAW Transform.Rotate (NOT AnimatedRotation
-    // — a 70ms step fed through the 520ms tween would be smoothed away).
+    // Fire, shudder, lock. The lock angle derives from the host-owned Widget.FireLockMs (the tooth index reached at
+    // the fire instant), not State: State is remounted on the Running-to-Fired ForceRebuild and AnimatedRotation
+    // seeds Begin==End on a fresh mount, so any other angle would snap, visible as a rewind. The shudder is a
+    // decaying oscillation added on top via a raw Transform.Rotate (AnimatedRotation's tween would smooth it away).
     private float _shudderAngle;
     private int   _shudderStep;
     private long  _shudderTickId;
-    // Decaying oscillation (radians) applied over ~5 steps at ShudderStepMs each, then 0 (locked).
+    // Decaying oscillation (radians), one value per ShudderStepMs, ending at 0 (locked).
     private static readonly float[] ShudderSequence = { 0.14f, -0.10f, 0.06f, -0.03f, 0f };
     private const int ShudderStepMs = 70;
 
-    // Cast-shadow depth, painted via ScribeGearEffect (silhouette recolour of the gear
-    // texture): a dark silhouette offset down-right beneath each gear → cheap 3D depth, contained by the HardEdge
-    // clip. A small offset and blur give a crisp near-contact shadow. Opacity is
-    // PER-GEAR: the teal temporal gear uses the full 0x70; the three steel gears use 2/3 of that
-    // (~0x4B) so the temporal gear stays the visual focus.
+    // Cast shadow via ScribeGearEffect (dark silhouette offset down-right beneath each gear), contained by the
+    // HardEdge clip. Opacity is per gear: the temporal gear 0x70, the steel gears 2/3 of that so it stays the focus.
     private static readonly SKColor TealShadowTint  = new(0x00, 0x00, 0x00, 0x70);   // ~44% black (temporal gear)
     private static readonly SKColor SteelShadowTint = new(0x00, 0x00, 0x00, 0x4B);   // ~29% black (2/3 of 0x70)
     private const float ShadowOffset = 1.5f;   // px (×scale) down-right
@@ -784,13 +700,8 @@ internal sealed class ScribeGearworksState : State<ScribeGearworks>
     private static readonly float StepAngleLarge  = MathF.PI * 2f / ReferenceTeeth;   // one large tooth (2π/12 = 30°)
     private const float Ratio = (float)ReferenceTeeth / SmallTeeth;                    // small steps ratio× faster
 
-    // The escape wheel is ALWAYS visible. "Engaged" does not gate its presence —
-    // it only decides how far the wheel peeks up and whether it turns. Idle: a small resting peek,
-    // stationary. Running/Fired: a larger peek so it slides a little further into view as the mechanism
-    // "goes live". Keeping it always-visible sidesteps the fire glitch entirely: because
-    // RefreshTimerView calls ForceRebuild on every status transition and stock Animated* widgets SNAP on
-    // a fresh mount (they only tween across a reconcile), an ever-hidden→visible
-    // latch would re-slide-in from nothing on each remount. An always-on wheel just repaints in place.
+    // The escape wheel is always visible; "engaged" only sets how far it peeks and whether it turns. A hidden-to-
+    // visible latch would re-slide from nothing on each remount, since stock Animated* widgets snap on a fresh mount.
     private bool Engaged => Widget.Status != TimerStatus.Idle;   // wheel turns + peeks further while Running/Fired
     private bool Locked  => Widget.Status == TimerStatus.Fired;
 
@@ -798,9 +709,7 @@ internal sealed class ScribeGearworksState : State<ScribeGearworks>
     {
         base.InitState();
         _toothIndex = CurrentToothIndex();
-        // Self-tick: repaint when the monotonic tooth index advances (the per-second snap) OR while the
-        // engage slide is still in flight (so the wheel visibly glides up over EngageSlideMs). This animates
-        // the widget without the host dialog rebuilding each frame (ScribeTimerIcon precedent).
+        // Self-tick: repaint when the tooth index advances or while a slide is in flight, without rebuilding the host.
         _tickId = Widget.Capi.Event.RegisterGameTickListener(_ =>
         {
             long next = CurrentToothIndex();
@@ -816,27 +725,24 @@ internal sealed class ScribeGearworksState : State<ScribeGearworks>
             }
         }, PollMs);
 
-        // DEV: rebuild live when a .geartune knob changes so layout nudges show without reopening.
+        // DEV: rebuild live when a .geartune knob changes.
         Widget.ModSystem.GearTuningChanged += OnGearTuningChanged;
 
         if (Locked)
         {
-            // Run a one-shot shudder on top of the (timestamp-derived) frozen angle. Because RefreshTimerView
-            // ForceRebuilds on the Running→Fired transition, InitState runs fresh at the moment of firing — so
-            // this one-shot fires exactly once per fire, which is what we want.
+            // One-shot shudder on top of the frozen angle; InitState runs fresh at the Running-to-Fired remount,
+            // so it fires once per fire.
             _shudderStep = 0;
             _shudderAngle = ShudderSequence[0];
             _shudderTickId = Widget.Capi.Event.RegisterGameTickListener(OnShudder, ShudderStepMs);
         }
     }
 
-    /// <summary>Escape-tooth index the RUNNING wheel had reached at a given monotonic timestamp — the shared
-    /// clock formula. Used both for the live angle (now) and the frozen lock angle (Widget.FireLockMs),
-    /// so the lock is exactly the last running angle → no rewind on fire.</summary>
+    /// <summary>Tooth index the running wheel had reached at a monotonic timestamp. Shared by the live angle and the
+    /// frozen lock angle, so the lock equals the last running angle (no rewind).</summary>
     private static long ToothIndexAt(long ms) => ms / TickPeriodMs;
 
-    /// <summary>0→1 progress of the Idle→Running engage slide, derived from the host-owned EngageStartMs so it
-    /// survives the ForceRebuild remount. 1 (fully engaged) when never started or long past.</summary>
+    /// <summary>0..1 progress of the engage slide from the host-owned EngageStartMs; 1 when never started or long past.</summary>
     private float EngageSlideProgress()
     {
         if (Widget.EngageStartMs <= 0) return 1f;
@@ -846,9 +752,7 @@ internal sealed class ScribeGearworksState : State<ScribeGearworks>
         return (float)dt / EngageSlideMs;
     }
 
-    /// <summary>0→1 progress of the Fired retract slide (live peek → resting peek), derived from the host-owned
-    /// FireLockMs so it survives the ForceRebuild remount. Only meaningful while Locked; 0 at the
-    /// fire instant (fully engaged), 1 once fully withdrawn.</summary>
+    /// <summary>0..1 progress of the Fired retract slide from FireLockMs: 0 at the fire instant, 1 once withdrawn.</summary>
     private float FireRetractProgress()
     {
         if (Widget.FireLockMs <= 0) return 0f;
@@ -870,7 +774,7 @@ internal sealed class ScribeGearworksState : State<ScribeGearworks>
         SetState(() => _shudderAngle = ShudderSequence[_shudderStep]);
     }
 
-    /// <summary>DEV: a .geartune knob changed — rebuild so Build re-reads the tuning values (live preview).</summary>
+    /// <summary>DEV: a .geartune knob changed; rebuild so Build re-reads the tuning values.</summary>
     private void OnGearTuningChanged() => SetState(() => { });
 
     public override void Dispose()
@@ -883,19 +787,15 @@ internal sealed class ScribeGearworksState : State<ScribeGearworks>
 
     private long CurrentToothIndex() => Widget.Capi.World.ElapsedMilliseconds / TickPeriodMs;
 
-    // Tick-tock: a faint clockwork beat once per real second, alternating two tones for the
-    // tick-tock cadence. Uses vanilla game:sounds/tick.ogg at two pitches (higher "tick" / lower
-    // "tock") to avoid shipping+attributing new audio. Routed
-    // through the Effect (Sound) channel via EnumSoundType.Sound + RelativePosition so the effect-volume slider
-    // controls it; faint via a low Volume; muted by the "Mute Scribe UI sounds" preference.
+    // Tick-tock: a faint beat per real second alternating two pitches of vanilla game:sounds/tick.ogg (no new
+    // audio). Plays on the Effect channel via EnumSoundType.Sound + RelativePosition; muted by "Mute Scribe UI sounds".
     private static readonly AssetLocation TickSound = new("game", "sounds/tick");
     private const float TickVolume = 0.49f;   // faint
     private const float TickPitch  = 1.15f;   // higher "tick"
     private const float TockPitch  = 0.85f;   // lower "tock"
 
-    /// <summary>Play one tick-tock beat for the given tooth index (even → tick, odd → tock, so the two tones
-    /// alternate deterministically across remounts). No-op when the player has muted Scribe UI sounds. Fire-and-
-    /// forget: the loaded sound self-disposes when it finishes (SoundParams.DisposeOnFinish defaults true).</summary>
+    /// <summary>One tick-tock beat (even tooth = tick, odd = tock, stable across remounts). No-op when muted.
+    /// Fire-and-forget: the sound self-disposes (SoundParams.DisposeOnFinish defaults true).</summary>
     private void PlayTickTock(long toothIndex)
     {
         if (Widget.ModSystem.MySettings.MuteUiSounds) return;
@@ -916,12 +816,9 @@ internal sealed class ScribeGearworksState : State<ScribeGearworks>
     {
         float scale = Widget.Scale;
 
-        // Region + gear sizing. The region
-        // is tall enough to host the pair (upper band) plus the escape wheel's peek from below. The BOUNDING
-        // BOX (regionW/regionH) is fixed; the gears are sized to fill it and mesh.
-        // DEV live-tuning: region dims + gear scales come from the .geartune window (defaults: trim box
-        // 200×130, gear scales 1.0). Fold these back into constants + delete
-        // ScribeGearTuning when the layout is finalized.
+        // Region + gear sizing. The region hosts the pair (upper band) plus the escape wheel's peek from below.
+        // DEV: region dims and gear scales come from the .geartune window; fold into constants and delete
+        // ScribeGearTuning once the layout is final.
         var tuning = Widget.ModSystem.GearTuning;
         float regionW   = tuning.TrimBoxWidth  * scale;   // DEV .geartune knob (default 200)
         float regionH   = tuning.TrimBoxHeight * scale;   // DEV .geartune knob (default 130)
@@ -929,13 +826,9 @@ internal sealed class ScribeGearworksState : State<ScribeGearworks>
         float smallSize = 65f    * scale * tuning.SmallGearScale;   // base size × scale knob (default 1)
         float escapeSize = 212.5f * scale;  // big wheel; only its top arc shows — rest clipped below
 
-        // Symmetric train: the teal temporal gear is the CENTERED driver, dropped LOW so
-        // it overlaps the escape wheel that peeks up from below; it is flanked by TWO small steel gears — one on
-        // each side — that mesh with it. toothKiss (the horizontal tuck) makes the small-gear teeth overlap the
-        // teal gear's teeth, and the smalls sit close to in-line with the teal gear's row.
-        // DEV live-tuning: the small-gear placement + teal-gear Y knobs come from the .geartune window.
-        // Fold these back into constants + delete
-        // ScribeGearTuning when the layout is finalized.
+        // Symmetric train: the temporal gear is the centered driver, dropped low to overlap the escape wheel, flanked
+        // by two small steel gears. toothKiss tucks their teeth into the temporal gear's. DEV: small-gear placement
+        // and teal-gear Y come from .geartune.
         float toothKiss = tuning.SmallGearOverlapX * scale;   // how deep each small tucks under the teal gear
         float largeLeft = (regionW - largeSize) / 2f;         // centered horizontally
         float largeTop  = tuning.LargeGearY * scale;          // DEV .geartune knob (default 30) — LOW → overlaps wheel
@@ -943,19 +836,15 @@ internal sealed class ScribeGearworksState : State<ScribeGearworks>
         float leftSmallLeft  = largeLeft - smallSize + toothKiss;
         float rightSmallLeft = largeLeft + largeSize - toothKiss;
 
-        // Escape wheel: ALWAYS visible, centered horizontally, peeking up from the bottom
-        // edge. The remainder extends past regionH and is clipped away (the eventual glass panel, M2, frames
-        // this arc). Two peek heights: a small RESTING peek when Idle, a larger LIVE peek while the timer runs.
-        // On Idle→Running the wheel SLIDES up between them over EngageSlideMs; on Running→Fired it
-        // SLIDES back DOWN live→resting over FireRetractMs so it visibly disengages as
-        // the timer completes. Both slide progresses are derived from host-owned timestamps (Widget.EngageStartMs
-        // / Widget.FireLockMs → survive the ForceRebuild remount), NOT State flags, so they glide not snap.
+        // Escape wheel: centered, peeking up from the bottom edge; the rest is clipped away. A small resting peek
+        // when Idle, a larger live peek while running; it slides between them over EngageSlideMs (up) and
+        // FireRetractMs (down on fire). Progress derives from host-owned timestamps so it glides, not snaps.
         float restingPeek = tuning.WheelIdlePeek * scale;    // DEV .geartune knob (default 34)
         float livePeek    = tuning.WheelActivePeek * scale;  // DEV .geartune knob (default 60)
         float escapePeek;
         if (Locked)
         {
-            // Fired: retract from the live peek back to the resting peek (mirror of the engage slide).
+            // Fired: retract from the live peek to the resting peek.
             float retractT = (float)Curves.EaseOutBack.Transform(FireRetractProgress());
             escapePeek = livePeek + (restingPeek - livePeek) * retractT;
         }
@@ -969,14 +858,11 @@ internal sealed class ScribeGearworksState : State<ScribeGearworks>
             escapePeek = restingPeek;
         }
         float escapeLeft = (regionW - escapeSize) / 2f;
-        float escapeTop  = regionH - escapePeek;         // body runs escapeTop..escapeTop+escapeSize (clipped)
+        float escapeTop  = regionH - escapePeek;
 
-        // Monotonic-derived targets. The teal driver turns one way; BOTH smalls counter-rotate against it
-        // (same sign as each other, opposite the teal), ratio× faster. The small gears also carry a DEV
-        // .geartune resting-angle offset (degrees→radians) so their teeth can be phased to mesh at rest; it's
-        // added on top of the live angle, so they still spin — it only shifts the starting phase. The offset is
-        // MIRRORED: the left small gets +X, the right small gets −X, because the two flank the teal gear
-        // symmetrically — the same signed offset would rotate them the same way and throw one out of mesh.
+        // Monotonic-derived angles. The teal driver turns one way; both smalls counter-rotate, ratio x faster. The
+        // smalls add a DEV .geartune resting-phase offset so their teeth mesh at rest; it is mirrored (+X left, -X
+        // right) because they flank the teal gear symmetrically, and only shifts the starting phase.
         float largeAngle    =  _toothIndex * StepAngleLarge;
         float smallSpin     = -_toothIndex * StepAngleLarge * Ratio;
         float smallRestPhase = tuning.SmallGearAngle * (MathF.PI / 180f);
@@ -985,40 +871,34 @@ internal sealed class ScribeGearworksState : State<ScribeGearworks>
 
         var children = new List<Widget>();
 
-        // Authored textured BACKDROP FIRST so it paints behind every gear, filling the trim box exactly (it is
-        // inside the HardEdge clip, so any bleed is trimmed). Optional: absent → nothing behind the gears. Wrapped in ScribeResetPaintColor so the DrawMaskedBox SharedPaint-alpha leak can't
-        // render it see-through/uneven (same fix the gears + dialog backdrops use).
+        // Textured BACKDROP first so it paints behind every gear, filling the trim box (inside the HardEdge clip).
+        // Optional. ScribeResetPaintColor prevents the DrawMaskedBox SharedPaint-alpha leak making it see-through.
         var backdropBmp = Widget.ModSystem.GetGuiTextureBitmap(ScribeGearworks.TrimBackdropAsset);
         if (backdropBmp is not null)
             children.Add(new Positioned(left: 0f, top: 0f, width: regionW, height: regionH,
                 child: new ScribeResetPaintColor(
                     new Container(style: new BoxStyle { Texture = backdropBmp, Width = regionW, Height = regionH }))));
 
-        // Escape wheel FIRST so it paints BEHIND the pair. Always present; only its motion depends on state.
-        //   Idle:    stationary at tooth 0 (the wheel is disengaged — the regulator isn't being driven).
-        //   Running: rotates with the monotonic clock, one escape-tooth per tick.
-        //   Fired:   FROZEN at the tooth index it had reached at the fire instant (Widget.FireLockMs) — the
-        //            same clock formula the running wheel used, so it locks exactly where it was (no
-        //            rewind) — with a brief decaying shudder on top, while it retracts (peek) to idle.
-        // NOTE the SIGN: +index here (the wheel spins OPPOSITE the teal driver).
+        // Escape wheel first so it paints behind the pair. Always present; only its motion depends on state.
+        //   Idle:    stationary at tooth 0.
+        //   Running: one escape-tooth per tick off the monotonic clock.
+        //   Fired:   frozen at the tooth index of the fire instant (Widget.FireLockMs), same formula as running,
+        //            so it locks where it was; a brief shudder rides on top while it retracts to idle.
+        // The wheel spins opposite the teal driver, hence +index.
         long escapeIndex = Locked ? ToothIndexAt(Widget.FireLockMs)
                          : Engaged ? _toothIndex
                          : 0L;
-        // Per-tick step = one of the wheel's OWN teeth so it stays tooth-honest. DEV: the tooth COUNT is
-        // .geartune-tunable, so derive the step from the live count — otherwise tuning the count would desync the per-tick advance from one visible tooth. + a resting-angle
-        // offset (degrees→radians) so the wheel's teeth can be phased to mesh with the teal gear; added on top of
-        // the live angle, so it just shifts the starting phase (still spins).
+        // Per-tick step is one of the wheel's own teeth; the count is .geartune-tunable, so the step derives from the
+        // live count. WheelAngle is a resting-phase offset so its teeth can mesh with the teal gear.
         float escapeStep = MathF.PI * 2f / (int)tuning.WheelTeeth;
         float escapeBase = escapeIndex * escapeStep + tuning.WheelAngle * (MathF.PI / 180f);
-        // The escape wheel is the procedurally generated "great wheel" (blocky, many-toothed, negative-space
-        // style); falls back to the reused small-gear PNG if generation is unavailable (e.g. server-side).
+        // The great wheel is procedurally generated; falls back to the small-gear PNG if generation is unavailable (e.g. server-side).
         var escapeBmp = Widget.ModSystem.GetProceduralGreatWheel()
                         ?? Widget.ModSystem.GetGuiTextureBitmap(ScribeGearworks.EscapeGearAsset);
         if (escapeBmp is not null)
         {
-            // The shudder is an INSTANT jolt (raw Transform.Rotate about center), layered over the settling
-            // base rotation — feeding it through AnimatedRotation's 520ms tween would smooth it away before it
-            // landed. Safe from the zero-size Skia-matrix crash (fixed non-zero child size). Only while Locked.
+            // The shudder is an instant raw Transform.Rotate over the settling base rotation (AnimatedRotation's
+            // 520ms tween would smooth it away). Safe from the zero-size Skia matrix crash (fixed child size).
             System.Func<Widget> maybeShudder = () =>
             {
                 Widget w = MakeGear(escapeBmp, escapeSize, escapeBase);
@@ -1026,16 +906,13 @@ internal sealed class ScribeGearworksState : State<ScribeGearworks>
                     w = Transform.Rotate(child: w, radians: _shudderAngle, alignment: Alignment.Center);
                 return w;
             };
-            // Shadow silhouette (steel gear casts a dark, contained shadow) beneath, then the opaque wheel. The
-            // wheel is wrapped in ScribeResetPaintColor so it paints through a clean opaque paint — the shadow's
-            // SrcIn tint (or any prior op) would otherwise modulate it see-through.
+            // Shadow beneath, then the wheel in ScribeResetPaintColor so the shadow's SrcIn tint cannot make it see-through.
             AddShadow(children, maybeShudder(), escapeLeft, escapeTop, escapeSize, scale, SteelShadowTint);
             children.Add(new Positioned(left: escapeLeft, top: escapeTop, width: escapeSize, height: escapeSize,
                 child: new ScribeResetPaintColor(maybeShudder())));
         }
 
-        // Two flanking small steel gears (shadow beneath each). Below the teal gear in paint order so the
-        // centered teal driver sits on top and its overlap of the escape wheel reads cleanly.
+        // Two flanking small steel gears with shadows, below the teal gear in paint order.
         var smallBmp = Widget.ModSystem.GetGuiTextureBitmap(ScribeGearworks.SmallGearAsset);
         if (smallBmp is not null)
         {
@@ -1047,9 +924,7 @@ internal sealed class ScribeGearworksState : State<ScribeGearworks>
                 child: new ScribeResetPaintColor(MakeGear(smallBmp, smallSize, rightSmallAngle))));
         }
 
-        // The teal temporal gear LAST (on top) — its own cast shadow beneath (the darker TealShadowTint), then
-        // the opaque gear. Wrapped in
-        // ScribeResetPaintColor so it paints fully opaque regardless of the shadow's tint left on the paint.
+        // Teal temporal gear last (on top), with its darker shadow; ScribeResetPaintColor keeps it opaque.
         var largeBmp = Widget.ModSystem.GetGuiTextureBitmap(ScribeGearworks.LargeGearAsset);
         if (largeBmp is not null)
         {
@@ -1058,30 +933,27 @@ internal sealed class ScribeGearworksState : State<ScribeGearworks>
                 child: new ScribeResetPaintColor(MakeGear(largeBmp, largeSize, largeAngle))));
         }
 
-        // Glass pane LAST (topmost) but still INSIDE the clip, so the very-nearly-transparent overlay covers the
-        // whole mechanism (gears + backdrop) and its edges are trimmed to the trim box. It reads as looking into
-        // the mechanism through glass. Non-interactive (a plain textured Container never hit-tests). Optional:
-        // absent → bare gears. Wrapped in ScribeResetPaintColor for the same DrawMaskedBox/SharedPaint leak fix.
+        // Glass pane last but inside the clip, so it covers gears and backdrop and is trimmed to the box.
+        // Non-interactive. Optional. ScribeResetPaintColor for the same SharedPaint leak fix.
         var glassBmp = Widget.ModSystem.GetGuiTextureBitmap(ScribeGearworks.TrimGlassAsset);
         if (glassBmp is not null)
             children.Add(new Positioned(left: 0f, top: 0f, width: regionW, height: regionH,
                 child: new ScribeResetPaintColor(
                     new Container(style: new BoxStyle { Texture = glassBmp, Width = regionW, Height = regionH }))));
 
-        // If nothing loaded, render an empty region rather than crash (asset-miss guard).
+        // Nothing loaded: render an empty region rather than crash.
         if (children.Count == 0)
             return new SizedBox(width: regionW, height: regionH);
 
-        // Clip the region so the escape wheel's hidden body (below the peek) — and every shadow — never overruns
-        // the form below. The authored border-trim art (added below) frames it; when that art is ABSENT we fall
-        // back to a 1px parchment border on the Container so the trim box is still visible while tuning.
+        // Clip so the escape wheel's hidden body and every shadow never overrun the form below. Without border art,
+        // a 1px parchment border keeps the box visible while tuning.
         var borderBmp = Widget.ModSystem.GetGuiTextureBitmap(ScribeGearworks.TrimBorderAsset);
         Widget clipped = new Container(
             style: new BoxStyle
             {
                 Width           = regionW,
                 Height          = regionH,
-                // Fallback outline only when there's no border art to frame the box.
+                // Fallback outline only when there is no border art.
                 BorderThickness = borderBmp is null ? scale : 0f,
                 BorderColor     = new Vector4(0.55f, 0.42f, 0.2f, 0.9f),   // parchment-brown outline
             },
@@ -1089,11 +961,9 @@ internal sealed class ScribeGearworksState : State<ScribeGearworks>
                 clipBehavior: ClipBehavior.HardEdge,
                 child: new SizedBox(width: regionW, height: regionH, child: new Stack(children))));
 
-        // Border-trim frame: an authored PNG that sits OUTSIDE the trim box with an even TrimBorderMargin (8px
-        // logical) on every side → its logical size is (regionW + 2·margin) × (regionH + 2·margin) = 268×154 at
-        // the 252×138 box. Its centre is transparent so the clipped gears/backdrop show through. Painted LAST
-        // (on top) so its inner edge overlaps the box edge cleanly. When the art is absent we just render the
-        // clipped region with its fallback 1px border (no frame).
+        // Border-trim frame: an authored PNG outside the trim box with an even TrimBorderMargin on every side
+        // ((regionW + 2*margin) x (regionH + 2*margin)) and a transparent centre. Painted last so its inner edge
+        // overlaps the box edge cleanly. Absent: just the clipped region with its fallback border.
         Widget region;
         if (borderBmp is not null)
         {
@@ -1102,9 +972,9 @@ internal sealed class ScribeGearworksState : State<ScribeGearworks>
             float borderH = regionH + 2f * margin;
             region = new SizedBox(width: borderW, height: borderH, child: new Stack(new List<Widget>
             {
-                // Clipped gear region, inset by the margin so it's centred inside the frame.
+                // Clipped gear region, inset by the margin.
                 new Positioned(left: margin, top: margin, width: regionW, height: regionH, child: clipped),
-                // The frame PNG over the full bordered area (transparent centre hole shows the gears).
+                // The frame PNG over the full bordered area.
                 new Positioned(left: 0f, top: 0f, width: borderW, height: borderH,
                     child: new ScribeResetPaintColor(
                         new Container(style: new BoxStyle { Texture = borderBmp, Width = borderW, Height = borderH }))),
@@ -1115,17 +985,14 @@ internal sealed class ScribeGearworksState : State<ScribeGearworks>
             region = clipped;
         }
 
-        // DEV .geartune "trim box Y": a PAINT-ONLY vertical nudge (Transform.Translate), NOT a margin/padding —
-        // it moves only the gear region and does NOT reflow the timer form/countdown below (a top margin would
-        // consume main-axis height and shrink the content). Positive = down. Skip the wrapper when 0 (no-op).
+        // DEV .geartune "trim box Y": a paint-only nudge (Transform.Translate), not a margin, so the form below
+        // does not reflow. Positive = down; skipped when 0.
         float trimY = tuning.TrimBoxY * scale;
         return trimY == 0f ? region : Transform.Translate(child: region, offset: new Vector2(0f, trimY));
     }
 
-    /// <summary>Push a cast-shadow silhouette of <paramref name="gear"/> into <paramref name="children"/>,
-    /// offset down-right and recoloured to a dark translucent silhouette via <see cref="ScribeGearEffect"/>
-    /// <paramref name="tint"/> is per-gear (steel gears lighter than the teal gear).
-    /// The offset/blur scale with the gearworks; the outer HardEdge clip keeps it contained.</summary>
+    /// <summary>Adds a cast-shadow silhouette of <paramref name="gear"/>, offset down-right and tinted via
+    /// <see cref="ScribeGearEffect"/> (<paramref name="tint"/> is per gear). The outer HardEdge clip contains it.</summary>
     private static void AddShadow(List<Widget> children, Widget gear, float left, float top, float size, float scale, SKColor tint)
     {
         children.Add(new Positioned(
@@ -1135,10 +1002,9 @@ internal sealed class ScribeGearworksState : State<ScribeGearworks>
             child: new ScribeGearEffect(gear, tint, ShadowBlur * scale)));
     }
 
-    /// <summary>One gear: a self-loaded raster in a fixed-size textured Container, wrapped in AnimatedRotation
-    /// so per-tooth target changes spring-settle. A fresh instance per call — the shadow/glow silhouettes need
-    /// their OWN rotation widget (a widget can't appear twice in the tree); identical angle inputs keep them in
-    /// visual lock-step with the gear.</summary>
+    /// <summary>One gear: a raster in a fixed-size textured Container inside AnimatedRotation so per-tooth target
+    /// changes spring-settle. Fresh instance per call, since a widget cannot appear twice in the tree and the
+    /// shadow needs its own rotation widget.</summary>
     private Widget MakeGear(SKBitmap bmp, float size, float angle)
         => new AnimatedRotation(
             angle: angle,

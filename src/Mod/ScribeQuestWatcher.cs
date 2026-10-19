@@ -13,50 +13,28 @@ using Vintagestory.API.Datastructures;
 namespace Scribe;
 
 /// <summary>
-/// Client-only "soft auto-detect" (Layer 2). Watches for quest accept/completion using vsquest's own SERVER-SYNCED state rather than any
-/// reflection: <c>VsQuest.QuestSystem</c> stamps <c>"lastaccepted-{questId}[-{playerUid}]"</c> and
-/// <c>"playercompleted-{playerUid}"</c> onto the quest-giver ENTITY's <c>WatchedAttributes</c> (confirmed
-/// in <c>vsquest-src/Systems/QuestSystem.cs</c> and <c>Entity/Behavior/BehaviorQuestGiver.cs</c>) — a
-/// normal, vanilla-API-visible <see cref="Vintagestory.API.Datastructures.ITreeAttribute"/> that syncs to
-/// every client with that entity loaded, no dialog or reflection required. Every catalog quest id is
-/// checked directly against those two keys on every loaded "questgiver"-behavior entity, which is why
-/// this needs no Harmony/AccessTools at all for accept/complete detection.
+/// Client-only soft auto-detect of quest accept/completion, with no reflection for the detection itself:
+/// <c>VsQuest.QuestSystem</c> stamps <c>"lastaccepted-{questId}[-{playerUid}]"</c> and
+/// <c>"playercompleted-{playerUid}"</c> onto the quest-giver ENTITY's synced <c>WatchedAttributes</c>, and
+/// every catalog quest id is checked against those keys on every loaded "questgiver" entity.
 ///
-/// <para>Only the RICHER kill/block-place/block-break progress mirroring has no entity-attribute
-/// equivalent — vsquest keeps live tracker counts only inside the open <c>VsQuest.QuestSelectGui</c>'s
-/// <c>activeQuests</c> field. That best-effort enrichment alone uses the Tallybook-proven reflection
-/// route (<see cref="AccessTools.Field"/>/<see cref="AccessTools.Property"/> against the dialog by type
-/// name), wrapped in try/catch with permanent self-disable on first failure — accept/complete detection
-/// above is entirely unaffected if this half breaks.</para>
+/// <para>Only the richer kill/block-place/block-break progress has no such equivalent (vsquest keeps live
+/// counts inside the open <c>VsQuest.QuestSelectGui</c>'s <c>activeQuests</c>), so that enrichment alone uses
+/// reflection, with permanent self-disable on first failure; accept/complete detection is unaffected.</para>
 ///
-/// <para>Session-only bookkeeping (<see cref="_acceptedSeen"/>/<see cref="_completedSeen"/>): this class
-/// only suppresses repeat notifications for the life of the client session, not across relogs. It is NOT
-/// the mechanism that prevents a duplicate auto-created Quest Link — that dedup happens server-side
-/// (<c>ScribeModSystem.Quest.cs</c> checks the target document for an existing Link to the same quest
-/// code before appending), so a re-notification on rejoin is a harmless, disclosed limitation rather than
-/// a correctness bug.</para>
+/// <para><see cref="_acceptedSeen"/>/<see cref="_completedSeen"/> only suppress repeat notifications for the
+/// client session. Duplicate auto-created Quest Links are prevented server-side
+/// (<c>ScribeModSystem.Quest.cs</c>), so a re-notification on rejoin is harmless.</para>
 ///
-/// <para><b>Progression Framework</b>: a second,
-/// independently-gated tick path detects accept/complete/per-objective progress for player-scoped quests
-/// by reading Progression Framework's own server-synced <c>WatchedAttributes</c> tree
-/// (<see cref="PfPlayerQuestTreeKey"/>, a public const on that mod's <c>QuestSystem</c>) directly off
-/// <c>capi.World.Player.Entity</c> — no entity scan needed (the tree is keyed on the player's own entity,
-/// not an NPC's) and no reflection at all, unlike vsquest's progress-mirroring half above. Gated and
-/// fail-closed independently of the vsquest path: a failure here disables PF detection only, for
-/// the session, and never touches vsquest's own accept/complete/progress state.</para>
+/// <para><b>Progression Framework</b> is a second, independently fail-closed tick path: it reads PF's synced
+/// <c>WatchedAttributes</c> tree (<see cref="PfPlayerQuestTreeKey"/>) off the player's own entity, with no
+/// entity scan and no reflection. A failure disables PF detection only, never vsquest's.</para>
 ///
-/// <para><b>Progression Framework server-scoped quests</b>:
-/// a THIRD, independently-gated tick path detects the same accept/complete/per-objective signals for
-/// server-scoped quests — one shared quest instance every player on the world contributes to together, with
-/// no per-player state of its own. Unlike the player-scoped tree above, this shared state has no
-/// <c>WatchedAttributes</c> equivalent to read: Progression Framework syncs it to clients over its own
-/// private network channel into a private field (<c>QuestSystem.clientServerQuestState</c>) with no public
-/// accessor. This path reads that ONE field via reflection (<see cref="AccessTools.Field"/>, cached after
-/// first success) — the only reflective hop; everything read off the resulting dictionary's values
-/// (<see cref="Vintagestory.API.Datastructures.TreeAttribute"/>, a real vanilla-API type) is a normal,
-/// non-reflective call, exactly like every other tree read in this class. Fail-closed independently of both
-/// paths above: a failure here (missing type, missing field, unexpected field type — e.g. after a
-/// Progression Framework update) permanently disables only server-scoped detection for the session.</para>
+/// <para><b>PF server-scoped quests</b> are a third, independently fail-closed path. Their shared state has no
+/// <c>WatchedAttributes</c> equivalent: PF syncs it into a private field
+/// (<c>QuestSystem.clientServerQuestState</c>) with no accessor, so that ONE field is read via reflection
+/// (cached); everything read off its values is a normal tree call. A failure (missing type/field, unexpected
+/// type after a PF update) disables only server-scoped detection.</para>
 /// </summary>
 internal sealed class ScribeQuestWatcher
 {
@@ -73,22 +51,18 @@ internal sealed class ScribeQuestWatcher
     private readonly HashSet<string> _acceptedSeen = new(StringComparer.Ordinal);
     private readonly HashSet<string> _completedSeen = new(StringComparer.Ordinal);
 
-    /// <summary>Per-quest last-observed <c>lastaccepted-*</c> value (vsquest stamps the in-game DAY it was
-    /// accepted — confirmed in vsquest's own source, <c>QuestSystem.SetDouble(key, World.Calendar.TotalDays)</c>
-    /// — a genuine re-accept of a repeatable quest overwrites it with a LARGER value). A value increasing
-    /// mid-session (never the first read this session, which only means "already accepted before login")
-    /// is the fresh-reaccept signal the reset-clear consumes.</summary>
+    /// <summary>Per-quest last-observed <c>lastaccepted-*</c> value (the in-game DAY of acceptance). A value
+    /// that grows mid-session (not the first read, which only means "accepted before login") signals a fresh
+    /// re-accept of a repeatable quest.</summary>
     private readonly Dictionary<string, double> _acceptedFingerprint = new(StringComparer.Ordinal);
 
-    // ---- best-effort dialog reflection (progress mirroring only) ----
     private const string QuestGuiTypeName = "VsQuest.QuestSelectGui";
     private bool dialogReflectionDisabled;
     private readonly Dictionary<string, int[]> liveProgress = new(StringComparer.Ordinal);
 
-    // ---- Progression Framework (player-scoped quests, own WatchedAttributes tree) ----
+    // ---- Progression Framework (player-scoped) ----
     private const string PfPlayerQuestTreeKey = "progressionframework:questlog";
-    // Matches QuestSystem's own status strings exactly (confirmed against the decompiled source):
-    // AcceptQuest writes "active"; CompleteQuest/CompleteObjective write "completed" (not "complete").
+    // PF's own status strings ("completed", not "complete").
     private const string PfStatusActive = "active";
     private const string PfStatusComplete = "completed";
     private bool pfDetectionDisabled;
@@ -96,18 +70,15 @@ internal sealed class ScribeQuestWatcher
     private Dictionary<string, ScribeProgressionFrameworkQuestEntry>? pfCatalogByCode;
     private readonly HashSet<string> pfAcceptedSeen = new(StringComparer.Ordinal);
     private readonly HashSet<string> pfCompletedSeen = new(StringComparer.Ordinal);
-    /// <summary>Per-quest last-observed PF "status" string, the same fresh-reaccept fingerprint idea as
-    /// <see cref="_acceptedFingerprint"/> but for PF's status field rather than vsquest's timestamp: a
-    /// mid-session flip AWAY from then back TO "active" (never the first read this session) is the fresh
-    /// re-accept signal.</summary>
+    /// <summary>Per-quest last-observed PF "status", the PF analogue of <see cref="_acceptedFingerprint"/>: a
+    /// mid-session flip away from then back to "active" signals a fresh re-accept.</summary>
     private readonly Dictionary<string, string> pfStatusFingerprint = new(StringComparer.Ordinal);
     private readonly Dictionary<string, Dictionary<string, string>> pfObjectiveStatus = new(StringComparer.Ordinal);
-    // Parallel to pfObjectiveStatus (same questCode -> objCode keying): PF's numeric "progress" int per objective, read
-    // alongside "status" but never conflated with it — a malformed/missing progress value must disable only
-    // this objective's live count, never accept/complete detection.
+    // Parallel to pfObjectiveStatus: PF's numeric "progress" per objective, kept separate so a bad value
+    // affects only the live count, never accept/complete detection.
     private readonly Dictionary<string, Dictionary<string, int>> pfObjectiveProgress = new(StringComparer.Ordinal);
 
-    // ---- Progression Framework server-scoped quests (reflected shared state, no WatchedAttributes) ----
+    // ---- Progression Framework (server-scoped, reflected) ----
     private const string PfQuestSystemTypeName = "ProgressionFramework.Quests.QuestSystem";
     private const string PfClientServerQuestStateFieldName = "clientServerQuestState";
     private bool serverQuestDetectionDisabled;
@@ -132,10 +103,8 @@ internal sealed class ScribeQuestWatcher
         }
     }
 
-    /// <summary>Live kill/block-place/block-break progress for a quest, positionally zipped against its
-    /// catalog <see cref="ScribeQuestCatalogEntry.Objectives"/> — index <c>i</c> here is objective
-    /// <c>i</c> there. Only populated while (or after) the quest's own dialog has been read this session;
-    /// returns false (no entry) otherwise, including whenever vsquest isn't installed.</summary>
+    /// <summary>Live counts, positionally aligned with the catalog <see cref="ScribeQuestCatalogEntry.Objectives"/>.
+    /// False until the quest's dialog has been read this session, or when vsquest isn't installed.</summary>
     public bool TryGetLiveProgress(string questCode, out IReadOnlyList<int> counts)
     {
         if (liveProgress.TryGetValue(questCode, out var arr)) { counts = arr; return true; }
@@ -143,10 +112,9 @@ internal sealed class ScribeQuestWatcher
         return false;
     }
 
-    /// <summary>The static objective definitions for a cataloged quest, positionally aligned with
-    /// <see cref="TryGetLiveProgress"/>'s counts. False before the catalog has been read once
-    /// (the first tick after login) or for an uncataloged quest code. VS Quest only — see
-    /// <see cref="TryGetPfObjectiveStatus"/> for Progression Framework's equivalent.</summary>
+    /// <summary>Static objectives for a cataloged quest, aligned with <see cref="TryGetLiveProgress"/>. False
+    /// before the first catalog read or for an uncataloged code. VS Quest only (see
+    /// <see cref="TryGetPfObjectiveStatus"/> for PF).</summary>
     public bool TryGetObjectives(string questCode, out IReadOnlyList<ScribeQuestObjectiveDef> objectives)
     {
         if (catalogByCode != null && catalogByCode.TryGetValue(questCode, out var q)) { objectives = q.Objectives; return true; }
@@ -154,10 +122,9 @@ internal sealed class ScribeQuestWatcher
         return false;
     }
 
-    /// <summary>Progression Framework's catalog objective definitions (code + required count) for a
-    /// cataloged quest (matched by code, not position, against
-    /// <see cref="TryGetPfObjectiveStatus"/>). False before the PF catalog has been read once, PF isn't
-    /// installed, or the quest code isn't cataloged.</summary>
+    /// <summary>PF's catalog objectives (code + required count), matched by code against
+    /// <see cref="TryGetPfObjectiveStatus"/>. False before the PF catalog is read, without PF, or for an
+    /// uncataloged code.</summary>
     public bool TryGetPfObjectiveDefs(string questCode, out IReadOnlyList<ScribePfObjectiveDef> objectives)
     {
         if (pfCatalogByCode != null && pfCatalogByCode.TryGetValue(questCode, out var q)) { objectives = q.Objectives; return true; }
@@ -165,10 +132,8 @@ internal sealed class ScribeQuestWatcher
         return false;
     }
 
-    /// <summary>Progression Framework's live per-objective status, keyed by each objective's own stable
-    /// code (no positional zip needed, unlike vsquest, since PF's own attribute tree already
-    /// correlates status to a code). False until this quest's tree has been read at least once this
-    /// session, including whenever Progression Framework isn't installed or detection has self-disabled.</summary>
+    /// <summary>PF's live per-objective status, keyed by objective code. False until the quest's tree has been
+    /// read this session, or when PF is absent or detection self-disabled.</summary>
     public bool TryGetPfObjectiveStatus(string questCode, out IReadOnlyDictionary<string, string> statusByCode)
     {
         if (pfObjectiveStatus.TryGetValue(questCode, out var map)) { statusByCode = map; return true; }
@@ -176,10 +141,8 @@ internal sealed class ScribeQuestWatcher
         return false;
     }
 
-    /// <summary>Progression Framework's live per-objective NUMERIC progress, keyed by each objective's own
-    /// stable code — the count that drives a QuestObjective
-    /// subtask's <c>CurrentQuantity</c> from. False until this quest's tree has been read at least once this
-    /// session, including whenever Progression Framework isn't installed or detection has self-disabled.</summary>
+    /// <summary>PF's live per-objective NUMERIC progress by objective code; drives a QuestObjective subtask's
+    /// <c>CurrentQuantity</c>. False under the same conditions as <see cref="TryGetPfObjectiveStatus"/>.</summary>
     public bool TryGetPfObjectiveProgress(string questCode, out IReadOnlyDictionary<string, int> progressByCode)
     {
         if (pfObjectiveProgress.TryGetValue(questCode, out var map)) { progressByCode = map; return true; }
@@ -190,13 +153,10 @@ internal sealed class ScribeQuestWatcher
     private static readonly Dictionary<string, string> EmptyStatusMap = new(StringComparer.Ordinal);
     private static readonly Dictionary<string, int> EmptyProgressMap = new(StringComparer.Ordinal);
 
-    /// <summary>Whether the player has been observed to start (accept or complete) the given quest code
-    /// this client session, per whichever backend it belongs to — a pure read of the session-cached sets
-    /// each backend's tick path above already maintains for auto-detect. For vsquest, "started" requires the quest's giver to have been scanned this session
-    /// (<see cref="ScanGiver"/>); for Progression Framework, any recorded status (active or completed) for
-    /// the code counts, from either the player-scoped or server-scoped tick path (both write
-    /// <see cref="pfStatusFingerprint"/>). Used only to filter the "Add Quest Link" picker's candidate list —
-    /// no other consumer.</summary>
+    /// <summary>Whether the player has been observed to start (accept or complete) the quest this session, read
+    /// from the session-cached detection sets. vsquest requires the giver to have been scanned
+    /// (<see cref="ScanGiver"/>); for PF any recorded status counts (<see cref="pfStatusFingerprint"/>). Only
+    /// filters the "Add Quest Link" picker.</summary>
     public bool HasStarted(string questCode)
         => _acceptedSeen.Contains(questCode)
             || _completedSeen.Contains(questCode)
@@ -230,9 +190,8 @@ internal sealed class ScribeQuestWatcher
         ScanProgressionFrameworkServerQuests();
     }
 
-    /// <summary>Checks every catalog quest against one quest-giver entity's synced
-    /// <c>WatchedAttributes</c> for a fresh accept or completion (see class doc-comment for the exact key
-    /// shapes). Pure vanilla API — no reflection.</summary>
+    /// <summary>Checks every catalog quest against one giver's synced <c>WatchedAttributes</c> for a fresh
+    /// accept or completion (key shapes in the class doc).</summary>
     private void ScanGiver(Entity giver, string uid)
     {
         var wa = giver.WatchedAttributes;
@@ -251,7 +210,7 @@ internal sealed class ScribeQuestWatcher
             if (_acceptedFingerprint.TryGetValue(q.QuestCode, out double prevValue) && value > prevValue)
             {
                 freshTransition = true;
-                _acceptedSeen.Remove(q.QuestCode); // force a refire below — a genuine re-accept, not a stale read
+                _acceptedSeen.Remove(q.QuestCode); // force a refire below
             }
             _acceptedFingerprint[q.QuestCode] = value;
 
@@ -272,11 +231,8 @@ internal sealed class ScribeQuestWatcher
         }
     }
 
-    /// <summary>Progression Framework's independently-gated detection path: reads that mod's
-    /// own <see cref="PfPlayerQuestTreeKey"/> tree directly off the player's own entity — no entity scan,
-    /// no reflection. Any failure (missing/malformed tree shape, e.g. after a PF update) permanently
-    /// disables THIS path only for the session; vsquest's detection above is read in a separate try scope
-    /// and is provably unaffected.</summary>
+    /// <summary>PF player-scoped detection: reads <see cref="PfPlayerQuestTreeKey"/> off the player's entity.
+    /// Any failure (e.g. malformed tree after a PF update) disables only this path for the session.</summary>
     private void ScanProgressionFramework()
     {
         if (pfDetectionDisabled) return;
@@ -304,7 +260,7 @@ internal sealed class ScribeQuestWatcher
                     && string.Equals(status, PfStatusActive, StringComparison.OrdinalIgnoreCase))
                 {
                     freshTransition = true;
-                    pfAcceptedSeen.Remove(questCode); // force a refire below — a genuine re-accept
+                    pfAcceptedSeen.Remove(questCode); // force a refire below
                 }
                 pfStatusFingerprint[questCode] = status;
 
@@ -330,9 +286,7 @@ internal sealed class ScribeQuestWatcher
                 {
                     if (objEntry.Value is not ITreeAttribute objTree) continue;
                     statusByCode[objEntry.Key] = objTree.GetString("status") ?? "";
-                    // A missing "progress" key leaves the last-cached value alone (a
-                    // malformed/absent count never overwrites with a spurious 0, and
-                    // never affects the status read above).
+                    // A missing "progress" key keeps the cached value rather than overwriting with 0.
                     if (objTree.HasAttribute("progress"))
                         progressByCode[objEntry.Key] = objTree.GetInt("progress", 0);
                 }
@@ -347,15 +301,9 @@ internal sealed class ScribeQuestWatcher
         }
     }
 
-    /// <summary>Progression Framework server-scoped quests' independently-gated detection path (see class
-    /// doc-comment): reads the mod's shared server-quest state via one reflected field access, then walks it
-    /// exactly like <see cref="ScanProgressionFramework"/> walks the player-scoped tree — same catalog, same
-    /// <see cref="pfAcceptedSeen"/>/<see cref="pfCompletedSeen"/>/<see cref="pfObjectiveStatus"/> dictionaries,
-    /// same <see cref="onAccepted"/>/<see cref="onCompleted"/> callbacks, so a server-scoped quest's
-    /// activation/completion is indistinguishable to the rest of the system from a player-scoped one. Any
-    /// failure (missing type, missing field, unexpected field shape — e.g. after a Progression Framework
-    /// update) permanently disables only this path for the session; player-scoped detection above is read in
-    /// a separate try scope and is provably unaffected.</summary>
+    /// <summary>PF server-scoped detection (see class doc): reads the shared state via one reflected field, then
+    /// walks it like <see cref="ScanProgressionFramework"/> using the same catalog, seen-sets, status
+    /// dictionaries and callbacks, so consumers can't tell the scopes apart. Any failure disables only this path.</summary>
     private void ScanProgressionFrameworkServerQuests()
     {
         if (serverQuestDetectionDisabled) return;
@@ -384,7 +332,7 @@ internal sealed class ScribeQuestWatcher
                     && string.Equals(status, PfStatusActive, StringComparison.OrdinalIgnoreCase))
                 {
                     freshTransition = true;
-                    pfAcceptedSeen.Remove(questCode); // force a refire below — a genuine re-accept
+                    pfAcceptedSeen.Remove(questCode); // force a refire below
                 }
                 pfStatusFingerprint[questCode] = status;
 
@@ -424,11 +372,9 @@ internal sealed class ScribeQuestWatcher
         }
     }
 
-    /// <summary>Best-effort refresh of <see cref="liveProgress"/> from the open quest dialog, if any
-    /// Mirrors Tallybook's <c>VsQuests.ReadQuestDialog()</c> exactly: find the dialog by type
-    /// name among <see cref="IGuiAPI.OpenedGuis"/>/<see cref="IGuiAPI.LoadedGuis"/>, then read
-    /// <c>activeQuests</c> and each active quest's three tracker lists via <see cref="AccessTools"/>. Any
-    /// exception permanently disables this half (accept/complete detection is untouched).</summary>
+    /// <summary>Best-effort refresh of <see cref="liveProgress"/> from the open quest dialog (found by type name),
+    /// reading <c>activeQuests</c> and each quest's three tracker lists via <see cref="AccessTools"/>. Any
+    /// exception permanently disables this half only.</summary>
     private void ReadDialogProgress()
     {
         if (dialogReflectionDisabled) return;

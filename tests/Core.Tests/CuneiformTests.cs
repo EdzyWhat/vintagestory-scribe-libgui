@@ -3,9 +3,7 @@ using Scribe.Core.Cuneiform;
 namespace Scribe.Core.Tests;
 
 // Tests for the game-agnostic cuneiform glyph model: stroke corner geometry, the glyph-forge
-// migration ladder, JSON bundle parsing, and the proportional line-layout engine (advance, padding
-// floor, widening-only kerning, uppercase folding, word gap, and missing-glyph safety). All pure/BCL
-// — no VS API, so this runs on CI with no game install.
+// migration ladder, bundle parsing, and the line-layout engine. Pure BCL, no VS API (runs on CI).
 public class CuneiformTests
 {
     // ---- Stroke corner geometry -------------------------------------------------------------
@@ -18,7 +16,6 @@ public class CuneiformTests
 
         Vec2[] c = stroke.Corners();
 
-        // Order is start+p, end+p, end-p, start-p per the export format.
         AssertVec(new Vec2(-4, 3), c[0]);
         AssertVec(new Vec2(-1, 7), c[1]);
         AssertVec(new Vec2(7, 1), c[2]);
@@ -180,7 +177,6 @@ public class CuneiformTests
         Assert.False(bundle.Contains('a'), "authored set is uppercase-only");
         Assert.False(bundle.Contains(' '), "no space glyph is authored");
 
-        // A known glyph has real ink (A is authored with 3 strokes in the source).
         Glyph a = bundle.Get('A')!;
         Assert.Equal(3, a.Strokes.Count);
     }
@@ -307,7 +303,6 @@ public class CuneiformTests
         Assert.Equal(0, line.CaretXAt(0), 6);
         Assert.Equal(40, line.CaretXAt(1), 6);
         Assert.Equal(90, line.CaretXAt(2), 6);
-        // Clamped both ways rather than throwing.
         Assert.Equal(0, line.CaretXAt(-5), 6);
         Assert.Equal(90, line.CaretXAt(99), 6);
     }
@@ -340,7 +335,6 @@ public class CuneiformTests
         Assert.Equal(40 + layout.WordGapUnits, line.CharBoundaries[2], 6);              // after space
         Assert.Equal(40 + layout.WordGapUnits + layout.MissingGlyphGapUnits,
             line.CharBoundaries[3], 6);                                                 // after '@'
-        // Strictly increasing (no zero-width step even across space + missing glyph).
         for (int i = 1; i < line.CharBoundaries.Count; i++)
         {
             Assert.True(line.CharBoundaries[i] > line.CharBoundaries[i - 1]);
@@ -350,7 +344,6 @@ public class CuneiformTests
     [Fact]
     public void NearestBoundary_ResolvesClicksToNearestIndex_TiesGoLower()
     {
-        // "AA": boundaries at 0, 40, 90.
         CuneiformLine line = Layout("AA");
 
         Assert.Equal(0, line.NearestBoundary(-10)); // left of start clamps to 0
@@ -407,12 +400,10 @@ public class CuneiformTests
         IReadOnlyList<CuneiformLine> lines = layout.LayoutWrapped("AA AA AA", 200.0);
 
         Assert.True(lines.Count >= 2, "a 360-wide string must wrap under a 200 max");
-        // No line exceeds the max (every word is 90 < 200, so a break point always exists).
         foreach (CuneiformLine l in lines)
         {
             Assert.True(l.TotalWidth <= 200.0 + 1e-6, $"line width {l.TotalWidth} exceeds max");
         }
-        // The second line resumes at the source index just past the break space.
         const string source = "AA AA AA";
         Assert.True(lines[1].SourceStart > 0);
         Assert.Equal(' ', source[lines[1].SourceStart - 1]); // char before the resume point is the break space
@@ -465,7 +456,6 @@ public class CuneiformTests
 
         Assert.Equal(5, line.CharBoundaries.Count); // 'A' + three spaces + 1
         Assert.Equal(40 + layout.WordGapUnits * 3, line.CharBoundaries[^1], 6);
-        // Strictly increasing — every trailing space moves the caret, none collapse to zero width.
         for (int i = 1; i < line.CharBoundaries.Count; i++)
         {
             Assert.True(line.CharBoundaries[i] > line.CharBoundaries[i - 1]);
@@ -483,7 +473,6 @@ public class CuneiformTests
 
         Assert.Single(lines); // fits on one line
         CuneiformLine last = lines[^1];
-        // "AA" is 90 wide; the trailing space adds one WordGapUnits and its own boundary entry.
         Assert.Equal(4, last.CharBoundaries.Count); // 'A','A',' ', +1
         Assert.Equal(90 + layout.WordGapUnits, last.TotalWidth, 6);
         Assert.Equal(90 + layout.WordGapUnits, last.CaretXAt(3), 6); // caret sits past the trailing space
@@ -501,9 +490,7 @@ public class CuneiformTests
         IReadOnlyList<CuneiformLine> lines = layout.LayoutWrapped("AA AA ", 100.0);
 
         Assert.True(lines.Count >= 2, "a 225-wide string must wrap under a 100 max");
-        // First line is exactly the first word — the break space is dropped, not trailing.
         Assert.Equal(90, lines[0].TotalWidth, 6);
-        // Final line keeps its trailing space (word 90 + one word gap).
         Assert.Equal(90 + layout.WordGapUnits, lines[^1].TotalWidth, 6);
     }
 
@@ -549,7 +536,6 @@ public class CuneiformTests
         IReadOnlyList<CuneiformLine> lines = layout.LayoutWrapped("AA AA\nAA", 100.0);
 
         Assert.True(lines.Count >= 3, "first paragraph wraps to 2 lines + the 3rd after '\\n'");
-        // The last line is the post-newline "AA": its source start is past "AA AA\n" (= index 6).
         CuneiformLine last = lines[^1];
         Assert.Equal(6, last.SourceStart);
         Assert.Equal(90, last.TotalWidth, 6);
@@ -665,8 +651,6 @@ public class CuneiformTests
 
         CuneiformLine line = layout.Layout("AA X A");
 
-        // Strokes come from indices: 0 (A), 1 (A), 3 (X); indices 2 (space) and 4 (space) emit nothing,
-        // index 5 (A) emits one. So the emitted strokes map to source chars 0, 1, 3, 5.
         int[] expectedChars = { 0, 1, 3, 5 };
         Assert.Equal(expectedChars.Length, line.Strokes.Count);
         for (int i = 0; i < expectedChars.Length; i++)
@@ -771,7 +755,6 @@ public class CuneiformTests
         double maxOffset = GlyphStrokeJitter.MaxPositionFraction * strength * gridSize;
         double maxWeight = GlyphStrokeJitter.MaxWeightFraction * strength;
 
-        // Sweep many seeds; every result must stay inside the strength-bounded envelope.
         for (int seed = 0; seed < 500; seed++)
         {
             GlyphStroke r = GlyphStrokeJitter.Jitter(stroke, seed, strength, gridSize);
@@ -833,7 +816,6 @@ public class CuneiformTests
             }
         }
 
-        // A different base seed shifts the whole family.
         Assert.NotEqual(GlyphStrokeJitter.SeedFor(1, 0, 0), GlyphStrokeJitter.SeedFor(2, 0, 0));
     }
 
@@ -983,7 +965,6 @@ public class CuneiformTests
             Assert.True(seeds.Add(GlyphStrokeRotation.SeedFor(baseSeed, ch)), $"collision at char {ch}");
         }
 
-        // A different base seed shifts the whole family.
         Assert.NotEqual(GlyphStrokeRotation.SeedFor(1, 0), GlyphStrokeRotation.SeedFor(2, 0));
     }
 
@@ -1019,7 +1000,6 @@ public class CuneiformTests
     {
         var schedule = new RevealSchedule(perStrokeMs: 30);
         int[] units = Cumulative(3, 3, 3); // three 3-stroke letters
-        // Char 0 and 1 are below the baseline of 2 → always revealed, regardless of elapsed (even 0).
         Assert.True(CuneiformReveal.IsStrokeRevealed(0, 0, baselineChars: 2, elapsedMs: 0, schedule, units));
         Assert.True(CuneiformReveal.IsStrokeRevealed(1, 5, baselineChars: 2, elapsedMs: 0, schedule, units));
     }
@@ -1033,13 +1013,10 @@ public class CuneiformTests
         var schedule = new RevealSchedule(perStrokeMs: 80);
         int[] units = Cumulative(3, 2, 5); // A, space, B
 
-        // B is source char index 2. Its first stroke reveals at exactly 400 ms.
         Assert.False(CuneiformReveal.IsStrokeRevealed(2, 0, baselineChars: 0, elapsedMs: 399, schedule, units));
         Assert.True(CuneiformReveal.IsStrokeRevealed(2, 0, baselineChars: 0, elapsedMs: 400, schedule, units));
-        // B's last stroke (ordinal 4) reveals at 720 ms.
         Assert.False(CuneiformReveal.IsStrokeRevealed(2, 4, baselineChars: 0, elapsedMs: 719, schedule, units));
         Assert.True(CuneiformReveal.IsStrokeRevealed(2, 4, baselineChars: 0, elapsedMs: 720, schedule, units));
-        // A's own strokes lead: ordinal 0 at t=0, ordinal 2 at 160 ms.
         Assert.True(CuneiformReveal.IsStrokeRevealed(0, 0, baselineChars: 0, elapsedMs: 0, schedule, units));
         Assert.False(CuneiformReveal.IsStrokeRevealed(0, 2, baselineChars: 0, elapsedMs: 159, schedule, units));
         Assert.True(CuneiformReveal.IsStrokeRevealed(0, 2, baselineChars: 0, elapsedMs: 160, schedule, units));
@@ -1054,7 +1031,6 @@ public class CuneiformTests
         int[] afterSimple = Cumulative(2, 3); // 2-stroke letter, then a letter
         int[] afterComplex = Cumulative(5, 3); // 5-stroke letter, then a letter
 
-        // Char 1's first stroke starts at (units before it)*80: 160 ms vs 400 ms.
         Assert.True(CuneiformReveal.IsStrokeRevealed(1, 0, baselineChars: 0, elapsedMs: 160, schedule, afterSimple));
         Assert.False(CuneiformReveal.IsStrokeRevealed(1, 0, baselineChars: 0, elapsedMs: 160, schedule, afterComplex));
         Assert.True(CuneiformReveal.IsStrokeRevealed(1, 0, baselineChars: 0, elapsedMs: 400, schedule, afterComplex));
@@ -1065,7 +1041,6 @@ public class CuneiformTests
     {
         var schedule = new RevealSchedule(perStrokeMs: 30);
         int[] units = Cumulative(3, 3); // char 0 has 3 strokes; char 1 starts after them (at 3*30 = 90)
-        // Char 1 starts at 90; its stroke ordinal 0 is in at 90, ordinal 1 at 120 — the second stroke lags.
         Assert.True(CuneiformReveal.IsStrokeRevealed(1, 0, baselineChars: 0, elapsedMs: 90, schedule, units));
         Assert.False(CuneiformReveal.IsStrokeRevealed(1, 1, baselineChars: 0, elapsedMs: 90, schedule, units));
         Assert.True(CuneiformReveal.IsStrokeRevealed(1, 1, baselineChars: 0, elapsedMs: 120, schedule, units));
@@ -1076,7 +1051,6 @@ public class CuneiformTests
     {
         var schedule = new RevealSchedule(perStrokeMs: 30);
         int[] units = Cumulative(3, 3, 3, 4, 4); // baseline covers the first three (3+3+3 = 9 units)
-        // With baseline 3, char 3 is the first new letter (its strokes start at t=0), char 4 at 4*30 = 120.
         Assert.True(CuneiformReveal.IsStrokeRevealed(3, 0, baselineChars: 3, elapsedMs: 0, schedule, units));
         Assert.False(CuneiformReveal.IsStrokeRevealed(4, 0, baselineChars: 3, elapsedMs: 119, schedule, units));
         Assert.True(CuneiformReveal.IsStrokeRevealed(4, 0, baselineChars: 3, elapsedMs: 120, schedule, units));
@@ -1098,7 +1072,6 @@ public class CuneiformTests
         int[] units = Cumulative(3, 2, 5); // "A B": 10 stroke-units total
         // Whole run from baseline 0: 10 units * 80 = 800 ms (the last stroke reveals at 720; the run ends at 800).
         Assert.Equal(800.0, CuneiformReveal.TotalDurationMs(baselineChars: 0, units, schedule));
-        // From baseline 1 (A already pressed): 10 - 3 = 7 new units * 80 = 560 ms.
         Assert.Equal(560.0, CuneiformReveal.TotalDurationMs(baselineChars: 1, units, schedule));
     }
 

@@ -96,7 +96,6 @@ public class ScribeCraftTaskTests
     public void Reconcile_GeneratesOneTrackerChildPerIngredientAtBatchQuantity()
     {
         var doc = new ScribeDocument();
-        // 16 target, yields 4 per craft → craftsNeeded 4.
         var id = doc.AddCraft("game:plank-aged", 16, "sig");
         int crafts = ScribeCraftMath.CraftsNeeded(16, 4);
 
@@ -133,7 +132,6 @@ public class ScribeCraftTaskTests
         var childId = doc.Blocks[1].TaskId;
         doc.SetTrackerCurrentQuantity(childId, 3); // simulate carried progress
 
-        // Player raises the target so crafts double (8 target, yields 4 → 2 crafts).
         doc.Blocks[0].TargetQuantity = 8;
         doc.ReconcileCraftIngredients(id,
             new[] { new ScribeCraftIngredient("game:log-oak", 2) },
@@ -193,7 +191,6 @@ public class ScribeCraftTaskTests
     [Fact]
     public void Reconcile_PreservesPlayerAddedRowsInTheRun_AndNeverNestsDeeper()
     {
-        // Build a Craft parent with an existing oak child and a player-added depth-1 note in the owned run.
         var parent = new ScribeBlock(ScribeBlockKind.Craft, "",
             targetItemCode: "game:plank-aged", targetQuantity: 4, recipeSignature: "sig");
         var doc = new ScribeDocument();
@@ -274,7 +271,6 @@ public class ScribeCraftTaskTests
         Assert.Equal(1, dye.TargetQuantity);   // ceil(0.1 × 3) = 1, NOT 0.1 × 3 int-multiplied
         Assert.Equal(3, feather.TargetQuantity); // solid unaffected by the liquid path
 
-        // Rescale: raise crafts to 20 → liquid target ceils 2.0 L to 2, preserving the child's id + progress.
         var dyeId = dye.TaskId;
         doc.SetTrackerCurrentQuantity(dyeId, 1);
         doc.ReconcileCraftIngredients(id, ingredients, Array.Empty<string>(), craftsNeeded: 20);

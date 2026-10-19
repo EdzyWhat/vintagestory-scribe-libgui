@@ -1,16 +1,9 @@
-// Display-only cuneiform text widget. Renders a single line of
-// text as filled rectangle STROKES (not a TTF typeface) from the glyph-forge geometry parsed by
-// Scribe.Core.Cuneiform. It mirrors ScribeMultilineField's 3-class LibGUI pattern:
-//   • CuneiformTextRender : RenderBox — runs the Core line layout, scales grid units → pixels by the
-//     requested em size, sizes itself to the line, and FILLS each stroke's oriented quad on the raw
-//     Skia canvas (context.Canvas + SKPath + SharedPaint). It deliberately does NOT use DrawBox:
-//     strokes are arbitrary-angle rectangles and DrawBox only draws axis-aligned (rounded) boxes.
-//   • CuneiformTextRenderWidget : RenderObjectWidget — the create/update bridge.
-//   • CuneiformText : StatefulWidget — owns an OPTIONAL AnimationController for a stroke-by-stroke
-//     reveal; by default it idles fully revealed (static display).
-//
-// Raw-canvas polygon fill inside PaintInternal is unusual in this codebase (most widgets only call
-// DrawText/DrawBox).
+// Display-only cuneiform text widget: renders one line as filled rectangle STROKES (not a TTF typeface) from
+// the glyph-forge geometry parsed by Scribe.Core.Cuneiform. Three classes, mirroring ScribeMultilineField:
+//   - CuneiformTextRender : RenderBox - lays out the line, scales grid units to pixels, and fills each stroke's
+//     oriented quad on the raw Skia canvas (not DrawBox, which only draws axis-aligned boxes).
+//   - CuneiformTextRenderWidget : RenderObjectWidget - create/update bridge.
+//   - CuneiformText : StatefulWidget - owns an optional AnimationController for a stroke-by-stroke reveal.
 
 using System;
 using Gui.Core.Framework;         // RenderObject, RenderBox
@@ -25,69 +18,46 @@ using SkiaSharp;                  // SKPath, SKPoint
 namespace Scribe;
 
 /// <summary>
-/// Shared cuneiform rendering metrics. Every cuneiform render object —
-/// the display <see cref="CuneiformTextRender"/>, the editable row (<see cref="ScribeCuneiformFieldRender"/>),
-/// and the title field — sizes a line to <c>fontSizeEm</c> pixels. But normal TTF <c>Text</c> at the same
-/// nominal font size occupies a line-height of roughly <see cref="LineHeightRatio"/>× that font size, so a
-/// cuneiform glyph authored to fill its em box reads visibly SHORTER than adjacent readable text.
-/// Scaling the cuneiform em by this ratio at render time brings the rendered cuneiform height in line with
-/// the readable text's rendered line-height —
-/// applied globally here (not as a per-call fudge) so rows, title, and labels all match. Scale-independent
-/// (a ratio, not a pixel target), so it holds at any GUI scale.
+/// Shared cuneiform rendering metrics. Cuneiform render objects size a line to <c>fontSizeEm</c> pixels, but TTF
+/// <c>Text</c> at that size occupies roughly <see cref="LineHeightRatio"/>x the line height, so unscaled cuneiform
+/// reads shorter than adjacent text. Scaling the em by the ratio globally keeps rows, titles and labels matched at
+/// any GUI scale.
 /// </summary>
 internal static class CuneiformMetrics
 {
-    /// <summary>Cuneiform's em→pixel scale is multiplied by this so its rendered glyph height reads well
-    /// against the surrounding readable text. A ratio of ~1.4 would match the TTF line-height; the value is
-    /// 1.4 × 1.2 × 1.1 = 1.848, a deliberate oversize for legibility rather than a height-match.
-    /// Applied globally (rows, title, labels) so every surface scales together.</summary>
+    /// <summary>Multiplier on cuneiform's em-to-pixel scale. 1.4 x 1.2 x 1.1 = 1.848: a deliberate oversize for
+    /// legibility rather than an exact TTF line-height match.</summary>
     public const float LineHeightRatio = 1.848f;
 
-    /// <summary>Multiplier applied to the em height BEFORE the <see cref="LineHeightRatio"/> line-height
-    /// formula, for the tablet's cuneiform title/row/label text only. This
-    /// shrinks the cuneiform render widgets' reserved `Size`/`scale` (not just the drawn ink) — deliberately decoupled from
-    /// <see cref="GuiDialogScribeTablet"/>'s `CheckboxSize`/`ControlSize`, which stay derived from
-    /// `FontSize * LineHeightRatio` with this factor left OUT, so the checkbox/control column keeps its
-    /// current size while the cuneiform row/title band sits shorter (an intentional mismatch — see
-    /// `ScribeRowControlNudge.CheckboxAndGripTop`'s existing "control can overflow its band" support).
-    /// 1.0 (the property's own default) applies no scaling; every non-tablet cuneiform
-    /// consumer stays at that default. The checkbox/icon/counter alignment nudges depend on this value.</summary>
+    /// <summary>Multiplier on the em height before the <see cref="LineHeightRatio"/> formula, for the tablet's
+    /// cuneiform title/row/label text. Shrinks the render widgets' reserved <c>Size</c> and drawn ink, but not
+    /// <see cref="GuiDialogScribeTablet"/>'s <c>CheckboxSize</c>/<c>ControlSize</c>, so the cuneiform band sits shorter
+    /// than the control column by design. The checkbox/icon/counter alignment nudges depend on this value; 1.0 (the
+    /// property default) applies no scaling.</summary>
     public const float GlyphDrawScale = 0.95f;
 
-    /// <summary>Multiplier on <see cref="ScribeCuneiformFieldRender"/>'s synthetic caret bar's drawn height,
-    /// relative to its line-height band. Paint-time only —
-    /// the caret shrinks toward the vertical center of its band, never touching layout, hit-testing, or the
-    /// caret's X position. The ratio is independent of GUI scale/`FontSize`
-    /// since it is relative to the line-height band, not an absolute pixel count. 1.0 gives the
-    /// full-band caret.</summary>
+    /// <summary>Drawn height of <see cref="ScribeCuneiformFieldRender"/>'s caret bar relative to its line-height
+    /// band. Paint-time only: it shrinks toward the band's vertical center without touching layout, hit-testing
+    /// or caret X. 1.0 is the full band.</summary>
     public const float CaretHeightScale = 44f / 48f;
 
-    /// <summary>Multiplier on the tablet cuneiform editable/read field's top+bottom inner padding
-    /// (<c>ScribeRowStyle.FieldPadY</c>), applied only where that padding is passed into a
-    /// <see cref="ScribeCuneiformFieldRenderWidget"/> for a real row (not the title bands, whose padding is
-    /// already 0). The ratio (6/9) is independent of GUI scale (relative to `FieldPadY`, not an absolute pixel
-    /// count). 1.0 leaves the padding unscaled.</summary>
+    /// <summary>Multiplier on the tablet cuneiform field's top/bottom padding (<c>ScribeRowStyle.FieldPadY</c>),
+    /// applied only to real rows (title bands already pad 0). 1.0 leaves it unscaled.</summary>
     public const float FieldPadYScale = 6f / 9f;
 
-    /// <summary>Default hand-written jitter strength applied to cuneiform
-    /// text until the client config knob overrides it. Reads as a hand-pressed wobble without
-    /// hurting legibility; 0 gives crisp authored geometry.</summary>
+    /// <summary>Default hand-written jitter strength for cuneiform text; 0 gives crisp authored geometry.</summary>
     public const float DefaultJitterStrength = 0.6f;
 
-    /// <summary>Default whole-character rotation, in degrees, applied to cuneiform text.
-    /// Each glyph tilts by a deterministic random angle in
-    /// [-max, +max] about its box center, so the text reads as hand-pressed rather than mechanically
-    /// upright. Stacks with (and is applied after) the per-endpoint jitter; 0 keeps every glyph upright.</summary>
+    /// <summary>Default whole-character rotation bound in degrees. Each glyph tilts by a deterministic angle in
+    /// [-max, +max] about its box center, after the per-endpoint jitter; 0 keeps glyphs upright.</summary>
     public const float DefaultRotationDegrees = (float)GlyphStrokeRotation.DefaultMaxDegrees;
 
-    /// <summary>Derives a stable base jitter seed from a string (e.g. a label's text), so the same text
-    /// always wobbles the same way and different texts differ. Order-independent of frame/wall-clock — a
-    /// plain deterministic string hash. Used for static display text; editable fields use a fixed per-field
-    /// seed instead so typing a character does not reseed the letters already on screen.</summary>
+    /// <summary>Stable base jitter seed from a string, so the same text always wobbles the same way. Used for
+    /// static display text; editable fields use a fixed per-field seed so typing does not reseed existing letters.</summary>
     public static int SeedFromString(string? s)
     {
-        // Deterministic FNV-1a over UTF-16 code units (String.GetHashCode is randomized per process, so it
-        // must NOT be used for a seed that has to be stable across sessions).
+        // FNV-1a over UTF-16 code units; String.GetHashCode is randomized per process so it cannot seed
+        // anything that must be stable across sessions.
         unchecked
         {
             uint h = 2166136261u;
@@ -104,10 +74,9 @@ internal static class CuneiformMetrics
 }
 
 /// <summary>
-/// The render object: lays a string out through the Core cuneiform engine and paints its strokes as
-/// filled quads, auto-sizing to the laid-out line. The line height in pixels equals
-/// <see cref="FontSizeEm"/> × <see cref="CuneiformMetrics.LineHeightRatio"/> (grid units scale to pixels by
-/// <c>renderedHeight / lineHeightGridUnits</c>) so cuneiform matches adjacent readable text.
+/// Render object: lays a string out through the Core cuneiform engine and paints its strokes as filled quads,
+/// auto-sizing to the line. Line height in pixels is <see cref="FontSizeEm"/> x
+/// <see cref="CuneiformMetrics.LineHeightRatio"/>.
 /// </summary>
 internal sealed class CuneiformTextRender : Gui.Core.Framework.RenderBox
 {
@@ -115,92 +84,74 @@ internal sealed class CuneiformTextRender : Gui.Core.Framework.RenderBox
     private float fontSizeEm = 32f;
     private Vector4 inkColor = Vector4.One;
     private GlyphBundle? bundle;
-    // Fraction of the line's strokes to reveal, in authored construction order (1 = whole line). Idle
-    // at 1 for the static prototype; the animation drives it 0→1 when active.
+    // Fraction of the line's strokes to reveal, in authored construction order (1 = whole line).
     private float revealFraction = 1f;
-    // Per-stroke hand-written jitter. 0 = crisp/authored geometry; the
-    // seed anchors the (deterministic) wobble so the SAME text jitters identically each frame/open.
+    // Per-stroke hand-written jitter; the seed anchors the deterministic wobble.
     private float jitterStrength;
     private int jitterSeed;
-    // Whole-character rotation. 0 = upright; each glyph tilts by a
-    // deterministic angle in [-max, +max]° about its box center, applied AFTER jitter, paint-time only.
+    // Whole-character rotation: deterministic angle in [-max, +max] degrees, after jitter, paint-time only.
     private float rotationDegrees;
-    // Per-stroke outer glow. Default disabled — non-tablet surfaces pay nothing.
+    // Per-stroke outer glow; disabled by default.
     private CuneiformGlow glow;
-    // Per-view stroke-weight scale. 1 = the Core-authored weight exactly;
-    // the tablet firms strokes up (fired) or thins them (wet). Paint-time only — never touches layout metrics.
+    // Stroke-weight scale (1 = Core-authored weight). Paint-time only.
     private float strokeWeightScale = 1f;
-    // Multiplier on the em height used by PerformLayout; it shrinks both the reserved Size and the drawn
-    // ink. 1 = no scaling.
+    // Multiplier on the em height used by PerformLayout; shrinks both reserved Size and drawn ink.
     private float glyphDrawScale = 1f;
 
-    // Cached from the last PerformLayout, reused by PaintInternal so layout and paint agree.
+    // Cached from the last PerformLayout so paint and layout agree.
     private CuneiformLine? line;
     private float scale = 1f;
 
-    /// <summary>The text to render (uppercase-folded by the layout; unauthored chars advance a small
-    /// gap). Relayouts on change (the line width/height depend on it).</summary>
+    /// <summary>The text to render (uppercase-folded by the layout; unauthored chars advance a small gap).</summary>
     public string Text { get => text; set => SetProperty(ref text, value ?? "", relayout: true); }
 
-    /// <summary>Pixel height of one em (one glyph grid). The whole line scales from this. Relayouts.</summary>
+    /// <summary>Pixel height of one em (one glyph grid).</summary>
     public float FontSizeEm { get => fontSizeEm; set => SetProperty(ref fontSizeEm, value, relayout: true); }
 
-    /// <summary>Ink color the stroke quads fill with (from the active theme). Repaint only.</summary>
+    /// <summary>Ink color of the stroke quads.</summary>
     public Vector4 InkColor { get => inkColor; set => SetProperty(ref inkColor, value, repaint: true); }
 
-    /// <summary>The parsed glyph geometry. Relayouts on change (glyphs determine the line's extent).
-    /// Null until the asset is loaded — the widget then renders nothing.</summary>
+    /// <summary>The parsed glyph geometry; null (asset not loaded) renders nothing.</summary>
     public GlyphBundle? Bundle { get => bundle; set => SetProperty(ref bundle, value, relayout: true); }
 
-    /// <summary>Fraction (0..1) of the line's strokes to paint, in construction order. Repaint only —
-    /// the geometry is unchanged, only how many strokes are drawn.</summary>
+    /// <summary>Fraction (0..1) of strokes painted, in construction order.</summary>
     public float RevealFraction
     {
         get => revealFraction;
         set => SetProperty(ref revealFraction, Math.Clamp(value, 0f, 1f), repaint: true);
     }
 
-    /// <summary>Hand-written jitter strength (0..1; 0 = crisp authored geometry). Repaint only — jitter is a
-    /// visual transform applied at paint time to the drawn quads, never to the layout metrics.</summary>
+    /// <summary>Jitter strength (0..1; 0 = crisp). Paint-time only; never affects layout.</summary>
     public float JitterStrength
     {
         get => jitterStrength;
         set => SetProperty(ref jitterStrength, Math.Clamp(value, 0f, 1f), repaint: true);
     }
 
-    /// <summary>Base seed the per-stroke jitter is derived from (combined with each stroke's stable identity).
-    /// The Mod layer picks it (per field/text) so the same text wobbles the same way. Repaint only.</summary>
+    /// <summary>Base seed for per-stroke jitter, combined with each stroke's stable identity.</summary>
     public int JitterSeed { get => jitterSeed; set => SetProperty(ref jitterSeed, value, repaint: true); }
 
-    /// <summary>Whole-character rotation in degrees (>= 0; 0 = upright). Repaint only — like jitter it is a
-    /// visual transform applied at paint time to the drawn quads, never to the layout metrics.</summary>
+    /// <summary>Whole-character rotation in degrees (0 = upright). Paint-time only; never affects layout.</summary>
     public float RotationDegrees
     {
         get => rotationDegrees;
         set => SetProperty(ref rotationDegrees, Math.Max(0f, value), repaint: true);
     }
 
-    /// <summary>The per-stroke outer glow (halo color/strength + blur fraction). Disabled by default; the
-    /// tablet sets a per-material glow to lift the ink off its clay backdrop. Repaint only — the glow is a
-    /// paint-time effect that never touches layout.</summary>
+    /// <summary>Per-stroke outer glow; the tablet sets a per-material glow to lift ink off its clay backdrop.</summary>
     public CuneiformGlow Glow { get => glow; set => SetProperty(ref glow, value, repaint: true); }
 
-    /// <summary>Per-view stroke-weight scale. Multiplies each stroke's
-    /// <c>GlyphStroke.Weight</c> at paint time so the tablet can firm the ink up or thin it per drying state.
-    /// A non-positive value is treated as 1 (the struct-default <see cref="ScribeRowStyle.CuneiformStrokeWeightScale"/>
-    /// of 0 means "use the base weight"). Repaint only — it changes only the painted thickness, never the
-    /// advance metrics the layout emits.</summary>
+    /// <summary>Multiplies each stroke's <c>GlyphStroke.Weight</c> at paint time. A non-positive value means 1
+    /// (<see cref="ScribeRowStyle.CuneiformStrokeWeightScale"/> defaults to 0 for "use base weight"). Never changes
+    /// advance metrics.</summary>
     public float StrokeWeightScale
     {
         get => strokeWeightScale;
         set => SetProperty(ref strokeWeightScale, value <= 0f ? 1f : value, repaint: true);
     }
 
-    /// <summary>Multiplier on the em height fed into the line-height formula.
-    /// A non-positive value is treated as 1 (matching <see cref="StrokeWeightScale"/>'s
-    /// guard). Relayouts — this shrinks the widget's reserved `Size` (and, since paint reuses the same
-    /// `scale` derived from that `Size`, the drawn ink too) so the tablet's cuneiform row/title band can sit
-    /// shorter than a checkbox/control sized off the SAME `FontSize` with this factor left out.</summary>
+    /// <summary>Multiplier on the em height fed into the line-height formula; non-positive means 1. Shrinks the
+    /// reserved <c>Size</c> and, since paint reuses the same <c>scale</c>, the drawn ink too.</summary>
     public float GlyphDrawScale
     {
         get => glyphDrawScale;
@@ -209,9 +160,7 @@ internal sealed class CuneiformTextRender : Gui.Core.Framework.RenderBox
 
     protected override void PerformLayout()
     {
-        // Match the rendered cuneiform height to adjacent readable text's line-height, not its raw em,
-        // then apply the glyph-draw-scale on top so cuneiform rows can
-        // read shorter than a checkbox/control sized off the same FontSize without this factor.
+        // Rendered height follows readable text's line-height (not the raw em), then glyphDrawScale on top.
         float renderedHeight = fontSizeEm * CuneiformMetrics.LineHeightRatio * glyphDrawScale;
 
         if (bundle is null)
@@ -224,7 +173,7 @@ internal sealed class CuneiformTextRender : Gui.Core.Framework.RenderBox
         var layout = new CuneiformLineLayout(bundle);
         line = layout.Layout(text);
 
-        // Grid units → pixels: one line-height of grid units maps to the rendered (ratio-boosted) height.
+        // Grid units to pixels: one line-height of grid units maps to the rendered height.
         double gridHeight = line.LineHeight > 0 ? line.LineHeight : CuneiformLineLayout.DefaultGridSize;
         scale = (float)(renderedHeight / gridHeight);
 
@@ -234,7 +183,7 @@ internal sealed class CuneiformTextRender : Gui.Core.Framework.RenderBox
 
     protected override void PaintInternal(PaintingContext context)
     {
-        // Paint the base box first (row background/frame, if any theme colors are set), then the strokes.
+        // Base box first (row background/frame), then the strokes.
         base.PaintInternal(context);
         if (context.Canvas is null || line is null || line.Strokes.Count == 0)
         {
@@ -251,25 +200,22 @@ internal sealed class CuneiformTextRender : Gui.Core.Framework.RenderBox
 
         SKPaint paint = context.SharedPaint;
         SKPaintStyle prevStyle = paint.Style;
-        bool prevAntialias = paint.IsAntialias;   // restored below.
+        bool prevAntialias = paint.IsAntialias;
 
         paint.Style = SKPaintStyle.Fill;
         paint.IsAntialias = true;
 
-        // A reused path, cleared per stroke — allocation-light across the whole line.
+        // One path reused (cleared) per stroke.
         using var path = new SKPath();
 
-        // Pass 1 (optional): every revealed stroke's HALO, blurred, in the glow color. Drawing all halos
-        // BEFORE any crisp ink means the crisp fills in pass 2 overwrite the halos inside each glyph, so
-        // overlapping strokes never darken/double each other's glow — the halo only shows where it spills
-        // past the ink onto the backdrop. The mask filter is a cached, shared blur.
+        // Pass 1 (optional): blurred halos of every revealed stroke, drawn before any crisp ink so overlapping
+        // strokes never double each other's glow and the halo only shows past the ink.
         if (glow.Enabled && CuneiformGlowMask.ForSigma(fontSizeEm * glow.BlurFraction) is { } mask)
         {
             paint.Color = glow.Color.ToSkColor();
             paint.MaskFilter = mask;
-            // Optional directional offset (a fraction of the em): translate ONLY the blurred halo pass so the
-            // glow reads as a seated drop rather than a symmetric aura. The crisp ink pass below
-            // draws un-offset, so the ink registers over the shifted halo. A zero offset is a centered halo.
+            // Optional offset (fraction of the em) applies to the halo pass only, so the glow reads as a drop
+            // shadow; the crisp ink is drawn un-offset.
             float glowOffX = fontSizeEm * glow.OffsetXFraction;
             float glowOffY = fontSizeEm * glow.OffsetYFraction;
             bool offsetHalo = glowOffX != 0f || glowOffY != 0f;
@@ -287,10 +233,10 @@ internal sealed class CuneiformTextRender : Gui.Core.Framework.RenderBox
             {
                 context.Canvas.Restore();
             }
-            paint.MaskFilter = null;   // clear before the crisp pass (and before return) — SharedPaint hygiene.
+            paint.MaskFilter = null;
         }
 
-        // Pass 2: every revealed stroke's crisp ink fill, on top of the halos.
+        // Pass 2: crisp ink fills on top of the halos.
         paint.Color = inkColor.ToSkColor();
         for (int i = 0; i < revealCount; i++)
         {
@@ -298,22 +244,17 @@ internal sealed class CuneiformTextRender : Gui.Core.Framework.RenderBox
             context.Canvas.DrawPath(path, paint);
         }
 
-        // Restore the shared paint's mutated properties (SharedPaint is reused across draw ops). Leave Color
-        // OPAQUE rather than restored to the inherited value: base.PaintInternal draws this row's resting box
-        // at boxColor alpha 0 just before we capture it, so restoring would leave the shared paint at alpha
-        // 0 for the next op, and DrawMaskedBox reuses SharedPaint.Color unset while DrawBitmap modulates by
-        // its alpha (a transparent clay backdrop). Opaque white is
-        // the neutral every sibling draw sets before painting.
+        // Restore the shared paint. Color is left OPAQUE white, not the inherited value: base.PaintInternal
+        // draws the resting box at alpha 0, and DrawMaskedBox/DrawBitmap reuse SharedPaint's color/alpha, so
+        // an alpha-0 leftover would make the next op transparent.
         paint.Color = SKColors.White;
         paint.Style = prevStyle;
         paint.IsAntialias = prevAntialias;
-        paint.MaskFilter = null;   // defensive: never leave a blur mask on the shared paint.
+        paint.MaskFilter = null;
     }
 
-    /// <summary>Rebuild <paramref name="path"/> (cleared in place) as one stroke's oriented quad in pixel
-    /// space, applying the same hand-written jitter (then whole-character rotation) both glow passes use so
-    /// the halo tracks the drawn ink. Seeded off the stroke's stable identity, so the SAME stroke transforms
-    /// identically every frame. Order: jitter → rotate → corners.</summary>
+    /// <summary>Rebuilds <paramref name="path"/> as one stroke's oriented quad in pixels: jitter, then rotation,
+    /// then corners. Both glow passes use it so the halo tracks the ink; seeded off the stroke's stable identity.</summary>
     private void BuildStrokePath(SKPath path, PositionedStroke ps)
     {
         GlyphStroke stroke = jitterStrength > 0f
@@ -331,19 +272,16 @@ internal sealed class CuneiformTextRender : Gui.Core.Framework.RenderBox
                 GlyphStrokeRotation.SeedFor(jitterSeed, ps.SourceCharIndex),
                 rotationDegrees);
         }
-        // Per-view weight scale: rebuild the stroke with a scaled weight
-        // before it becomes a quad. Applied AFTER jitter/rotation so it composes with them, only when it
-        // differs from 1. Corners() derives the quad half-width from Weight, so this changes only the painted
-        // thickness — the advance metrics the layout emits are the un-scaled geometry.
+        // Weight scale applies after jitter/rotation; Corners() derives the half-width from Weight, so only
+        // painted thickness changes, not advance metrics.
         if (strokeWeightScale != 1f)
         {
             stroke = new GlyphStroke(stroke.Start, stroke.End, stroke.Weight * strokeWeightScale);
         }
         Scribe.Core.Cuneiform.Vec2[] corners = stroke.Corners();
 
-        // GlyphDrawScale lives entirely in PerformLayout's renderedHeight/scale and is NOT re-applied here.
-        // Layout, paint, and (for the editable field) caret/selection/hit-testing all read the one `scale`
-        // and stay in lockstep.
+        // GlyphDrawScale lives entirely in PerformLayout's scale and is not re-applied here, so layout, paint
+        // and the editable field's caret/hit-testing stay in lockstep.
         path.Reset();
         path.MoveTo((float)(corners[0].X * scale), (float)(corners[0].Y * scale));
         path.LineTo((float)(corners[1].X * scale), (float)(corners[1].Y * scale));
@@ -352,24 +290,21 @@ internal sealed class CuneiformTextRender : Gui.Core.Framework.RenderBox
         path.Close();
     }
 
-    /// <summary>The glyph box center to rotate a character's strokes about, in grid-unit space (the same
-    /// space the strokes live in, before the pixel scale is applied). X is the midpoint of the source
-    /// character's advance span from the un-jittered layout (<see cref="CuneiformLine.CharBoundaries"/>);
-    /// Y is half the glyph grid. Reading the pivot from the layout — never from a transformed stroke — keeps
-    /// rotation a pure paint-time transform that never feeds back into metrics/caret/hit-testing.</summary>
+    /// <summary>Center of a character's glyph box in grid-unit space (before pixel scale): X is the midpoint of its
+    /// advance span from the un-jittered layout, Y half the grid. Read from the layout, never a transformed stroke,
+    /// so rotation never feeds back into metrics/caret/hit-testing.</summary>
     private static Scribe.Core.Cuneiform.Vec2 GlyphRotationPivot(CuneiformLine line, PositionedStroke ps)
     {
         var b = line.CharBoundaries;
         int i = ps.SourceCharIndex;
-        // Guard the boundary range: CharBoundaries has (charCount + 1) entries, so the char at index i has
-        // its span in [i, i+1]. Fall back to the stroke's own start x if the index is somehow out of range.
+        // CharBoundaries has charCount + 1 entries; fall back to the stroke's start x if out of range.
         double left = i >= 0 && i < b.Count ? b[i] : ps.Stroke.Start.X;
         double right = i + 1 >= 0 && i + 1 < b.Count ? b[i + 1] : left;
         return new Scribe.Core.Cuneiform.Vec2((left + right) / 2.0, ps.GridSize / 2.0);
     }
 }
 
-/// <summary>RenderObjectWidget bridge: forwards text, em size, ink color, bundle, and reveal fraction.</summary>
+/// <summary>RenderObjectWidget bridge forwarding the cuneiform render properties.</summary>
 internal sealed class CuneiformTextRenderWidget : RenderObjectWidget
 {
     public CuneiformTextRenderWidget(
@@ -422,11 +357,8 @@ internal sealed class CuneiformTextRenderWidget : RenderObjectWidget
 }
 
 /// <summary>
-/// A display-only cuneiform text line. Optionally reveals its strokes one-by-one in authored
-/// construction order via an owned <see cref="AnimationController"/>; when <see cref="AnimateReveal"/>
-/// is false (the default) it renders the whole line statically. Owns and disposes
-/// its controller per the LibGUI lifecycle (created in <see cref="State.InitState"/>, disposed in
-/// <see cref="State.Dispose"/>) — see <c>docs/libgui-reference.md</c>.
+/// A display-only cuneiform line. With <see cref="AnimateReveal"/> it reveals strokes in construction order via an
+/// owned <see cref="AnimationController"/> (created in InitState, disposed in Dispose); otherwise static.
 /// </summary>
 public sealed class CuneiformText : StatefulWidget
 {
@@ -461,43 +393,34 @@ public sealed class CuneiformText : StatefulWidget
     /// <summary>The line of text to render.</summary>
     public string Text { get; }
 
-    /// <summary>Pixel height of one em (one glyph grid).</summary>
+    /// <summary>Pixel height of one em.</summary>
     public float FontSizeEm { get; }
 
-    /// <summary>Ink color the strokes fill with (usually the theme's on-surface color).</summary>
+    /// <summary>Ink color of the strokes.</summary>
     public Vector4 InkColor { get; }
 
-    /// <summary>The parsed glyph geometry; null renders nothing (asset not yet loaded).</summary>
+    /// <summary>The parsed glyph geometry; null renders nothing.</summary>
     public GlyphBundle? Bundle { get; }
 
-    /// <summary>Whether to play the stroke-by-stroke reveal on mount. Default false = static full line.</summary>
+    /// <summary>Play the stroke-by-stroke reveal on mount; default false = static.</summary>
     public bool AnimateReveal { get; }
 
-    /// <summary>Reveal duration in ms when <see cref="AnimateReveal"/> is on.</summary>
+    /// <summary>Reveal duration in ms.</summary>
     public int RevealDurationMs { get; }
 
-    /// <summary>Hand-written jitter strength (0..1). Defaults to <see cref="CuneiformMetrics.DefaultJitterStrength"/>;
-    /// pass 0 for crisp authored geometry. The base seed is derived from <see cref="Text"/> so the same text
-    /// wobbles consistently.</summary>
+    /// <summary>Jitter strength (0..1); 0 is crisp. The seed derives from <see cref="Text"/>.</summary>
     public float JitterStrength { get; }
 
-    /// <summary>Whole-character rotation in degrees. Defaults to
-    /// <see cref="CuneiformMetrics.DefaultRotationDegrees"/>; pass 0 to keep every glyph upright. Applied
-    /// after jitter, at paint time only.</summary>
+    /// <summary>Whole-character rotation in degrees; 0 keeps glyphs upright.</summary>
     public float RotationDegrees { get; }
 
-    /// <summary>The per-stroke outer glow. Disabled by default (non-tablet display text pays nothing); the
-    /// tablet passes a per-material glow so its cuneiform title/label lifts off the clay backdrop.</summary>
+    /// <summary>Per-stroke outer glow; disabled by default.</summary>
     public CuneiformGlow Glow { get; }
 
-    /// <summary>Per-view cuneiform stroke-weight scale. Defaults to 1 =
-    /// the Core-authored weight exactly; the tablet passes its per-state scale so display text firms up or
-    /// thins with the drying state. Non-tablet display text leaves it at 1 and is pixel-identical.</summary>
+    /// <summary>Stroke-weight scale; 1 = Core-authored weight.</summary>
     public float StrokeWeightScale { get; }
 
-    /// <summary>Multiplier on the em height used for layout and drawn stroke geometry.
-    /// Defaults to 1 = no scaling; the tablet passes <see cref="CuneiformMetrics.GlyphDrawScale"/>
-    /// for its title/row/label text. Non-tablet display text leaves it at 1 and is pixel-identical.</summary>
+    /// <summary>Multiplier on the em height for layout and drawn geometry; 1 = no scaling.</summary>
     public float GlyphDrawScale { get; }
 
     public override State CreateState() => new CuneiformTextState();
@@ -512,7 +435,7 @@ internal sealed class CuneiformTextState : State<CuneiformText>
         base.InitState();
         if (Widget.AnimateReveal)
         {
-            // ITickerProvider comes from the owner, exactly like ScribeRowSizeAnimation's controller.
+            // Ticker provider comes from the owner.
             controller = new AnimationController(
                 TimeSpan.FromMilliseconds(Widget.RevealDurationMs), Element.Owner!.GetTickerProvider());
             controller.OnValueChanged += OnValueChanged;
@@ -535,13 +458,13 @@ internal sealed class CuneiformTextState : State<CuneiformText>
 
     public override Widget Build(BuildContext context)
     {
-        // No animation: render the whole line statically (reveal fraction 1).
+        // Static: whole line.
         if (controller is null)
         {
             return BuildLine(1f);
         }
 
-        // Animated: rebuild each tick, mapping the controller's 0→1 value to the reveal fraction.
+        // Animated: map the controller's 0..1 value to the reveal fraction each tick.
         return new AnimatedBuilder(controller, _ => BuildLine((float)controller.Value));
     }
 
@@ -552,7 +475,7 @@ internal sealed class CuneiformTextState : State<CuneiformText>
         bundle: Widget.Bundle,
         revealFraction: revealFraction,
         jitterStrength: Widget.JitterStrength,
-        // Static display text seeds off its own content, so the same label always wobbles identically.
+        // Seeded off the text so a label always wobbles identically.
         jitterSeed: CuneiformMetrics.SeedFromString(Widget.Text),
         rotationDegrees: Widget.RotationDegrees,
         glow: Widget.Glow,

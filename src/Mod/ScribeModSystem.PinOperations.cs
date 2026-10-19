@@ -16,13 +16,10 @@ namespace Scribe;
 public sealed partial class ScribeModSystem
 {
     /// <summary>
-    /// Server-side pin/unpin, addressed by (DocId, TaskId). An UNPIN removes straight from the store
-    /// with no block resolution, so it works when the owning lectern is broken or its chunk is
-    /// unloaded. A PIN resolves the owning block via the live index only to snapshot the task's
-    /// text/done from the server's own authoritative document (never a client-supplied snapshot); if
-    /// the document can't be resolved right now the pin is still recorded with an empty snapshot.
-    /// Lock-free throughout. Re-pushes the player when their set changed. Public so the block-entity
-    /// layer and the integration suite drive the exact production path, not a copy of it.
+    /// Pins/unpins by (DocId, TaskId). Unpin removes from the store without resolving the block, so it works
+    /// when the lectern is broken or unloaded. Pin snapshots text/done from the server's own document (never
+    /// a client snapshot), recording an empty snapshot if unresolvable. Lock-free; re-pushes the player when
+    /// their set changed. Public so the block-entity layer and integration suite use the production path.
     /// </summary>
     public void SetPinForPlayer(IServerPlayer player, Guid docId, Guid taskId, bool pinned,
         string? fallbackText = null, bool fallbackDone = false,
@@ -52,9 +49,8 @@ public sealed partial class ScribeModSystem
             double? assignedTimestamp = null;
             double? acceptedTimestamp = null;
             ScribeDocument? source = null;
-            // Prefer the server's own authoritative document when available; fall back to the
-            // client-supplied snapshot for items whose host is not registered server-side (e.g. Notebooks).
-            // The same resolved document drives pin insert/gather (owned-run placement).
+            // Prefer the server's document; fall back to the client snapshot for hosts not registered
+            // server-side (e.g. Notebooks). The same document drives pin placement.
             if (TryResolveDocHost(docId, out var docHost, player))
             {
                 source = docHost!.Document;
@@ -69,9 +65,7 @@ public sealed partial class ScribeModSystem
                     currentQuantity = block.CurrentQuantity;
                     linkLabel = block.LinkLabel;
                     depth = block.Depth;
-                    // Snapshot the leading-icon assignment marker —
-                    // no client-supplied fallback exists for this field since it's always resolvable here
-                    // (the same document that resolves every other field above).
+                    // No client fallback: this field is always resolvable from the document.
                     isAcceptedAssignment = block.Assignment?.State == ScribeAssignmentState.Accepted;
                     if (isAcceptedAssignment)
                     {
@@ -96,23 +90,12 @@ public sealed partial class ScribeModSystem
     }
 
     /// <summary>
-    /// Server-side complete-a-task by identity (the read-view checkbox / HUD checkbox), for a task the
-    /// player has pinned. The per-player pin store is authoritative for a pinned task's done-state, so
-    /// the flow is store-first with write-through:
-    /// <list type="number">
-    /// <item><b>Toggle in the store</b> — flip the acting player's pin's done-state (the authoritative
-    /// value), so completion works even when the source is unresolvable/destroyed.</item>
-    /// <item><b>Write through to the source</b> — when the owning document resolves, set its task's done
-    /// to match (reconciling ONLY the acting player; other players' pins are their own copies).</item>
-    /// <item><b>Apply the completion policy</b> — <c>Sink</c> keeps the (now-done) pin; <c>Unpin</c>
-    /// removes the pin; <c>Delete</c> removes the task from the source (when resolvable) and the pin.
-    /// Removal/unpin fires only on a transition INTO done, so unchecking a done task never removes it.</item>
-    /// </list>
-    /// The <paramref name="policy"/> is the acting player's client-local completion preference, carried
-    /// in the completion request and already normalized by the caller; the server holds no completion-policy
-    /// state. Re-pushes the acting player once at the end when their set changed. Public for the same
-    /// reason as <see cref="SetPinForPlayer"/> — the block-entity layer and the integration suite drive
-    /// the exact production path.
+    /// Completes a pinned task by identity. Store-first with write-through: toggles the pin's done-state
+    /// in the store (authoritative, so it works with an unresolvable source), writes it through to the source
+    /// document when it resolves (acting player only), then applies <paramref name="policy"/>: <c>Sink</c>
+    /// keeps the done pin, <c>Unpin</c> removes it, <c>Delete</c> removes the task and pin. Removal fires only
+    /// on a transition INTO done. The policy is the caller's already-normalized client preference.
+    /// Re-pushes once if the set changed. Public so the block-entity layer and integration suite use the production path.
     /// </summary>
     public void CompleteTaskForPlayer(IServerPlayer player, Guid docId, Guid taskId,
         ScribeCompletionPolicy policy = ScribeCompletionPolicy.Sink,
@@ -124,18 +107,14 @@ public sealed partial class ScribeModSystem
         bool? current = pinStore.GetPinDone(player.PlayerUID, docId, taskId);
         if (current is null)
         {
-            // Not pinned by this player — a plain checkbox on an unpinned document task. Toggle the
-            // shared document directly and apply the policy there too (the policy is not limited to
-            // pinned tasks): Sink→bottom, Delete→remove.
+            // Not pinned: toggle the shared document directly; the policy still applies there (Sink→bottom, Delete→remove).
             CompleteUnpinnedTaskAtSource(player, docId, taskId, policy, behavior);
             return;
         }
         bool nowDone = !current.Value;
 
-        // A completion-prompt's "accept" is
-        // marking the linked task done. Captured from the pin's OWN snapshot (not the source document) so
-        // it works even when the source is unresolvable, mirroring every other snapshot read in this
-        // method. Only a transition INTO done counts — unchecking a completed quest task never re-records.
+        // A completion-prompt "accept" is marking the linked quest task done. Read from the pin's own
+        // snapshot so it works with an unresolvable source; only a transition INTO done counts.
         if (nowDone && pinStore.GetPin(player.PlayerUID, docId, taskId) is { Kind: ScribeBlockKind.Link } questPin
             && ScribeLinkTarget.IsQuest(questPin.LinkTarget))
         {
@@ -153,8 +132,7 @@ public sealed partial class ScribeModSystem
 
         if (resolved)
         {
-            // Captured BEFORE the mutation: a Delete policy can remove the block entirely, but the
-            // Assignment object itself (if any) survives independent of the block's document membership.
+            // Captured BEFORE the mutation: Delete can remove the block, but the Assignment survives independently.
             var assignmentOnBlock = docHost!.Document.FindByTaskId(taskId)?.Assignment;
             var outcome = ScribeCompletion.ApplyGivenDone(docHost.Document, taskId, nowDone, policy, behavior);
             if (outcome.DocChanged) docHost.PersistFromReader();
@@ -177,10 +155,8 @@ public sealed partial class ScribeModSystem
         }
         else
         {
-            // The document is unresolvable right now (e.g. the Notebook isn't in this player's
-            // inventory) — there's no block to mutate or write through to, but the canonical
-            // assignment-store derivation is addressed by
-            // taskId alone and does not need it, so it still runs here.
+            // Unresolvable (e.g. Notebook not in inventory): nothing to mutate, but assignment-completion
+            // derivation is addressed by taskId alone and still runs.
             Trace("  complete: doc {0} unresolvable for task {1} — deriving assignment completion from the store only", docId, taskId);
             NotifyAssignmentDoneChanged(taskId, nowDone, null);
 
@@ -192,18 +168,10 @@ public sealed partial class ScribeModSystem
     }
 
     /// <summary>
-    /// Server-side edit-a-pinned-task's-text by identity (the Pin Tab's inline text edit), for a task the
-    /// player has pinned. Best-effort write-through, mirroring <see cref="CompleteTaskForPlayer"/>:
-    /// <list type="number">
-    /// <item><b>Write through to the source</b> — when the owning document resolves, set its task's text
-    /// via the lock-free <see cref="BlockEntityScribeLectern.SetTaskTextFromReader"/> (which rejects a
-    /// blank edit and reconciles nothing else).</item>
-    /// <item><b>Update the pin snapshot</b> — refresh the acting player's pin's last-known text so the edit
-    /// is reflected even when the source is unresolvable (snapshot-only degrade).</item>
-    /// </list>
-    /// Only the acting player is touched (their own pin is their own copy — grief-proof). A blank/
-    /// whitespace-only edit is rejected end-to-end and changes nothing. Re-pushes the acting player when
-    /// their set changed. Public so the integration suite drives the exact production path.
+    /// Edits a pinned task's text by identity; best-effort write-through like <see cref="CompleteTaskForPlayer"/>.
+    /// Sets the source task's text lock-free via <see cref="BlockEntityScribeLectern.SetTaskTextFromReader"/>
+    /// when it resolves, and always refreshes the acting player's pin snapshot. Only that player's pin is
+    /// touched; a blank edit is rejected end-to-end. Re-pushes when changed. Public for the integration suite.
     /// </summary>
     public void EditPinnedTaskForPlayer(IServerPlayer player, Guid docId, Guid taskId, string text)
     {
@@ -217,22 +185,17 @@ public sealed partial class ScribeModSystem
             return;
         }
 
-        // Write through to the shared source document when it resolves (best-effort; a gone source just
-        // skips this — the snapshot below still updates).
+        // Best-effort; a gone source just skips this.
         if (TryResolveDocHost(docId, out var docHost, player)) docHost!.SetTaskTextFromReader(taskId, text);
 
-        // Always refresh the acting player's pin snapshot so the edit shows even if the source is unloaded.
         bool changed = pinStore.SetPinText(player.PlayerUID, docId, taskId, text);
         if (changed) PushPinsTo(player);
     }
 
     /// <summary>
-    /// Server-side standalone delete-a-task by identity (the Pin Tab's delete control), for a task the
-    /// player has pinned. Mirrors the Delete completion policy's write-through, but as a first-class action
-    /// independent of any policy: when the owning document resolves, remove the task lock-free via
-    /// <see cref="BlockEntityScribeLectern.DeleteTaskFromReader"/>; always remove the acting player's pin
-    /// (a safe no-op if it's already gone) and re-push. Snapshot/store-only when the source is unresolvable.
-    /// Public so the integration suite drives the exact production path.
+    /// Deletes a pinned task by identity, independent of completion policy: removes it lock-free from the
+    /// source via <see cref="BlockEntityScribeLectern.DeleteTaskFromReader"/> when it resolves, and always
+    /// removes the acting player's pin. Public for the integration suite.
     /// </summary>
     public void DeleteTaskForPlayer(IServerPlayer player, Guid docId, Guid taskId,
         ScribeSubtaskBehavior behavior = ScribeSubtaskBehavior.Bound)
@@ -262,12 +225,9 @@ public sealed partial class ScribeModSystem
     }
 
     /// <summary>
-    /// Server-side reorder of the acting player's own pin list into a client-supplied order. Permutes ONLY
-    /// that player's per-player list in <see cref="ScribePinStore"/> (unknown/duplicate ids ignored, omitted
-    /// pins preserved), never any document's block order and never another player's list; the store already
-    /// persists an ordered list under <c>scribe:pins:v1</c>, so persistence follows on the next world save.
-    /// Re-pushes the acting player when the order actually changed. Public so the integration suite drives
-    /// the exact production path.
+    /// Reorders the acting player's own pin list into a client-supplied order (unknown/duplicate ids
+    /// ignored, omitted pins preserved). Never touches document block order or another player's list.
+    /// Re-pushes when the order changed. Public for the integration suite.
     /// </summary>
     public void ReorderPinsForPlayer(IServerPlayer player, IReadOnlyList<(Guid DocId, Guid TaskId)> order)
     {
@@ -276,13 +236,11 @@ public sealed partial class ScribeModSystem
     }
 
     /// <summary>
-    /// Server-side write-through of a Tracker's live <c>CurrentQuantity</c> by identity, driven by a client
-    /// count engine's <see cref="ScribeSetTrackerQuantityMessage"/>. Resolves
-    /// the owning document (registry, or by scanning the acting player's inventory for an item host) and
-    /// writes the clamped count lock-free via <see cref="IScribeDocumentHost.SetTrackerCurrentQuantityFromReader"/>,
-    /// which marks the source dirty and resyncs every viewer. A best-effort no-op when the source is
-    /// unresolvable, the task is gone, or it isn't a Tracker. No pin involvement — the count is not a pin
-    /// action. Public so the integration suite can drive the exact production path.
+    /// Writes a Tracker's live <c>CurrentQuantity</c> by identity from a client count engine's
+    /// <see cref="ScribeSetTrackerQuantityMessage"/>. Resolves the document (registry, or scanning the player's
+    /// inventory) and writes the clamped count lock-free via
+    /// <see cref="IScribeDocumentHost.SetTrackerCurrentQuantityFromReader"/>. Best-effort no-op when unresolvable,
+    /// gone, or not a Tracker. Not a pin action. Public for the integration suite.
     /// </summary>
     public void SetTrackerQuantityForPlayer(IServerPlayer player, Guid docId, Guid taskId, int quantity)
     {
@@ -292,13 +250,10 @@ public sealed partial class ScribeModSystem
     }
 
     /// <summary>
-    /// Server-side write-through of a QuestObjective's live <c>CurrentQuantity</c> by identity, driven by
-    /// the client-side quest watcher's <see cref="ScribeSetQuestObjectiveProgressMessage"/>.
-    /// Mirrors <see cref="SetTrackerQuantityForPlayer"/>
-    /// exactly, but through the dedicated <see cref="IScribeDocumentHost.SetQuestObjectiveProgressFromReader"/>
-    /// path so it never shares a gate with the Tracker/Craft carried-inventory engine. A best-effort no-op
-    /// when the source is unresolvable, the task is gone, or it isn't a QuestObjective. No pin involvement.
-    /// Public so the integration suite can drive the exact production path.
+    /// Writes a QuestObjective's live <c>CurrentQuantity</c> by identity from the quest watcher's
+    /// <see cref="ScribeSetQuestObjectiveProgressMessage"/>. Like <see cref="SetTrackerQuantityForPlayer"/> but
+    /// through <see cref="IScribeDocumentHost.SetQuestObjectiveProgressFromReader"/> so it never shares a gate
+    /// with the Tracker/Craft engine. Best-effort no-op; no pin involvement. Public for the integration suite.
     /// </summary>
     public void SetQuestObjectiveProgressForPlayer(IServerPlayer player, Guid docId, Guid taskId, int quantity)
     {
@@ -308,12 +263,10 @@ public sealed partial class ScribeModSystem
     }
 
     /// <summary>
-    /// Server-side write-through of a Read View filter pill + collapsed-group set (read-view-filter-and-
-    /// collapse), driven by a client's <see cref="ScribeSetReadViewStateMessage"/>. Resolves the owning
-    /// document exactly like <see cref="SetTrackerQuantityForPlayer"/> (registry, or by scanning the acting
-    /// player's inventory for an item host) and writes lock-free via
-    /// <see cref="IScribeDocumentHost.SetReadViewStateFromReader"/>. A best-effort no-op when the source is
-    /// unresolvable. Public so the integration suite can drive the exact production path.
+    /// Writes a Read View filter pill + collapsed-group set from <see cref="ScribeSetReadViewStateMessage"/>,
+    /// resolving the document like <see cref="SetTrackerQuantityForPlayer"/> and writing via
+    /// <see cref="IScribeDocumentHost.SetReadViewStateFromReader"/>. Best-effort no-op when unresolvable.
+    /// Public for the integration suite.
     /// </summary>
     public void SetReadViewStateForPlayer(IServerPlayer player, Guid docId, byte filterCategory, IReadOnlyCollection<Guid> collapsedGroupIds)
     {
@@ -322,15 +275,10 @@ public sealed partial class ScribeModSystem
             docHost!.SetReadViewStateFromReader(filterCategory, collapsedGroupIds);
     }
 
-    /// <summary>Collapses a completion policy to <see cref="ScribeCompletionPolicy.Unpin"/> when the target
-    /// document is a read-only (hard/fired) tablet. A read-only source can
-    /// neither be reordered (<c>Sink</c>/<c>UnpinSink</c>) nor have tasks removed (<c>Delete</c>), and firing
-    /// a tablet with a pinned task must not strand that pin on the HUD — so every document-mutating policy
-    /// becomes a plain unpin. <c>Keep</c> is left alone (leaving the pin is a valid read-only outcome), and
-    /// <c>Unpin</c> is already the target. An editable/uncapped source (<c>ReadOnly == false</c>, or an
-    /// unresolvable one passed as null) keeps its policy verbatim. Read-only-ness is sourced from the host's
-    /// own <see cref="ScribeDocumentPolicy.ReadOnly"/>, which <see cref="TabletHost"/> reports from the live
-    /// stack's hard/fired state — no re-reading of tablet attributes here.</summary>
+    /// <summary>Collapses a completion policy to <see cref="ScribeCompletionPolicy.Unpin"/> when the target is a
+    /// read-only (hard/fired) tablet, which can neither be reordered nor lose tasks and must not strand a pin on
+    /// the HUD. <c>Keep</c> is left alone; an editable or unresolvable (null) source keeps its policy. Read-only-ness
+    /// comes from the host's <see cref="ScribeDocumentPolicy.ReadOnly"/>.</summary>
     private static ScribeCompletionPolicy CollapsePolicyForReadOnlySource(
         ScribeCompletionPolicy policy, IScribeDocumentHost? host)
     {
@@ -338,10 +286,8 @@ public sealed partial class ScribeModSystem
         return policy == ScribeCompletionPolicy.Keep ? policy : ScribeCompletionPolicy.Unpin;
     }
 
-    /// <summary>Resolves a docId to an <see cref="IScribeDocumentHost"/>. Checks the registry first
-    /// (covers Lecterns, which register server-side on Initialize). If not found, searches the acting
-    /// player's inventory for a Notebook whose stored DocId matches and creates a transient host from
-    /// that slot — Notebooks are only registered client-side, so the server must find them by scanning.</summary>
+    /// <summary>Resolves a docId to a host: registry first (Lecterns), else a transient host from a matching
+    /// Notebook/Tablet in the acting player's inventory (those register only client-side).</summary>
     private bool TryResolveDocHost(Guid docId, out IScribeDocumentHost? host,
         IServerPlayer? player = null)
     {
@@ -361,8 +307,7 @@ public sealed partial class ScribeModSystem
                 if (slot.Itemstack?.Collectible is not IScribeDocumentItem) continue;
                 if (!ScribeDocumentAttributes.TryReadFrom(slot.Itemstack, out var doc) || doc is null) continue;
                 if (doc.DocId != docId) continue;
-                // Construct the tier-correct host (TabletHost for a tablet) so its policy/title apply
-                // server-side too; both derive from NotebookHost, so the write-through path is identical.
+                // Tier-correct host so the policy/title apply server-side; both derive from NotebookHost.
                 var nbHost = slot.Itemstack.Collectible is ItemScribeTablet
                     ? new TabletHost(slot)
                     : new NotebookHost(slot);
@@ -374,12 +319,9 @@ public sealed partial class ScribeModSystem
         return false;
     }
 
-    /// <summary>Completes (toggles) an UNPINNED document task straight on the shared source — a plain
-    /// checkbox on a task nobody has pinned. There is no pin, so there is no store involvement, but the
-    /// completion policy still applies to the document itself: on a
-    /// transition INTO done, <c>Sink</c> moves the task to the document bottom and <c>Delete</c> removes
-    /// it from the source; <c>Keep</c>/<c>Unpin</c> just toggle (there is nothing to unpin). A no-op when
-    /// the source is unresolvable (nothing to toggle without a document).</summary>
+    /// <summary>Toggles an UNPINNED document task directly on the shared source. No store involvement, but the
+    /// policy still applies on a transition INTO done: <c>Sink</c> moves it to the bottom, <c>Delete</c> removes it,
+    /// <c>Keep</c>/<c>Unpin</c> just toggle. No-op when unresolvable.</summary>
     private void CompleteUnpinnedTaskAtSource(IServerPlayer player, Guid docId, Guid taskId,
         ScribeCompletionPolicy policy, ScribeSubtaskBehavior behavior)
     {
@@ -396,9 +338,7 @@ public sealed partial class ScribeModSystem
         }
         bool nowDone = !block.Done;
 
-        // A read-only (hard/fired) tablet can't be reordered or have tasks removed; collapse every
-        // document-mutating policy to Unpin. With no pin here that leaves a
-        // plain toggle, so a hardened tablet's checkbox flips done-state without disturbing the document.
+        // A read-only tablet collapses every mutating policy to Unpin, leaving a plain toggle.
         policy = CollapsePolicyForReadOnlySource(policy, docHost);
 
         var outcome = ScribeCompletion.ApplyGivenDone(docHost.Document, taskId, nowDone, policy, behavior);
@@ -407,8 +347,7 @@ public sealed partial class ScribeModSystem
         Trace("  complete(unpinned): task {0} toggled to done={1} (affected {2})", taskId, nowDone, outcome.AffectedTaskIds.Count);
     }
 
-    /// <summary>Re-push a single player their own full pin set (server → client). Called on join and
-    /// after any change to that player's set. Only ever sends a player their own pins.</summary>
+    /// <summary>Re-pushes a player their own full pin set (server → client); never anyone else's.</summary>
     public void PushPinsTo(IServerPlayer player)
     {
         if (sapi is null || pinStore is null) return;
@@ -416,9 +355,7 @@ public sealed partial class ScribeModSystem
         sapi.Network.GetChannel(NetworkChannelName).SendPacket(new ScribePinnedSetMessage { PinnedRefBytes = bytes }, player);
     }
 
-    /// <summary>Re-push each listed player their own pin set. The block entity calls this after a
-    /// snapshot refresh / orphan sweep affecting several players. A uid that isn't a currently-online
-    /// player is skipped (their set is already persisted and will sync on their next join).</summary>
+    /// <summary>Re-pushes each listed online player their own pin set; offline uids are skipped (synced on next join).</summary>
     public void PushPinsTo(IReadOnlyList<string> playerUids)
     {
         if (sapi is null) return;

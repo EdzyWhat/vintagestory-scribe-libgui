@@ -4,12 +4,9 @@ using Vintagestory.API.MathTools;
 namespace Scribe;
 
 /// <summary>
-/// The standalone Inbox block — a thin subclass of
-/// <see cref="BlockScribeWritingStation"/>, mirroring <see cref="BlockScriptorium"/>/
-/// <see cref="BlockAssignmentDesk"/>: interaction, tooltip, and document carry-over logic is shared with
-/// the Lectern/Scriptorium. Placement is its own concern (see <see cref="TryPlaceBlock"/>): unlike every
-/// other writing station (ground-only) or the Chalkboard (wall-only), the Inbox supports BOTH modes from
-/// one item.
+/// The standalone Inbox block, a thin subclass of <see cref="BlockScribeWritingStation"/> (like
+/// <see cref="BlockScriptorium"/>/<see cref="BlockAssignmentDesk"/>). Unlike the ground-only stations and
+/// the wall-only Chalkboard, it supports BOTH placement modes from one item (see <see cref="TryPlaceBlock"/>).
 /// </summary>
 public sealed class BlockInbox : BlockScribeWritingStation
 {
@@ -22,20 +19,16 @@ public sealed class BlockInbox : BlockScribeWritingStation
     /// <summary>The Inbox has no renamable document — see the base's doc comment.</summary>
     protected override bool ShowsDocumentTitleInTooltip => false;
 
-    /// <summary>Only the ground placement mode (a click on a top face) needs a solid floor below; a
-    /// wall-mounted placement (a horizontal face) is validated by its own wall-attach check in
-    /// <see cref="TryPlaceBlock"/> instead.</summary>
+    /// <summary>Only ground placement (a top-face click) needs a solid floor; wall placement is validated
+    /// by the wall-attach check in <see cref="TryPlaceBlock"/>.</summary>
     protected override bool RequiresSolidGround(BlockSelection blockSel) => blockSel.Face == BlockFacing.UP;
 
     /// <summary>
-    /// Dual-mode placement. Ground placement (a click on a top face) delegates to the shared base's
-    /// floor-check + player-facing rotation, same as the Lectern/Scriptorium/Assignment Desk.
-    /// Wall-mounted placement (a click on a horizontal face) mirrors the vanilla wood torch's
-    /// <c>BlockGroundAndSideAttachable.TryAttachTo</c>: this class hierarchy does NOT inherit the
-    /// automatic face→variant resolution (the base <c>Block.TryPlaceBlock</c>/<c>DoPlaceBlock</c> always
-    /// places `this` block's own id), so it is done here — checks for a solid block
-    /// behind the clicked face, then places the matching "-&lt;direction&gt;" wall variant rather than this
-    /// item's own ("-up") block id.
+    /// Dual-mode placement. A top-face click delegates to the base's floor check + player-facing rotation.
+    /// A horizontal-face click mirrors the vanilla torch's <c>BlockGroundAndSideAttachable.TryAttachTo</c>:
+    /// this hierarchy does NOT inherit automatic face→variant resolution (<c>Block.TryPlaceBlock</c> always
+    /// places `this` block's own id), so it checks for a solid block behind the face and places the matching
+    /// "-&lt;direction&gt;" wall variant instead of this item's own ("-up") block id.
     /// </summary>
     public override bool TryPlaceBlock(IWorldAccessor world, IPlayer byPlayer, ItemStack itemstack, BlockSelection blockSel, ref string failureCode)
     {
@@ -64,11 +57,9 @@ public sealed class BlockInbox : BlockScribeWritingStation
         return true;
     }
 
-    /// <summary>Picking the block from either placement mode yields the same ("-up") Inbox item — mirrors
-    /// <c>BlockGroundAndSideAttachable.GetDrops</c>'s identical fix-up for the vanilla torch, and the
-    /// base's own document-carry-over (<see cref="BlockScribeWritingStation.GetDrops"/>) reimplemented
-    /// here against the resolved "-up" block rather than <c>this</c>, since <c>this</c> may be a
-    /// wall-mounted variant.</summary>
+    /// <summary>Picking from either placement mode yields the same ("-up") Inbox item, as vanilla's torch
+    /// does. Reimplements the base's document carry-over (<see cref="BlockScribeWritingStation.GetDrops"/>)
+    /// against the resolved "-up" block, since <c>this</c> may be a wall variant.</summary>
     public override ItemStack[] GetDrops(IWorldAccessor world, BlockPos pos, IPlayer byPlayer, float dropQuantityMultiplier = 1f)
     {
         var drop = new ItemStack(world.BlockAccessor.GetBlock(CodeWithVariant("orientation", "up")));

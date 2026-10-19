@@ -15,19 +15,13 @@ namespace Scribe;
 public sealed partial class ScribeModSystem
 {
     /// <summary>
-    /// Registers the mod's custom SVG glyphs into the client's icon table so they can be drawn by
-    /// code string like any built-in icon. This is REQUIRED, not optional: <c>IconUtil.DrawIcon</c>
-    /// looks a code up in <c>CustomIcons</c> first, then falls through a switch of hardcoded built-in
-    /// names -- with NO default case, so an unregistered code (e.g. "scribepin") silently draws
-    /// nothing (see VSAPI-NOTES.md "Icon-button glyphs"). <c>SvgIconSource</c> wraps an asset path
-    /// as a renderer that flood-recolors the whole SVG to the button's Font.Color at draw time, so
-    /// each glyph is authored as a single flat black shape (assets/scribe/textures/icons/*.svg).
+    /// Registers the mod's SVG glyphs into the client's icon table. Required: <c>IconUtil.DrawIcon</c> checks
+    /// <c>CustomIcons</c> then a hardcoded switch with no default case, so an unregistered code silently draws
+    /// nothing (see VSAPI-NOTES.md "Icon-button glyphs"). <c>SvgIconSource</c> flood-recolors the SVG to the
+    /// button's Font.Color, so each glyph is a single flat black shape.
     ///
-    /// The files MUST live under the <c>textures/</c> category: VS only scans assets under its 16
-    /// hardcoded <c>AssetCategory</c> codes (blocktypes, textures, sounds, ... -- there is no
-    /// "icons" category), so a file under a bare <c>icons/</c> folder is never loaded and TryGet
-    /// returns null. Vanilla stores every SVG icon at <c>textures/icons/</c> (e.g.
-    /// game:textures/icons/copy.svg) -- we match that. (Learned the hard way; see VSAPI-NOTES.md.)
+    /// The files must live under <c>textures/</c>: VS only scans its hardcoded <c>AssetCategory</c> folders, so a
+    /// bare <c>icons/</c> folder is never loaded (see VSAPI-NOTES.md).
     /// </summary>
     private static void RegisterCustomIcons(ICoreClientAPI api)
     {
@@ -36,78 +30,51 @@ public sealed partial class ScribeModSystem
         RegisterSvgIcon(api, "scribeclose", new AssetLocation("scribe", "textures/icons/close.svg"));
         RegisterSvgIcon(api, "scribeedit", new AssetLocation("scribe", "textures/icons/edit.svg"));
         RegisterSvgIcon(api, "scribegear", new AssetLocation("scribe", "textures/icons/gear.svg"));
-        // Pinned-HUD-only gear-ring variant: the dialog Settings tabs use the solid "scribegear" above;
-        // only ScribeHudGearButton uses this hollow-ring gear.
+        // Hollow-ring gear used only by ScribeHudGearButton; Settings tabs use the solid "scribegear".
         RegisterSvgIcon(api, "scribegearhud", new AssetLocation("scribe", "textures/icons/gear-hud.svg"));
         RegisterSvgIcon(api, "scribecheck", new AssetLocation("scribe", "textures/icons/check.svg"));
         RegisterSvgIcon(api, "scribeguest",   new AssetLocation("scribe", "textures/icons/guestbook.svg"));
-        // Sent Assignment History nav icon — same book.svg as scribebook below.
+        // Same book.svg as scribebook below.
         RegisterSvgIcon(api, "scribehistory", new AssetLocation("scribe", "textures/icons/book.svg"));
         RegisterSvgIcon(api, "scribetimer",   new AssetLocation("scribe", "textures/icons/timer.svg"));
         RegisterSvgIcon(api, "scribeinfo",    new AssetLocation("scribe", "textures/icons/info.svg"));
-        // Inbox Inventory tab only: a 2x2 grid of outlined squares. The Scriptorium's Transcribe tab
-        // uses scribebook below.
         RegisterSvgIcon(api, "scribeinventory", new AssetLocation("scribe", "textures/icons/grid.svg"));
-        // Guide-page Link icon: a guide/explainer page has no item to draw, so
-        // its Link row shows this generic open-book glyph instead of an ItemStackDisplay. Also the
-        // Scriptorium's Transcribe tab icon (see scribeinventory comment above).
+        // Guide-page Link icon (no item to draw); also the Scriptorium's Transcribe tab icon.
         RegisterSvgIcon(api, "scribebook",    new AssetLocation("scribe", "textures/icons/book.svg"));
-        // Quest Link marker: an exclamation mark in a circle, distinct from the
-        // book glyph a guide-page Link shows — a rotated derivative of info.svg (see quest.svg).
+        // Quest Link marker, distinct from the guide-page book glyph.
         RegisterSvgIcon(api, "scribequest",   new AssetLocation("scribe", "textures/icons/quest.svg"));
-        // Static VS Quest objective marker: a bullseye communicates a target/criterion without implying
-        // that the row opens the quest dialog or a guide page.
+        // Static VS Quest objective marker; implies no click target.
         RegisterSvgIcon(api, "scribeobjective", new AssetLocation("scribe", "textures/icons/bullseye.svg"));
-        // Drag-reorder feedback glyphs: the grabbed row's grip becomes ◀ and the prospective drop row's
-        // grip becomes ▶.
+        // Drag-reorder feedback: grabbed row's grip becomes ◀, the drop row's becomes ▶.
         RegisterSvgIcon(api, "scribetriangleleft",  new AssetLocation("scribe", "textures/icons/triangle-left.svg"));
         RegisterSvgIcon(api, "scribetriangleright", new AssetLocation("scribe", "textures/icons/triangle-right.svg"));
-        // Add-kind picker caret: the footer's segmented add button carries a caret
-        // that opens/closes a floating drop-up menu of kinds. It points ▲ when closed (the menu expands
-        // UPWARD, over the scroll body) and flips ▼ when open (tap again to collapse).
+        // Add-kind picker caret: ▲ when closed (the drop-up menu expands upward), ▼ when open.
         RegisterSvgIcon(api, "scribetriangleup",   new AssetLocation("scribe", "textures/icons/triangle-up.svg"));
         RegisterSvgIcon(api, "scribetriangledown", new AssetLocation("scribe", "textures/icons/triangle-down.svg"));
-        // Accepted-assignment leading-icon marker: a rolled scroll, distinct from the guestbook/book glyphs.
         RegisterSvgIcon(api, "scribeassignment", new AssetLocation("scribe", "textures/icons/scroll.svg"));
-        // Shared Inbox tab nav button: an inbox-with-down-arrow glyph.
         RegisterSvgIcon(api, "scribeinboxarrow", new AssetLocation("scribe", "textures/icons/inbox-arrow.svg"));
-        // Assignment Desk's Create Assignments nav button: a thin-stroke plus glyph.
         RegisterSvgIcon(api, "scribeplus", new AssetLocation("scribe", "textures/icons/plus-thin.svg"));
     }
 
     /// <summary>
-    /// Registers Scribe's bundled typeface(s) with LibGUI's Skia font registry so the mod's own text can
-    /// name them via <c>TextStyle.FontFamily</c> This mirrors how LibGUI itself
-    /// bundles + registers its faces in <c>GuiModSystem.LoadFonts</c>: load the <c>.ttf</c> asset bytes to an
-    /// <c>SKTypeface</c> via <see cref="SkiaAssetLoader.LoadFont"/>, then hand it to
-    /// <c>FontRegistry.RegisterCustomFont(family, weight, typeface)</c>. Once registered,
-    /// <c>TextLayoutHelper</c> resolves that family for BOTH measurement and drawing (it checks
-    /// <c>GetCustomTypeface</c> before any system-font fallback), so no per-surface draw override is needed
-    /// and the scoping is inherent — only text whose family names "Caudex" changes.
+    /// Registers Scribe's bundled typefaces with LibGUI's <c>FontRegistry</c> (as LibGUI does in
+    /// <c>GuiModSystem.LoadFonts</c>) so text can name them via <c>TextStyle.FontFamily</c>. <c>TextLayoutHelper</c>
+    /// checks <c>GetCustomTypeface</c> for both measurement and drawing, so only text naming a registered
+    /// family changes.
     ///
-    /// <para>Asset path note: the font lives under <c>textures/fonts/</c>, NOT a bare <c>fonts/</c> folder.
-    /// <c>fonts</c> is not one of VS's scanned <c>AssetCategory</c> codes (confirmed by decompile — LibGUI
-    /// only loads its own <c>assets/gui/fonts/</c> by doing an extra <c>AddModOrigin("gui","fonts")</c> +
-    /// <c>Assets.Reload</c> dance first). Filing it under the already-scanned <c>textures</c> category
-    /// (the same one our SVG icons use) avoids that dance entirely. Unlike the icons, we do NOT need a
-    /// <c>loadAsset: true</c> re-fetch guard: <see cref="SkiaAssetLoader.LoadFont"/> reads the bytes into an
-    /// <c>SKTypeface</c> HERE at client init, before <c>UnloadAssets</c> nulls the asset data, and the
-    /// typeface (not the asset) is what the registry keeps. See VSAPI-NOTES.md (LibGUI section).</para>
+    /// <para>Fonts live under <c>textures/fonts/</c> because <c>fonts</c> is not a scanned <c>AssetCategory</c>
+    /// (see VSAPI-NOTES.md). Unlike the icons, no <c>loadAsset: true</c> re-fetch is needed:
+    /// <see cref="SkiaAssetLoader.LoadFont"/> copies the bytes into an <c>SKTypeface</c> at client init, before
+    /// <c>UnloadAssets</c> nulls the asset data, and the registry keeps the typeface.</para>
     /// </summary>
     private static void RegisterCustomFonts(ICoreClientAPI api)
     {
         var loader = new SkiaAssetLoader(api);
-        // AssetLocation is lowercased by LoadFont (path.ToLower()), so the asset filename must be lowercase.
-        // The bold cut is registered under every non-italic weight slot: Caudex's one consumer (the lectern
-        // dialog title) requests FontWeight.Bold, and registering a real regular face under Normal alongside
-        // it makes the resolver pick the Normal face for a Bold request. Mapping the one bold face to every
-        // weight means whatever weight the resolver lands on, it gets the bold cut.
-        //
-        // The Italic slot holds a genuinely italic, lighter cut (the subtitle descriptor wants a real
-        // slant). That is two distinct real faces on two weight slots of one family, so if the title ever
-        // renders in the wrong face, suspect that resolver quirk before a missing/corrupt asset.
-        // Tracks which bundled families actually registered so the default-family resolution below can
-        // pick a real fallback instead of a family that itself failed to load.
+        // LoadFont lowercases the path, so asset filenames must be lowercase.
+        // The bold cut is registered under every non-italic weight: registering a regular face under Normal
+        // alongside it makes the resolver pick Normal for a Bold request. The Italic slot holds a real italic
+        // cut; if the title renders in the wrong face, suspect that resolver quirk before a bad asset.
+        // Families that actually registered, for the default-family fallback below.
         var registeredFamilies = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         var bold = loader.LoadFont("scribe", "textures/fonts/caudex-bold.ttf");
@@ -115,16 +82,13 @@ public sealed partial class ScribeModSystem
         bool caudexRegistered = bold is not null;
         if (bold is null)
         {
-            // Missing/corrupt asset: LoadFont already logged the failure. The mod stays fully usable
-            // without the face; the title falls back to whatever "sans-serif" resolves to below.
+            // LoadFont already logged the failure; the title falls back to the default family.
             api.Logger.Warning("[scribe] bundled font 'Caudex' failed to load; title stays on the default family");
         }
         else
         {
-            // FontRegistry.GetCustomTypeface is keyed by (family, weight) and returns null on a miss — a weight
-            // with no registration falls through to a system font. Bold face covers Normal/SemiBold/Bold (no
-            // consumer requests plain Normal Caudex); Italic gets the real italic cut when it loaded, else
-            // falls back to the bold face too rather than leaving that slot unregistered.
+            // GetCustomTypeface is keyed by (family, weight); an unregistered weight falls through to a system
+            // font, so Italic falls back to the bold face rather than staying unregistered.
             foreach (var weight in new[] { FontWeight.Normal, FontWeight.SemiBold, FontWeight.Bold })
             {
                 FontRegistry.RegisterCustomFont("Caudex", weight, bold);
@@ -138,13 +102,10 @@ public sealed partial class ScribeModSystem
             api.Logger.Warning("[scribe] bundled font 'Caudex' italic cut failed to load; italic text falls back to the bold cut");
         }
 
-        // Task-text font selector faces: the player picks one of these for the
-        // Lectern's task/note rows. Each is a single-cut regular TTF registered under ALL weights (same
-        // reasoning as Caudex above — the resolver may land on any weight, so map them all to the one face).
-        // "Playfair Display" / "Cormorant Unicase" are NOT here: the LibGUI (`gui`) dependency already
-        // registers those, so the selector can offer them at zero asset cost. Family names must match
-        // ScribePlayerSettings.KnownTaskFonts exactly. A missing/corrupt face logs one warning and is simply
-        // absent from the resolver (its selector option then falls through to the default body font).
+        // Task-text selector faces: single-cut regular TTFs registered under all weights (the resolver may
+        // land on any). "Playfair Display" / "Cormorant Unicase" are registered by `gui` already. Family names
+        // must match ScribePlayerSettings.KnownTaskFonts exactly. A failed face logs a warning and falls
+        // through to the default body font.
         var taskFonts = new (string family, string path)[]
         {
             ("Scapholene", "textures/fonts/scapholene-regular.ttf"),
@@ -168,13 +129,8 @@ public sealed partial class ScribeModSystem
         }
         api.Logger.Notification("[scribe] bundled task-text fonts registered for the settings font selector");
 
-        // Resolve Scribe's own default family (task-font default, HUD chrome, Settings chrome,
-        // History/Timer/Guestbook metadata) to one of Scribe's bundled, custom-registered faces
-        // directly, with no alias of LibGUI's shared "sans-serif" family. "sans-serif" is LibGUI's
-        // framework-wide TextStyle default, consulted by every gui-dependent mod's unstyled text, so
-        // aliasing it would change other mods' default font too. Pick the first bundled face that actually loaded, preferring a general-purpose
-        // sans body font; if none loaded, fall back to the literal "sans-serif" string, i.e. exactly
-        // what that text would resolve to without Scribe's font system at all.
+        // Scribe's default family is the first bundled face that loaded, never an alias of LibGUI's shared
+        // "sans-serif" (every gui-dependent mod's unstyled text uses it). If none loaded, use literal "sans-serif".
         string resolvedDefaultFamily = "sans-serif";
         foreach (var family in new[] { "Noto Sans", "Noto Serif", "Scapholene", "La Belle Aurore", "Caudex" })
         {
@@ -188,17 +144,11 @@ public sealed partial class ScribeModSystem
     }
 
     /// <summary>
-    /// Registers one SVG asset under a <c>CustomIcons</c> code, re-resolving the asset on every draw
-    /// instead of capturing it once. This is REQUIRED: the obvious <c>CustomIcons[code] =
-    /// api.Gui.Icons.SvgIconSource(asset)</c> captures the <see cref="IAsset"/> and re-reads its
-    /// <c>.Data</c> at draw time -- but VS calls <c>AssetManager.UnloadAssets()</c> after startup,
-    /// which sets <c>Data = null</c> on every non-patched asset (confirmed by decompile), so the
-    /// captured asset's bytes are gone by the first draw and <c>rasterizeSvg</c> throws
-    /// <c>ArgumentNullException("Asset Data is null. Is the asset loaded?")</c>, crashing the client
-    /// mid-compose. <c>AssetManager.TryGet(loc, loadAsset: true)</c> re-loads an unloaded asset on
-    /// demand (<c>if (!value.IsLoaded() &amp;&amp; loadAsset) value.Origin.TryLoadAsset(value)</c>),
-    /// so re-resolving by <see cref="AssetLocation"/> inside the delegate self-heals. Compose is
-    /// infrequent (not per-frame), so the re-fetch cost is negligible. See VSAPI-NOTES.md.
+    /// Registers one SVG asset under a <c>CustomIcons</c> code, re-resolving the asset on every draw. Required:
+    /// capturing the <see cref="IAsset"/> once fails because VS calls <c>AssetManager.UnloadAssets()</c> after
+    /// startup, nulling <c>Data</c>, so <c>rasterizeSvg</c> throws and crashes the client mid-compose.
+    /// <c>TryGet(loc, loadAsset: true)</c> re-loads on demand; compose is infrequent so the cost is negligible.
+    /// See VSAPI-NOTES.md.
     /// </summary>
     private static void RegisterSvgIcon(ICoreClientAPI api, string code, AssetLocation loc)
     {
@@ -207,8 +157,7 @@ public sealed partial class ScribeModSystem
             var asset = api.Assets.TryGet(loc, loadAsset: true);
             if (asset?.Data is null)
             {
-                // Missing/unloadable asset: draw nothing rather than throw. Logged once-ish so a
-                // packaging mistake is visible without spamming (compose runs on open/recompose).
+                // Draw nothing rather than throw; the warning surfaces packaging mistakes.
                 api.Logger.Warning("[scribe] icon '{0}' asset {1} not loadable ({2}); drawing nothing",
                     code, loc, asset is null ? "not found" : "Data null");
                 return;

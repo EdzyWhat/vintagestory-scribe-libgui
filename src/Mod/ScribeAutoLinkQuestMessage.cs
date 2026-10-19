@@ -5,105 +5,85 @@ using ProtoBuf;
 namespace Scribe;
 
 /// <summary>One quest objective's catalog definition, captured client-side (the catalog is a client-only
-/// asset read — the server has no other way to know it, same reason
-/// <see cref="ScribeAutoLinkQuestMessage.Title"/>/<see cref="ScribeAutoLinkQuestMessage.Description"/>
-/// already travel this way) so the server can seed the Quest Link's QuestObjective children immediately
-/// after adding it. Progression Framework supplies live progress; VS Quest supplies a one-shot static
-/// criteria snapshot. Trusted-but-client input, like every other field on
-/// the carrying message.</summary>
+/// read) so the server can seed the Quest Link's QuestObjective children right after adding it. Progression
+/// Framework supplies live progress; VS Quest a one-shot static criteria snapshot. Trusted-but-client input.</summary>
 [ProtoContract]
 public sealed class ScribeAutoLinkObjectiveWire
 {
-    /// <summary>The objective's own stable code (the reconcile match key — <see cref="Scribe.Core.ScribePfObjectiveDef.Code"/>).</summary>
+    /// <summary>The objective's stable code (the reconcile match key, <see cref="Scribe.Core.ScribePfObjectiveDef.Code"/>).</summary>
     [ProtoMember(1)]
     public string? Code { get; set; }
 
-    /// <summary>The objective's resolved single-item code, or null for a non-item/multi-item objective
-    /// (<see cref="Scribe.Core.ScribePfObjectiveDef.ItemCode"/>).</summary>
+    /// <summary>The objective's resolved single-item code, or null for a non-item/multi-item objective.</summary>
     [ProtoMember(2)]
     public string? ItemCode { get; set; }
 
-    /// <summary>The objective's captured display label, used when <see cref="ItemCode"/> is null
-    /// (<see cref="Scribe.Core.ScribePfObjectiveDef.Label"/>).</summary>
+    /// <summary>The captured display label, used when <see cref="ItemCode"/> is null.</summary>
     [ProtoMember(3)]
     public string? Label { get; set; }
 
-    /// <summary>The objective's required count (<see cref="Scribe.Core.ScribePfObjectiveDef.Required"/>).</summary>
+    /// <summary>The objective's required count.</summary>
     [ProtoMember(4)]
     public int Required { get; set; }
 
-    /// <summary>Progression Framework's currently-reported progress at accept time. Ignored for VS Quest,
-    /// whose criteria children remain static at zero.</summary>
+    /// <summary>Progression Framework's reported progress at accept time. Ignored for VS Quest.</summary>
     [ProtoMember(5)]
     public int CurrentProgress { get; set; }
 }
 
 /// <summary>
 /// Client → server: create a Quest Link for a quest the client's <see cref="ScribeQuestWatcher"/> just
-/// detected as accepted (Quest Accept Policy = Always/Prompt).
-/// The server resolves the DESTINATION at <see cref="TargetInventoryId"/>/<see cref="TargetSlotId"/> and
-/// re-validates it (writeable, has capacity) exactly like <c>TryPlaceAcceptedAssignment</c> does — never
-/// trusting the client's choice as proof of eligibility — falling back to the sending player's first carried Notebook/Tablet
-/// (<c>ScribeModSystem.History.cs</c>'s <c>FindNotebookInInventory</c>) only when no target was sent. Is authoritative for whether the Link is
-/// actually added: it silently no-ops if the player carries no Scribe document, has no capacity, or
-/// already has a Link for this exact (source, quest code) (idempotent under repeat detection — see
-/// <c>ScribeQuestWatcher</c>'s doc-comment on session-only dedup).
+/// detected as accepted (Quest Accept Policy = Always/Prompt). The server re-validates the destination at
+/// <see cref="TargetInventoryId"/>/<see cref="TargetSlotId"/> (writeable, has capacity) like
+/// <c>TryPlaceAcceptedAssignment</c>, falling back to the sender's first carried Notebook/Tablet
+/// (<c>FindNotebookInInventory</c>) only when no target was sent. It silently no-ops if the player carries no
+/// Scribe document, has no capacity, or already has a Link for this (source, quest code), so repeat detection is idempotent.
 /// </summary>
 [ProtoContract]
 public sealed class ScribeAutoLinkQuestMessage
 {
-    /// <summary>Which backend mod this quest came from (<see cref="Scribe.Core.ScribeQuestSource"/>).
-    /// Null/absent falls back to <see cref="Scribe.Core.ScribeQuestSource.VsQuest"/> server-side.</summary>
+    /// <summary>Which backend mod the quest came from (<see cref="Scribe.Core.ScribeQuestSource"/>).
+    /// Null falls back to <see cref="Scribe.Core.ScribeQuestSource.VsQuest"/> server-side.</summary>
     [ProtoMember(4)]
     public string? Source { get; set; }
 
     /// <summary>The quest's domain-qualified id (e.g. <c>"vsquest:quest-freeghost"</c>), stored verbatim
-    /// after the <c>"quest:{source}/"</c> prefix — see <see cref="Scribe.Core.ScribeLinkTarget.ForQuest"/>.</summary>
+    /// after the <c>"quest:{source}/"</c> prefix.</summary>
     [ProtoMember(1)]
     public string? QuestCode { get; set; }
 
-    /// <summary>Resolved display title, captured client-side from the catalog at detection time (a quest
-    /// has no Handbook page to re-derive this from later).</summary>
+    /// <summary>Display title captured client-side at detection (a quest has no Handbook page to re-derive it from).</summary>
     [ProtoMember(2)]
     public string? Title { get; set; }
 
-    /// <summary>Resolved description, or null if the quest has none (<see cref="ScribeQuestCatalog"/>).</summary>
+    /// <summary>Resolved description, or null if the quest has none.</summary>
     [ProtoMember(3)]
     public string? Description { get; set; }
 
-    /// <summary>Accept-time placement target — the <c>InventoryID</c> of the slot the client resolved to receive
-    /// the linked quest (the sole eligible carried Scribe document, or the player's picker choice among
-    /// 2+). Null falls back to server-side resolution (<c>FindNotebookInInventory</c>), mirroring
-    /// <see cref="ScribeAssignmentActionMessage.TargetInventoryId"/>'s convention.</summary>
+    /// <summary>Accept-time placement target: the <c>InventoryID</c> of the slot the client resolved to receive
+    /// the quest. Null falls back to server-side resolution.</summary>
     [ProtoMember(5)]
     public string? TargetInventoryId { get; set; }
 
-    /// <summary>Slot index within <see cref="TargetInventoryId"/>. Defaults to -1 (unresolved) so an
-    /// absent value never aliases slot 0 — see <see cref="ScribeAssignmentActionMessage.TargetSlotId"/>'s
-    /// remarks on why the <see cref="DefaultValue"/> attribute is load-bearing, not decorative, for this.</summary>
+    /// <summary>Slot index within <see cref="TargetInventoryId"/>; defaults to -1 (unresolved). See
+    /// <see cref="ScribeAssignmentActionMessage.TargetSlotId"/> for why <see cref="DefaultValue"/> is load-bearing.</summary>
     [ProtoMember(6)]
     [DefaultValue(-1)]
     public int TargetSlotId { get; set; } = -1;
 
-    /// <summary>The quest's catalog objective definitions, captured client-side (see
-    /// <see cref="ScribeAutoLinkObjectiveWire"/>'s remarks). The server reconciles these into
-    /// QuestObjective children immediately after adding the Link. Null/empty when the watcher has no
-    /// catalog entry for the quest.</summary>
+    /// <summary>The quest's catalog objective definitions, reconciled by the server into QuestObjective
+    /// children after adding the Link. Null/empty when the watcher has no catalog entry.</summary>
     [ProtoMember(7)]
     public List<ScribeAutoLinkObjectiveWire>? Objectives { get; set; }
 
-    /// <summary>The client's <see cref="Scribe.Core.ScribePlayerSettings.AutoPinOnQuestAccept"/> preference
-    /// at send time. When true, the server pins the
-    /// newly-created Link's task right after adding it, through the same pin-add path a manual pin uses.
-    /// Defaults to false (link but don't pin).</summary>
+    /// <summary>The client's <see cref="Scribe.Core.ScribePlayerSettings.AutoPinOnQuestAccept"/> preference at
+    /// send time. When true the server pins the new Link's task through the manual pin-add path.</summary>
     [ProtoMember(8)]
     public bool AutoPin { get; set; }
 
-    /// <summary>The client's <see cref="Scribe.Core.ScribePlayerSettings.PinInsert"/> preference (as a
-    /// byte), read only when <see cref="AutoPin"/> is true — where the newly-pinned task lands in the pin
-    /// list, mirroring <c>ScribeSetPinMessage.PinInsert</c>'s own convention exactly (an auto-pin follows
-    /// the same insertion rules as a manual pin). Defaults to 0
-    /// (<see cref="Scribe.Core.ScribePinInsert.Bottom"/>).</summary>
+    /// <summary>The client's <see cref="Scribe.Core.ScribePlayerSettings.PinInsert"/> preference (as a byte),
+    /// read only when <see cref="AutoPin"/> is true; follows the same insertion rules as a manual pin.
+    /// Defaults to 0 (<see cref="Scribe.Core.ScribePinInsert.Bottom"/>).</summary>
     [ProtoMember(9)]
     public byte PinInsert { get; set; }
 }

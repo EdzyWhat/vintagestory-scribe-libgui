@@ -85,7 +85,6 @@ public class ScribeTextCorruptorTests
         }
     }
 
-    // Removes any combining mark from the corruptor's set, leaving the base characters.
     private static string StripMarks(string s)
     {
         var sb = new System.Text.StringBuilder(s.Length);

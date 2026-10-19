@@ -2,14 +2,11 @@ using Scribe.Core;
 
 namespace Scribe.Core.Tests;
 
-// Tests for the pure identity diff behind ScribeAnimatedList: given the
-// previous rendered order, which of those were live, the incoming live order, and the ghosts still
-// animating, it computes departures (+ their slots), revivals, appearances, and the full spliced render
-// order. Pure/game-agnostic — no LibGUI, no widgets. Guids are made deterministic per-name so a scenario
-// reads by letter.
+// Tests for the pure identity diff behind ScribeAnimatedList (departures, revivals, appearances,
+// spliced render order). Guids are deterministic per-name so a scenario reads by letter.
 public class ScribeListDiffTests
 {
-    // Stable, deterministic Guids keyed by a single letter so tests read like the on-screen row order.
+    // Deterministic Guids keyed by a single letter.
     private static Guid Id(char c) => new Guid(c, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
 
     private static List<Guid> Ids(string letters) => letters.Select(Id).ToList();
@@ -83,9 +80,7 @@ public class ScribeListDiffTests
     [Fact]
     public void DepartureWhileAGhostAlreadyCollapses_LaterSlotAccountsForTheGhost()
     {
-        // Frame 1 already produced ghost "b" at slot 1 (prevRender "abc" includes it, but b is NOT live).
-        // Now "c" departs. c's slot is its index in prevRender (2) — the pre-existing ghost pushes it down,
-        // exactly the editor's display-index math. Both ghosts render at their slots.
+        // Frame 1 already produced ghost "b" at slot 1; now "c" departs at its index in prevRender (2).
         var r = Compute(prevRender: "abc", prevLive: "ac", newLive: "a", ghosts: ('b', 1));
 
         Assert.Single(r.Departed);
@@ -151,10 +146,7 @@ public class ScribeListDiffTests
     [Fact]
     public void RowAppearsAtNonEndSlot_IsReportedAppeared_RenderKeepsOrder()
     {
-        // A new row "x" arrives in the MIDDLE of the live order (e.g. insert-below, or a Sink-style reorder
-        // that presents an add at a non-end slot). It must
-        // still be reported appeared, and the render order must place it where the live order does — so the
-        // container's grow reads correctly for a non-last row, not just an append.
+        // A new row arrives mid-list: still reported appeared, and rendered where the live order puts it.
         var r = Compute(prevRender: "ab", prevLive: "ab", newLive: "axb");
 
         Assert.Equal(new[] { Id('x') }, r.Appeared);

@@ -26,11 +26,8 @@ using Vintagestory.API.MathTools;  // BlockPos
 
 namespace Scribe;
 
-/// <summary>A value snapshot of one Pin Tab row. <see cref="Kind"/> distinguishes Task / Tracker / Link /
-/// Craft / Text (notes are pinnable; the HUD shows them as text only). A Tracker/Link's icon + name are
-/// resolved by the dialog (where <c>capi</c> lives) and passed in as <see cref="DisplayStack"/> /
-/// <see cref="DisplayName"/>, so the pure LibGUI row widget stays API-free — mirroring
-/// <see cref="ScribeReadRowData"/>.</summary>
+/// <summary>A value snapshot of one Pin Tab row. A Tracker/Link's icon + name are resolved by the dialog and
+/// passed in as <see cref="DisplayStack"/> / <see cref="DisplayName"/>, so the row widget stays API-free.</summary>
 internal readonly record struct ScribePinRowData(
     Guid DocId, Guid TaskId, bool Done, string Text,
     ScribeBlockKind Kind = ScribeBlockKind.Task,
@@ -44,26 +41,20 @@ internal readonly record struct ScribePinRowData(
     public bool IsLink => Kind == ScribeBlockKind.Link;
     public bool IsCraft => Kind == ScribeBlockKind.Craft;
     public bool IsQuestObjective => Kind == ScribeBlockKind.QuestObjective;
-    /// <summary>A Tracker/Link/Craft/QuestObjective renders an item icon + name instead of an editable text
-    /// field; a plain Task keeps the directly-editable field. A Craft parent shows its recipe output.</summary>
+    /// <summary>Renders an item icon + name instead of an editable text field.</summary>
     public bool IsItemKind => IsTracker || IsLink || IsCraft || IsQuestObjective;
-    /// <summary>Kinds whose row carries a live have/need counter: Tracker and the Craft parent (both count the
-    /// viewer's carried inventory). Mirrors <see cref="ScribeBlock.IsCarriedCountTracked"/>.</summary>
+    /// <summary>Kinds with a live have/need counter. Mirrors <see cref="ScribeBlock.IsCarriedCountTracked"/>.</summary>
     public bool IsCarriedCountTracked => IsTracker || IsCraft;
-    /// <summary>The row's display label: a Craft parent frames its output name ("Craft Iron Ingot"), a
-    /// Tracker/Link shows its resolved item name (its own Text is empty), a Task shows its authored text.
-    /// Also used by the collapsing ghost so a removed item row doesn't collapse as a blank row.</summary>
+    /// <summary>The row's display label: Craft frames its output name, Tracker/Link show the resolved item
+    /// name (their own Text is empty), a Task shows its authored text.</summary>
     public string Label => IsCraft ? Lang.Get("scribe:scribe-gui-craft-row-label", DisplayName ?? Text)
         : IsItemKind ? (DisplayName ?? Text) : Text;
 }
 
 /// <summary>
-/// The Pin Tab's content tree: the player's pins as an editable, reorderable list, plus the
-/// completion-policy picker below. Reuses the editor view's row shape (grip + checkbox +
-/// <see cref="ScribeMultilineField"/> + hover delete/unpin), but every row is editable by default and
-/// sourced from the player's pin set rather than a document. Uses a NON-virtualized
-/// <see cref="SingleChildScrollView"/> + <see cref="Column"/> of ALL rows (like the editor) so every
-/// field's focus node stays mounted and the dialog can coordinate cross-row focus/commit. No max-row cap.
+/// The Pin Tab's content tree: the player's pins as an editable, reorderable list plus the completion-policy
+/// picker. Uses a NON-virtualized scroll view of ALL rows (like the editor) so every field's focus node
+/// stays mounted and the dialog can coordinate cross-row focus/commit.
 /// </summary>
 internal sealed class ScribePinnedContent : StatefulWidget
 {
@@ -123,45 +114,35 @@ internal sealed class ScribePinnedContent : StatefulWidget
     public Action<Guid, Guid> OnToggleComplete { get; }
     public Action<Guid, Guid> OnDelete { get; }
     public Action<Guid, Guid> OnUnpin { get; }
-    /// <summary>Open a pinned Tracker/Link's target Handbook page (its name is a hyperlink), addressed by
-    /// TaskId. Never touches completion — distinct from the row's checkbox.</summary>
+    /// <summary>Opens a pinned Tracker/Link's target Handbook page; never touches completion.</summary>
     public Action<Guid> OnOpenLink { get; }
     public Action<int, int> OnReorder { get; }
     public ScribeCompletionPolicy CompletionPolicy { get; }
     public Action<ScribeCompletionPolicy> OnCompletionPolicyChanged { get; }
-    /// <summary>Horizontal breathing room applied around the completion-policy picker header, matching the
-    /// title row's inset (<c>left: 10 + 0.04·W, right: 0.04·W</c>) so the picker lines up with the title
-    /// band above it. Passed in from the dialog, which owns the <c>ScribeLayout</c> width.</summary>
+    /// <summary>Inset around the picker header, matching the title row's inset
+    /// (<c>left: 10 + 0.04·W, right: 0.04·W</c>); supplied by the dialog, which owns the layout width.</summary>
     public EdgeInsets PolicyPickerPadding { get; }
     public ScribeRowStyle Style { get; }
     /// <summary>Dialog-owned scroll controller shared by all views; NOT disposed here.</summary>
     public ScrollController ScrollController { get; }
-    /// <summary>Host-owned collapse controllers for the Pin Tab's departing rows,
-    /// passed through to the <see cref="ScribeAnimatedList"/> so a removed pin's row collapses out rather than
-    /// snapping. The dialog owns its lifetime (survives the resync reconcile) and reads its <c>AnyAnimating</c>
-    /// to drive scroll-pin/hover in <c>OnRenderGUI</c>; NOT disposed here.</summary>
+    /// <summary>Host-owned collapse controllers for departing rows, passed to the <see cref="ScribeAnimatedList"/>.
+    /// The dialog owns its lifetime; NOT disposed here.</summary>
     public ScribeAnimationRegistry CollapseRegistry { get; }
-    /// <summary>Fired (deferred) when a departing pin row's collapse completes and the list has shrunk, so the
-    /// dialog can re-clamp the shared scroll extent — see <see cref="ScribeAnimatedList.OnDepartureSettled"/>.</summary>
+    /// <summary>Fired (deferred) when a departing row's collapse completes, so the dialog can re-clamp the
+    /// shared scroll extent — see <see cref="ScribeAnimatedList.OnDepartureSettled"/>.</summary>
     public Action OnDepartureSettled { get; }
-    /// <summary>Live illumination shade, threaded in so the policy-caption hover
-    /// tooltip — which renders in the global Overlay layer, outside the dialog body's own ScribeGlobalTint
-    /// wrap — can be shaded to match the body in low light.</summary>
+    /// <summary>Live illumination shade; the policy-caption tooltip renders in the global Overlay layer,
+    /// outside the body's tint wrap, so it needs this to match the body in low light.</summary>
     public ScribeAmbientLightSampler.Shade CurrentShade { get; }
-    /// <summary>Optional per-surface restyle of the completion-policy Dropdown, threaded from the dialog's
-    /// <c>DecoratePolicyDropdownStyle</c> seam. <c>null</c> = the theme's default style is used verbatim. The
-    /// chalkboard supplies one to make its open menu's SELECTED row legible (fully-opaque accent fill +
-    /// <c>OnPrimary</c> label) — see the seam's doc-comment.</summary>
+    /// <summary>Optional per-surface restyle of the completion-policy Dropdown; <c>null</c> uses the theme's
+    /// default style verbatim.</summary>
     public System.Func<DropdownStyle, DropdownStyle>? DecoratePolicyDropdownStyle { get; }
-    /// <summary>Whether <see cref="ScribeTabHeader.Build"/> renders its Row 2 subtitle line, read from
-    /// <c>modSystem.VisualTuning.ShowSubtitleRow</c>.</summary>
+    /// <summary>Whether <see cref="ScribeTabHeader.Build"/> renders its Row 2 subtitle line.</summary>
     public bool ShowSubtitleRow { get; }
-    /// <summary>The full-color assigned-task stamp raster (see <see cref="ScribeAssignedTaskIcon"/>),
-    /// resolved once by the dialog and passed down so this row widget stays API-free. Null falls back to
-    /// the plain SVG glyph.</summary>
+    /// <summary>Full-color assigned-task stamp raster (see <see cref="ScribeAssignedTaskIcon"/>); null falls back
+    /// to the plain SVG glyph.</summary>
     public SKBitmap? AssignedStampBitmap { get; }
-    /// <summary>The external-mod hover-info stamp raster (see <see cref="ScribeExternalInfoIcon"/>),
-    /// resolved once by the dialog and passed down so this row widget stays API-free. Null falls back
+    /// <summary>External-mod hover-info stamp raster (see <see cref="ScribeExternalInfoIcon"/>); null falls back
     /// to the plain SVG glyph.</summary>
     public SKBitmap? ExternalStampBitmap { get; }
 
@@ -170,9 +151,8 @@ internal sealed class ScribePinnedContent : StatefulWidget
 
 internal sealed class ScribePinnedContentState : State<ScribePinnedContent>
 {
-    // Drag-reorder state (this State owns the row list, so a drag updates via SetState here — NOT the
-    // dialog's ForceRebuild, which would unmount the grip mid-drag and drop the pointer capture). Mirrors
-    // ScribeEditorContentState.
+    // Drag state updates via SetState here, NOT the dialog's ForceRebuild, which would unmount the grip
+    // mid-drag and drop the pointer capture.
     private int? dragFromIndex;
     private int? dragOverIndex;
 
@@ -186,10 +166,8 @@ internal sealed class ScribePinnedContentState : State<ScribePinnedContent>
 
     private void OnRowDragEnd()
     {
-        // ALWAYS repaint on release (see the editor's OnRowDragEnd): clear the drag under SetState so the
-        // ghost row's dimmed content and the ◀/▶ grip arrows revert even on a no-op release. OnReorder's
-        // from==to path sends no packet and triggers no rebuild, so without this the row would stay dimmed
-        // with a ◀ handle.
+        // Always repaint on release: a from==to OnReorder triggers no rebuild, so without SetState the
+        // source row would stay dimmed with a ◀ handle.
         int? from = dragFromIndex;
         int? to = dragOverIndex;
         SetState(() => { dragFromIndex = null; dragOverIndex = null; });
@@ -204,24 +182,15 @@ internal sealed class ScribePinnedContentState : State<ScribePinnedContent>
         var colors = Theme.Of(context).ColorScheme;
         TextStyle labelStyle = new() { FontSize = 14, Color = colors.OnSurface };
 
-        // Route the rows through ScribeAnimatedList: the container diffs the
-        // TaskId-keyed set frame-to-frame, so a pin removed by complete/unpin/delete — which lands here as a
-        // now-absent row on the OnMyPinsChanged reconcile — collapses out (rows below sliding up) rather than
-        // snapping. The container abstracts MOTION only: it decides row ORDER (live rows + collapsing ghosts
-        // spliced at their old slots) and hands that ordered list to OUR layoutBuilder below, which keeps the
-        // Pin Tab's own Scrollbar > SingleChildScrollView > Column shape. Immediate policy (no undo window —
-        // the Pin Tab's Completion Policy is visible/editable and it has discrete unpin/delete controls, so
-        // its removals are affirmative choices).
+        // Rows go through ScribeAnimatedList so a removed pin collapses out instead of snapping. The container
+        // decides row order (live rows + collapsing ghosts); our layoutBuilder keeps the Pin Tab's own scroll
+        // shape. Immediate policy: removals here are affirmative choices, so there is no undo window.
         //
-        // Each live row is a TaskId-keyed ScribePinRow (its ScribeMultilineField State — hence
-        // caret + unsaved buffer — reconciles across a resync). Each departing row supplies an explicit frozen
-        // ghost: a live pin row is unsafe to freeze in place (its checkbox/field/gestures would stay live mid-
-        // collapse and its focus node is gone once the pin leaves the set), so we snapshot it as a static
-        // ScribeFrozenEditorRow — the same [grip-spacer][checkbox][text] shape the editor's ghost uses, so the
-        // Pin Tab and editor collapse identically. Pinned:false → no resting tint (a Pin Tab row has none).
-        // Mirrors the editor's arrow gate (ScribeEditorContent.cs) — the drop-target
-        // arrow is a direct rendering of the same validity check ScribePinOrdering.Reorder's commit uses,
-        // excluding the dragged pin's own cluster (dropping on your own already-pinned children is a no-op).
+        // Live rows are TaskId-keyed so field state (caret, unsaved buffer) survives a resync. A departing
+        // row uses a static ScribeFrozenEditorRow ghost because a live row's checkbox/field/gestures would
+        // stay live mid-collapse and its focus node is gone. Pinned:false = no resting tint.
+        // The drop-target arrow mirrors the validity check ScribePinOrdering.Reorder's commit uses,
+        // excluding the dragged pin's own cluster (dropping on your own pinned children is a no-op).
         List<int>? dragDepths = null;
         (int ClusterStart, int ClusterEnd) dragCluster = default;
         if (dragFromIndex is { } dragFrom)
@@ -246,7 +215,6 @@ internal sealed class ScribePinnedContentState : State<ScribePinnedContent>
                     autoFocus: Widget.AutoFocusTaskId == r.TaskId,
                     isDropTarget: dragFromIndex is not null && dragOverIndex == i && IsValidDropTarget(i),
                     isDragSource: dragFromIndex == i,
-                    // Any drag in progress → non-source/non-target rows hide their grip glyph.
                     dragActive: dragFromIndex is not null,
                     onTextChanged: Widget.OnTextChanged,
                     onCommitText: Widget.OnCommitText,
@@ -261,14 +229,11 @@ internal sealed class ScribePinnedContentState : State<ScribePinnedContent>
                     assignedStampBitmap: Widget.AssignedStampBitmap,
                     externalStampBitmap: Widget.ExternalStampBitmap,
                     currentShade: Widget.CurrentShade,
-                    // Key by TaskId (not index) so a row's field State + element identity track the pin
-                    // across a reorder/resync rebuild rather than by list position.
+                    // Keyed by TaskId, not index, so identity tracks the pin across reorder/resync.
                     key: new ValueKey<Guid>(r.TaskId)),
                 Ghost: new ScribeFrozenEditorRow(
-                    // The collapse ghost snapshots the row's real Kind + resolved item fields so a
-                    // removed Tracker/Link collapses showing its icon + name (+ counter) rather than a blank
-                    // task row. Every pinnable kind is Completable, so the ghost keeps its checkbox mirroring
-                    // the live row as it collapses.
+                    // Snapshots the real Kind + resolved item fields so a removed Tracker/Link collapses
+                    // showing its icon + name rather than a blank task row.
                     new ScribeEditRowData(Index: i, Kind: r.Kind, Done: r.Done, Pinned: false, TaskId: r.TaskId,
                         Text: r.Text, DisplayStack: r.DisplayStack, DisplayName: r.DisplayName,
                         TargetQuantity: r.TargetQuantity, CurrentQuantity: r.CurrentQuantity, LinkTarget: r.LinkTarget,
@@ -283,18 +248,15 @@ internal sealed class ScribePinnedContentState : State<ScribePinnedContent>
             registry: Widget.CollapseRegistry,
             policy: ScribeListRemovalPolicy.Immediate,
             onDepartureSettled: Widget.OnDepartureSettled,
-            // The layout wrapper is ours: the container passes the ordered widget list (live rows +
-            // any collapsing ghosts) and we wrap it. When that list is empty — no live rows
-            // AND no ghost still collapsing — show the empty-state prompt; this keeps the placeholder from
-            // popping in before the LAST removed row has finished collapsing.
+            // Empty-state prompt only when no live rows AND no ghost still collapsing, so it doesn't pop
+            // in before the last removed row finishes collapsing.
             layoutBuilder: rows => rows.Count == 0
                 ? new Padding(
                     EdgeInsets.All(12),
                     child: new Text(
                         Lang.Get("scribe:scribe-gui-pintab-empty"),
                         new TextStyle { FontSize = 14, Color = colors.OnSurfaceVariant, SoftWrap = true }))
-                // 8-unit top padding lives INSIDE the scroll region so the durable divider above sits
-                // flush against the viewport and this breathing room scrolls away with the content.
+                // Top padding is inside the scroll region so the divider above sits flush with the viewport.
                 : new Scrollbar(
                     controller: Widget.ScrollController,
                     child: new SingleChildScrollView(
@@ -306,19 +268,12 @@ internal sealed class ScribePinnedContentState : State<ScribePinnedContent>
                             children: rows))))
                 { AutoHide = false });
 
-        // Completion-policy picker: the same control the Settings window offers, editing the one shared
-        // per-player preference ("one value, two hosts"). Positioned as the view's
-        // HEADER, above the list.
-        //
-        // The caption scales with the window text size (derived from the shared row Style, which is
-        // BaseWindowFontSize * WindowFontScale) and carries the SAME hover helptext the Settings screen
-        // shows for this setting, so the two hosts of this one preference read identically. Both the
-        // caption/help and the dropdown's own text follow the player's chosen Task Text Font.
+        // Completion-policy picker: the same shared per-player preference the Settings window edits. The
+        // caption scales with the window text size (derived from the row Style) and carries the same hover
+        // helptext as Settings.
         float scale = Widget.Style.FontSize / ScribeRowConstants.BaseWindowFontSize;
         string taskFont = ScribeTaskFont.Resolve(Widget.Style.TaskFontFamily);
-        // Caption renders in Caudex like the rest of Row 3 (the policy picker) — explicit rather than
-        // inherited from the tab's DefaultTextStyle ancestor, matching the title/subtitle rows above it.
-        // The smaller 13*scale size is a deliberate delta and stays explicit too.
+        // Font and the smaller 13*scale size are explicit rather than inherited from the tab's DefaultTextStyle.
         Widget policyCaption = new Text(Lang.Get("scribe:settings-completionpolicy"),
             new TextStyle
             {
@@ -328,10 +283,8 @@ internal sealed class ScribePinnedContentState : State<ScribePinnedContent>
             });
         policyCaption = ScribeGlobalTint.ShadedTooltip(
             child: policyCaption,
-            // Shade the whole tooltip — bubble + text — to match the body in low light
-            // same reduced hover strength as the shared WithTooltip
-            // helper. This tooltip renders OUTSIDE the tab subtree, so the DefaultTextStyle ancestor
-            // does NOT reach it — it must keep an explicit task font.
+            // Shades bubble + text like the shared WithTooltip helper. Renders OUTSIDE the tab subtree, so
+            // the DefaultTextStyle ancestor does not reach it: it needs an explicit task font.
             content: new Padding(
                 EdgeInsets.All(6),
                 child: new Text(
@@ -346,16 +299,11 @@ internal sealed class ScribePinnedContentState : State<ScribePinnedContent>
             baseTheme: Theme.Of(context),
             shade: Widget.CurrentShade);
 
-        // Start from the theme's dropdown style and swap in Caudex on its shared TextStyle (used for both
-        // the trigger button label and the menu items) — Row 3 renders in Caudex like the title/subtitle
-        // rows above it, not the player's task font. Kept explicit (not inherited) regardless: the
-        // dropdown's popup menu renders in a global overlay, outside the tab subtree the DefaultTextStyle
-        // ancestor covers — and Dropdown takes a DropdownStyle, not a plain Text anyway.
+        // Swap Caudex onto the dropdown's shared TextStyle (trigger label and menu items). Explicit because the
+        // popup menu renders in a global overlay outside the DefaultTextStyle subtree.
         var dropdownStyle = Theme.Of(context).DropdownStyle;
         dropdownStyle = dropdownStyle with { TextStyle = dropdownStyle.TextStyle with { FontFamily = ScribeTaskFont.ButtonFamily } };
-        // Let the owning dialog restyle the picker per its theme: the chalkboard fixes its
-        // unreadable selected-row colors here. Applied AFTER the font tweak so the surface override composes on
-        // top; null (every other surface) leaves the theme default untouched.
+        // Applied AFTER the font tweak so the surface override composes on top.
         if (Widget.DecoratePolicyDropdownStyle is { } decorate) dropdownStyle = decorate(dropdownStyle);
 
         var policyPicker = new Column(
@@ -367,8 +315,7 @@ internal sealed class ScribePinnedContentState : State<ScribePinnedContent>
                 policyCaption,
                 new Dropdown<ScribeCompletionPolicy>(
                     value: Widget.CompletionPolicy,
-                    // Explicit display order: Keep (stay), Keep (sink),
-                    // Unpin (stay), Unpin (sink), Delete — kept in sync with the Settings picker.
+                    // Display order must stay in sync with the Settings picker.
                     items: new List<DropdownItem<ScribeCompletionPolicy>>
                     {
                         new() { Value = ScribeCompletionPolicy.Keep,      Label = Lang.Get("scribe:scribe-completion-keep") },
@@ -381,19 +328,14 @@ internal sealed class ScribePinnedContentState : State<ScribePinnedContent>
                     style: dropdownStyle),
             });
 
-        // Root the tab subtree in the player's Task Text Font + window-scaled base size, so the empty
-        // state and the policy caption inherit them. Widgets that render
-        // outside this subtree keep explicit fonts: the policy tooltip + dropdown menu (global overlay)
-        // and the pin rows' ScribeMultilineField (custom RenderBox that doesn't inherit).
-        // Shared Row 2 subtitle + Row 3 (the policy picker, inset to match the title row's padding) + the
-        // durable divider.
+        // Shared subtitle row + the policy picker (inset to match the title row) + the divider.
         Widget header = ScribeTabHeader.Build(colors, Widget.Style,
             "scribe:scribe-gui-nav-pinned", "scribe:scribe-gui-subtitle-pinned",
             Widget.ShowSubtitleRow,
             new Padding(Widget.PolicyPickerPadding, child: policyPicker));
 
-        // Top inset is 4 (tight gap between the title bar and the Row 2 subtitle); left/right/bottom are 10
-        // like every other tab.
+        // Root the subtree in the player's task font + window-scaled size. The policy tooltip, dropdown menu and
+        // ScribeMultilineField render outside it or don't inherit, so they keep explicit fonts.
         return ScribeTextDefaults.Wrap(Widget.Style.TaskFontFamily, Widget.Style.FontSize, new Padding(
             EdgeInsets.Ltrb(10, 4, 10, 10),
             child: new Column(
@@ -409,10 +351,9 @@ internal sealed class ScribePinnedContentState : State<ScribePinnedContent>
 }
 
 /// <summary>
-/// One Pin Tab row: a drag grip + a completion checkbox + the pin's directly-editable text field, with
-/// hover-conditional unpin and delete buttons floating on the right — the editor row's shape
-/// (<see cref="ScribeEditRow"/>) fed from a pin rather than a document block. Editable by default; every
-/// action is addressed by the pin's stable <c>(DocId, TaskId)</c>. Keyed by TaskId by its parent.
+/// One Pin Tab row: drag grip + completion checkbox + editable text field, with hover-only unpin and delete
+/// buttons on the right (the <see cref="ScribeEditRow"/> shape fed from a pin). Actions are addressed by
+/// the pin's <c>(DocId, TaskId)</c>.
 /// </summary>
 internal sealed class ScribePinRow : StatefulWidget
 {
@@ -466,16 +407,12 @@ internal sealed class ScribePinRow : StatefulWidget
     public int Index { get; }
     public FocusNode? FocusNode { get; }
     public bool AutoFocus { get; }
-    /// <summary>True while a drag is in progress and this row is the current drop target — the row's grip
-    /// shows a right-pointing (▶) accent glyph marking where the dragged row would land.</summary>
+    /// <summary>True while a drag is in progress and this row is the current drop target (grip shows ▶).</summary>
     public bool IsDropTarget { get; }
-    /// <summary>True while a drag is in progress and this row is the one being dragged (its origin) — the
-    /// row shows a left-pointing (◀) grip glyph and dims to read as lifted. Takes priority over
-    /// <see cref="IsDropTarget"/> when the cursor hovers back over the source row.</summary>
+    /// <summary>True for the row being dragged (grip shows ◀, content dims). Wins over
+    /// <see cref="IsDropTarget"/> when the cursor is back over the source row.</summary>
     public bool IsDragSource { get; }
-    /// <summary>True while ANY grip-drag is in progress (this row may be neither source nor target). A
-    /// non-participating row hides its grip glyph so the list declutters down to just the ◀ source and ▶
-    /// drop-target rows.</summary>
+    /// <summary>True while ANY grip-drag is in progress; non-participating rows hide their grip glyph.</summary>
     public bool DragActive { get; }
     public Action<Guid, string> OnTextChanged { get; }
     public Action<Guid> OnCommitText { get; }
@@ -487,11 +424,9 @@ internal sealed class ScribePinRow : StatefulWidget
     public Action<int> OnDragOver { get; }
     public Action OnDragEnd { get; }
     public ScribeRowStyle Style { get; }
-    /// <summary>The full-color assigned-task stamp raster, threaded down from the content widget (see
-    /// <see cref="ScribePinnedContent.AssignedStampBitmap"/>). Null falls back to the plain SVG glyph.</summary>
+    /// <summary>See <see cref="ScribePinnedContent.AssignedStampBitmap"/>.</summary>
     public SKBitmap? AssignedStampBitmap { get; }
-    /// <summary>The external-mod hover-info stamp raster, threaded down from the content widget (see
-    /// <see cref="ScribePinnedContent.ExternalStampBitmap"/>). Null falls back to the plain SVG glyph.</summary>
+    /// <summary>See <see cref="ScribePinnedContent.ExternalStampBitmap"/>.</summary>
     public SKBitmap? ExternalStampBitmap { get; }
     public ScribeAmbientLightSampler.Shade CurrentShade { get; }
 
@@ -501,9 +436,8 @@ internal sealed class ScribePinRow : StatefulWidget
 internal sealed class ScribePinRowState : State<ScribePinRow>
 {
     private bool done;
-    /// <summary>True while the pointer is over this row: the delete/unpin controls are hidden until then
-    /// (the editor row's hover-gating). The grip is NOT hover-gated (it stays mounted so a drag it started
-    /// can't lose pointer capture mid-move).</summary>
+    /// <summary>True while the pointer is over this row; gates delete/unpin. The grip is NOT hover-gated so a
+    /// drag it started can't lose pointer capture mid-move.</summary>
     private bool hovered;
 
     public override void InitState()
@@ -512,39 +446,30 @@ internal sealed class ScribePinRowState : State<ScribePinRow>
         done = Widget.Data.Done;
     }
 
-    /// <summary>Resync the optimistic <see cref="done"/> when an external change flips this row's authoritative
-    /// completion. Mirrors <c>ScribeReadRowState.UpdateWidget</c>: the Pin Tab reconciles in place, so a server re-push
-    /// (e.g. a HUD completion under a Keep/Sink policy, where the pin stays in the set) REUSES this
-    /// TaskId-keyed row rather than remounting it — without this override, <see cref="InitState"/>'s seed goes
-    /// stale and the checkbox never reflects the external toggle. Gate on the authoritative value actually
-    /// CHANGING so a pure chrome reconcile (pin re-tint, reorder) doesn't stomp an in-flight optimistic tick
-    /// the player just made — the same discipline the Read view uses.</summary>
+    /// <summary>Resyncs the optimistic <see cref="done"/> when the authoritative completion flips externally
+    /// (a server re-push reuses this keyed row, so the <see cref="InitState"/> seed would go stale). Gated on
+    /// the value actually changing so a chrome-only reconcile doesn't stomp an in-flight optimistic tick.</summary>
     public override void UpdateWidget(ScribePinRow oldWidget)
     {
         base.UpdateWidget(oldWidget);
         if (oldWidget.Data.Done != Widget.Data.Done) done = Widget.Data.Done;
     }
 
-    /// <summary>The content of a Tracker/Link pin row: the referenced item's icon + name, plus a have/need
-    /// counter on the LEFT for a Tracker. The name is a hyperlink — tapping it
-    /// opens the item's Handbook page via <see cref="ScribePinRow.OnOpenLink"/> and never touches the row's
-    /// checkbox. Mirrors <c>ScribeReadRowState.BuildItemContent</c> exactly so the Pin Tab, read, and editor
-    /// views render Tracker/Link rows identically (counter-left; future Crafting tasks inherit it).</summary>
+    /// <summary>Item icon + name (a hyperlink via <see cref="ScribePinRow.OnOpenLink"/>), plus a left-hand
+    /// have/need counter for a Tracker. Must match <c>ScribeReadRowState.BuildItemContent</c> so all views
+    /// render these rows identically.</summary>
     private Widget BuildItemContent(ColorScheme colors, ScribeRowStyle style)
     {
         var data = Widget.Data;
         float iconSize = ScribeRowConstants.ItemIconSize
             * (style.ControlSize / ScribeRowConstants.RowCheckboxSize);
         float lineHeight = ScribeRowControlNudge.TextLineHeight(style.FontSize);
-        // A Quest Link's icon renders in the row's leading slot instead, so this
-        // inline slot has no icon for it and the name's band height falls back to ItemNameLineHeight
-        // (cuneiform-aware on the tablet).
+        // A Quest Link's icon renders in the leading slot, so this inline slot has none.
         bool isQuestLink = ScribeLinkTarget.IsQuest(data.LinkTarget);
         float bandHeight = ScribeRowControlNudge.ItemVisualBandHeight(
             style, data.LinkTarget, data.IsStaticVsQuestObjective, data.DisplayStack);
-        // Link accent: Primary on light surfaces, or the row's override where Primary is illegible as text on
-        // a dark surface (the Chalkboard slate — ScribeRowStyle.LinkColor). A Quest Link uses the separate QuestLinkColor
-        // seam instead, so it reads distinct from a plain Link.
+        // Primary, or the row's LinkColor override where Primary is illegible on a dark surface. A Quest Link
+        // uses QuestLinkColor so it reads distinct.
         Vector4 linkColor = data.IsStaticVsQuestObjective
             ? colors.OnSurface
             : isQuestLink
@@ -570,15 +495,12 @@ internal sealed class ScribePinRowState : State<ScribePinRow>
         var rowChildren = new List<Widget>();
         if (data.IsLink)
         {
-            // A Quest Link's icon already renders in the row's leading slot — no
-            // second icon here.
             if (!isQuestLink) rowChildren.Add(icon);
             rowChildren.Add(nameLink);
         }
-        else // Tracker or Craft parent: a "have / need" counter on the LEFT, then the item icon + name.
+        else // Tracker or Craft parent: "have / need" counter on the left, then icon + name.
         {
             bool satisfied = data.CurrentQuantity >= data.TargetQuantity;
-            // Inverted emphasis + satisfied strikethrough, shared with the read/HUD counters.
             rowChildren.Add(ScribeCenterIfShort.InBand(
                 ScribeTrackerCounterText.Build(
                     data.CurrentQuantity, data.TargetQuantity, satisfied,
@@ -588,7 +510,7 @@ internal sealed class ScribePinRowState : State<ScribePinRow>
             rowChildren.Add(nameLink);
         }
 
-        // Same 4px left inset as the read item row (Pin and Read must match). Editor stepper stays flush.
+        // 4px left inset must match the read item row.
         return new Padding(
             EdgeInsets.Only(left: 4f, right: style.FieldPadX),
             child: new Row(
@@ -606,17 +528,9 @@ internal sealed class ScribePinRowState : State<ScribePinRow>
 
         var children = new List<Widget>();
 
-        // Grip on the FAR LEFT (always present, matching the editor). onPress/hover(row)/release drive the
-        // reorder; nudged down to center on a one-line input, with the trailing gap zeroed.
-        //
-        // The grip glyph is state-driven during a drag, identical to
-        // the editor view: source (grabbed) row → ◀ (muted OnSurfaceVariant); the prospective drop row → ▶
-        // (accent Primary); any OTHER row while a drag is in progress → a same-size empty box (glyph hidden)
-        // so only the ◀/▶ pair shows and the column width is unchanged. Source wins over drop-target when
-        // the cursor hovers back over the origin row.
-        // Ink for the grip + its ◀/▶ arrows: the tablet supplies a darker material ink (matching the
-        // title-bar grip/pencil) via style.GripGlyphColor so the handle reads as engraved on the clay;
-        // other surfaces fall back to the theme's mid-gray OnSurfaceVariant.
+        // Grip is always present on the far left. During a drag: source row = ◀, prospective drop row = ▶,
+        // any other row = same-size empty box so the column width is unchanged. Source wins over drop target.
+        // The tablet supplies its own ink via style.GripGlyphColor.
         Vector4 gripColor = style.GripGlyphColor ?? colors.OnSurfaceVariant;
         Widget gripGlyph =
             Widget.IsDragSource ? new ScribeVsIconGlyph("scribetriangleleft", style.ControlSize, gripColor)
@@ -632,23 +546,18 @@ internal sealed class ScribePinRowState : State<ScribePinRow>
                 onRelease: _ => Widget.OnDragEnd(),
                 child: gripGlyph)));
 
-        // Source-row "lifted / in-hand" dim (matching the editor): while THIS row is dragged, its CONTENT
-        // (checkbox + text) paints at ~half opacity, applied per-child so the grip column keeps full opacity
-        // and the ◀ source arrow retains its ink. Always-present (value flips 1.0↔0.5) so no widget swap.
+        // Dragged row's content dims per-child so the grip keeps full opacity. Always present (1.0/0.5) so
+        // no widget swap occurs.
         float contentOpacity = Widget.IsDragSource ? 0.5f : 1f;
 
-        // Completion checkbox — completes with NO undo delay (the send fires immediately; see the dialog's
-        // OnPinCompleteTask). Flips optimistically in its own State; the server re-push reconciles it.
-        // A pinned note has no Done: the checkbox unpins instead (Pin Tab is how you drop a HUD note). A
-        // pinned QuestObjective is the same case — it isn't player-completable (mirrors
-        // ScribeBlock.IsCompletable), so tapping it unpins rather than sending a completion toggle the
-        // server would silently no-op.
+        // Completes with no undo delay; flips optimistically and the server re-push reconciles. A pinned note
+        // or QuestObjective isn't player-completable (see ScribeBlock.IsCompletable), so its checkbox unpins
+        // instead of sending a toggle the server would silently no-op.
         children.Add(new Opacity(contentOpacity, child: new Padding(
             EdgeInsets.Only(top: ScribeRowControlNudge.CheckboxAndGripTop(
                 style, data.IsItemKind, data.LinkTarget,
                 data.IsStaticVsQuestObjective, data.DisplayStack)),
-            // A Quest Link's checkbox is misleading (toggling it doesn't affect the quest), so its slot
-            // renders the quest-marker icon instead.
+            // A Quest Link's slot shows the quest-marker icon; a checkbox would be misleading.
             child: ScribeRowControlNudge.BuildLeadingControl(
                 context, style, data.LinkTarget, done,
                 _ =>
@@ -662,26 +571,19 @@ internal sealed class ScribePinRowState : State<ScribePinRow>
                     Widget.OnToggleComplete(data.DocId, data.TaskId);
                 }))));
 
-        // Assignment marker for an accepted assignment (matching the Read/Editor rows' placement): after
-        // the grip and checkbox, inside the checkbox to its right. Only takes up space when this row
-        // actually is an accepted assignment.
+        // Assignment marker, placed like the Read/Editor rows; takes space only for an accepted assignment.
         if (data.IsAcceptedAssignment)
             children.Add(ScribeAssignedTaskIcon.Build(style, colors.OnSurfaceVariant, data.IsItemKind, Widget.AssignedStampBitmap,
                 context: context, currentShade: Widget.CurrentShade,
                 assignerName: data.AssignerName, assignedDate: data.AssignedDate, acceptedDate: data.AcceptedDate));
 
-        // External-mod hover-info marker — independent of the assignment
-        // marker above; both can appear side by side on the same row.
+        // External-mod hover-info marker; independent of the assignment marker (both can show).
         if (!string.IsNullOrEmpty(data.ExtraInfo))
             children.Add(ScribeExternalInfoIcon.Build(style, colors.OnSurfaceVariant, data.IsItemKind, Widget.ExternalStampBitmap,
                 context: context, currentShade: Widget.CurrentShade, extraInfo: data.ExtraInfo));
 
-        // A Tracker/Link pin renders a non-editable item icon + name (+ a have/need counter for a Tracker),
-        // NOT the editable text field — its own Text is empty, its content is the referenced item, exactly
-        // like the read/editor views. Otherwise the directly-editable text field
-        // (editable by default — no separate edit mode). Held to the same task-text cap as the editor. Writes
-        // through on every keystroke (OnTextChanged buffers it); commits on Enter/blur (OnCommitText). Enter
-        // commits in place (no insert-below on the Pin Tab).
+        // Item kinds render the referenced item (their own Text is empty); otherwise an editable field that
+        // buffers on every keystroke (OnTextChanged) and commits in place on Enter/blur (no insert-below here).
         if (data.IsItemKind)
         {
             children.Add(new Expanded(child: new Opacity(contentOpacity, child: BuildItemContent(colors, style))));
@@ -697,9 +599,7 @@ internal sealed class ScribePinRowState : State<ScribePinRow>
                 padY: style.FieldPadY,
                 autoFocus: Widget.AutoFocus,
                 maxLength: ScribeDocumentCodec.MaxTaskTextLength,
-                // Read the seeded focus-border seam like the Edit view / guestbook do so a focused
-                // Pinned-tab row lights the SAME border as an Edit-view row — chalk-white on the chalkboard,
-                // Primary elsewhere.
+                // Same focus border as an Edit-view row.
                 focusBorderColor: style.InputFocusBorderColor,
                 onChanged: text => Widget.OnTextChanged(data.TaskId, text),
                 onCommitAndAdvance: () => Widget.OnCommitText(data.TaskId),
@@ -708,8 +608,7 @@ internal sealed class ScribePinRowState : State<ScribePinRow>
                 onBlur: () => Widget.OnCommitText(data.TaskId)))));
         }
 
-        // A Depth-1 subtask adds a left inset so a pinned subtask reads as nested, matching the editor/read
-        // rows so the indent is identical across surfaces; depth-0 rows are unchanged.
+        // Subtask indent matches the editor/read rows.
         float subtaskIndent = data.Depth > 0 ? style.SubtaskIndent : 0f;
         Widget rowBody = new Padding(
             EdgeInsets.Only(
@@ -723,11 +622,8 @@ internal sealed class ScribePinRowState : State<ScribePinRow>
                 mainAxisSize: MainAxisSize.Max,
                 children: children));
 
-        // Drag feedback is on the grip glyph (◀/▶ above) + a source-row opacity dim (below), NOT a row
-        // background wash.
-        // A Pin Tab row has no resting pinned tint of its own (every row is pinned), so its idle Container
-        // is fully transparent. The Container stays ALWAYS present (transparent fill / zero border) so the
-        // widget type never swaps mid-drag, keeping the field's State mounted (the STRUCTURAL STABILITY rule).
+        // No resting tint (every row is pinned). The Container stays ALWAYS present (transparent) so the
+        // widget type never swaps mid-drag, which would unmount the field's State.
         rowBody = new Container(
             style: new BoxStyle
             {
@@ -737,8 +633,7 @@ internal sealed class ScribePinRowState : State<ScribePinRow>
             },
             child: rowBody);
 
-        // Delete + unpin float on the RIGHT as real buttons, shown only on hover. delete = right-most (the
-        // task itself), unpin to its left (remove only the pin). Same Stack overlay the editor uses.
+        // Hover-only buttons: delete right-most (the task itself), unpin to its left (just the pin).
         var stackChildren = new List<Widget> { rowBody };
         if (hovered)
         {
@@ -758,7 +653,7 @@ internal sealed class ScribePinRowState : State<ScribePinRow>
                 right: btnRight + boxW + gap, top: btnTop,
                 child: new ScribeRowButton(
                     iconName: "scribepin",
-                    iconColor: colors.Primary, // a Pin Tab row is always pinned → active accent
+                    iconColor: colors.Primary,
                     size: btn,
                     onTap: () => Widget.OnUnpin(data.DocId, data.TaskId),
                     iconScale: 1.1f))); // pin glyph +10%
@@ -775,20 +670,6 @@ internal sealed class ScribePinRowState : State<ScribePinRow>
     }
 }
 
-/// <summary>Top-margin nudges that visually center a row's shorter controls on a SINGLE-LINE text
-/// input, without moving them when the text wraps to multiple lines.
-///
-/// <para>The row lays its children out with <see cref="CrossAxisAlignment.Start"/> (top-aligned) so a
-/// multi-line input keeps the controls pinned to its first line. That means the controls do NOT auto-
-/// center — a one-line input is a couple of pixels taller than the grip/checkbox glyphs and the
-/// floating pin/delete buttons, so each reads a hair high. We nudge each control DOWN by a top margin
-/// to sit centered on a one-line row. Because the nudge is smaller than the (input − control) slack, it
-/// never grows the row height.</para>
-///
-/// <para>The window font size is user-adjustable, so these are COMPUTED from
-/// the measured single-line input height and the control's size at the current scale — centering is
-/// <c>(inputHeight − controlHeight) / 2</c>, which is not linear in the scale, so a fixed multiplier
-/// wouldn't stay centered. The single-line input height mirrors
-/// <c>ScribeMultilineFieldRender</c>'s own formula (measured line height of "Ag" in the same
-/// "sans-serif" family + the field's vertical padding), so the computed offset tracks the real field at
-/// any scale.</para></summary>
+/// <summary>Top-margin nudges that center a row's shorter controls on a single-line input without moving
+/// them when the text wraps. Computed as <c>(inputHeight − controlHeight) / 2</c> (not linear in the font
+/// scale), mirroring <c>ScribeMultilineFieldRender</c>'s single-line height formula.</summary>

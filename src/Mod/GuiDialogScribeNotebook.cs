@@ -36,25 +36,16 @@ public class GuiDialogScribeNotebook : ScribeDialogBase
     private IInventory? _hotbar;
 
     // ── Manual History entry state ──────────────────────────────
-    // One FocusNode per Manual entry the local player currently owns AND may edit — the pending
-    // unsent draft (if any) plus every already-created Manual entry authored by this player.
-    // Mirrors ScribeDialogBase's _guestbookNoteFocusNodes, keyed by EntryId instead of a natural
-    // (PlayerName, InGameDate) key, since a player can own many Manual entries at once.
+    // One FocusNode per Manual entry the local player owns and may edit (pending draft + authored entries).
     private readonly Dictionary<Guid, FocusNode> _manualFocusNodes = new();
-    // Live (not-yet-committed) text per owned Manual entry, keyed the same way — kept on the
-    // dialog itself (not a per-build closure local) so OnGuiClosed can commit any in-flight edit
-    // on close, the third of the design's three commit triggers (Enter / blur / dialog close).
+    // Uncommitted text per owned entry; held on the dialog so OnGuiClosed can commit in-flight edits.
     private readonly Dictionary<Guid, string> _manualLiveText = new();
     private readonly Dictionary<Guid, string> _manualLastSent = new();
-    // The one pending "Add Entry" draft not yet confirmed by the server, if any. A second "Add
-    // Entry" click while this is set just refocuses it rather than starting a second draft.
+    // The one pending "Add Entry" draft not yet confirmed by the server; a second click refocuses it.
     private Guid? _manualDraftId;
-    // True once the draft's first non-empty commit has been sent (Add), so later commits for the
-    // same EntryId send SetText instead — set independently of the server's round-trip completing.
+    // True once the draft's first non-empty commit is sent, so later commits send SetText instead.
     private bool _manualDraftSent;
-    // One-shot: the freshly-minted draft row autofocuses its field on the build right after
-    // "Add Entry" is clicked, then never again (mirrors ScribeDialogBase.Layout.cs's
-    // autoFocusRowOnRebuild idiom).
+    // One-shot: the new draft row autofocuses on the build right after "Add Entry".
     private bool _manualDraftAutoFocus;
 
     public GuiDialogScribeNotebook(IScribeDocumentHost host, ICoreClientAPI capi)
@@ -66,21 +57,18 @@ public class GuiDialogScribeNotebook : ScribeDialogBase
             _hotbar.SlotModified += OnHotbarSlotModified;
     }
 
-    /// <summary>Disable the engine's frame-by-frame range check. Notebooks are not proximity-bound
-    /// to a block position, so we never want the dialog to auto-close based on distance.</summary>
+    /// <summary>Disables the engine's range check; notebooks are not bound to a block position.</summary>
     protected override double InteractionRange => double.MaxValue;
 
-    /// <summary>Opt out of LibGUI's immersive-mouse-mode "floaty" positioning. The base projects a world
-    /// anchor onto the screen every frame, and with no block to anchor to our dummy <c>BlockPos(0)</c>
-    /// would pin the window to the world origin, so it drifts as the camera turns. Null = plain
-    /// screen-space placement. Inherited by the Clockmaker Notebook.</summary>
+    /// <summary>Opts out of LibGUI's "floaty" world-anchored positioning: the dummy <c>BlockPos(0)</c>
+    /// would pin the window to the world origin and drift with the camera. Null = screen-space placement.
+    /// Inherited by the Clockmaker Notebook.</summary>
     protected override WorldAnchor? Anchor => null;
 
     protected override string EmptyHintLangKey => "scribe:scribe-gui-edit-hint-notebook";
 
-    /// <summary>The Notebook grants editor access immediately without a server round-trip — there is
-    /// no lock to contend over when only one player can hold an item at a time. Seed the scratch from
-    /// the host's current document so existing tasks and title are preserved when entering editor mode.</summary>
+    /// <summary>Grants editor access immediately (an item has no lock contention), seeding the scratch
+    /// from the host's current document.</summary>
     protected override void RequestEditorAccess()
     {
         EnterEditorMode(ScribeDocumentCodec.Serialize(host.Document));
@@ -89,12 +77,9 @@ public class GuiDialogScribeNotebook : ScribeDialogBase
     /// <summary>No editor lock on a Notebook — nothing to release.</summary>
     protected override void SendReleaseLockPacket() { }
 
-    /// <summary>Extends the base capture set with Manual History entry fields (add-custom-history-
-    /// entries): without this, typing into one leaks movement/hotbar keys to the character controller,
-    /// because <see cref="_manualFocusNodes"/> lives on this subclass and the base
-    /// <see cref="ScribeDialogBase.CaptureAllInputs"/> only knows about editor rows, Pin Tab rows, and
-    /// Guestbook notes. Still gated on <see cref="Vintagestory.API.Client.GuiDialog.Focused"/> for the
-    /// same reason the base override is.</summary>
+    /// <summary>Adds Manual History entry fields to the base capture set; without this, typing in one
+    /// leaks movement/hotbar keys to the character controller. Gated on
+    /// <see cref="Vintagestory.API.Client.GuiDialog.Focused"/> like the base override.</summary>
     public override bool CaptureAllInputs()
         => base.CaptureAllInputs()
         || (Focused && _manualFocusNodes.Values.Any(n => n.HasFocus));
@@ -113,9 +98,8 @@ public class GuiDialogScribeNotebook : ScribeDialogBase
             activeColor: IsHistoryView ? ScribeRowConstants.NavActiveHistory : null);
     }
 
-    /// <summary>Builds the History tab content for the Notebook — a newest-first list of automatically
-    /// recorded (read-only) and player-authored <c>Manual</c> entries, plus
-    /// a persistent "Add Entry" control.</summary>
+    /// <summary>Builds the History tab: a newest-first list of automatic (read-only) and player-authored
+    /// <c>Manual</c> entries, plus an "Add Entry" control.</summary>
     protected override Widget BuildHistoryContent()
     {
         var nbHost  = host as NotebookHost;
@@ -129,8 +113,7 @@ public class GuiDialogScribeNotebook : ScribeDialogBase
 
         string myName = capi.World.Player.PlayerName;
 
-        // The pending draft retires the moment its real entry syncs back from the server — from then
-        // on the entries loop below renders it like any other Manual entry this player authored.
+        // The pending draft retires once its real entry syncs back from the server.
         if (_manualDraftId is { } pendingId
             && entries.Any(e => e.Kind == HistoryEventKind.Manual && e.EntryId == pendingId))
         {
@@ -142,17 +125,13 @@ public class GuiDialogScribeNotebook : ScribeDialogBase
         bool autoFocusDraft = _manualDraftAutoFocus;
         _manualDraftAutoFocus = false; // one-shot
 
-        // Family inherited from the tab's DefaultTextStyle ancestor (below): bodyStyle drops its explicit
-        // FontFamily; kind/date follow the task font too.
+        // Font family is inherited from the tab's DefaultTextStyle ancestor (below).
         string taskFont = modSystem.MySettings.TaskFontFamily;
         var bodyStyle = new TextStyle { FontSize = ScribeTaskFont.LayoutSize(taskFont, bodySize), Color = colors.OnSurface };
         var kindStyle = new TextStyle { FontSize = ScribeTaskFont.LayoutSize(taskFont, kindSize), Color = colors.OnSurface with { W = colors.OnSurface.W * 0.65f }, Weight = FontWeight.SemiBold };
         var dateStyle = new TextStyle { FontSize = ScribeTaskFont.LayoutSize(taskFont, dateSize), Color = colors.OnSurface with { W = colors.OnSurface.W * 0.55f } };
 
-        // Bare row content, collected WITHOUT the bottom-padding/divider wrapper — deferred to a second
-        // pass below so "is this the last row" can be answered once the full list is known (a faint
-        // divider separates adjacent entries but never leads or trails the list; add-custom-history-
-        // entries 7.5).
+        // Bare row content; dividers are added in a second pass once the last row is known.
         var rowContents = new List<Widget>(entries.Count + 1);
 
         if (_manualDraftId is { } draftId)
@@ -206,12 +185,8 @@ public class GuiDialogScribeNotebook : ScribeDialogBase
                 }));
         }
 
-        // Second pass: wrap every row but the last in a faint bottom border (20%-opacity "Ink" —
-        // ScribeTheme's own name for OnSurface/OnBackground), then apply the bottom-padding gap to all.
-        // Each non-last row gets its OWN 6px gap between its content and the divider line (so the text
-        // never touches the line it's sitting above), on top of the pre-existing 6px gap after the line
-        // (before the next row's subtitle) — 12px total between one row's text and the next row's
-        // subtitle, 6px between one row's text and its own divider.
+        // Second pass: every row but the last gets a faint bottom divider with a 6px gap above it;
+        // every row gets a 6px gap below.
         Vector4 dividerColor = colors.OnSurface with { W = 0.15f };
         var rows = new List<Widget>(rowContents.Count);
         for (int idx = 0; idx < rowContents.Count; idx++)
@@ -224,10 +199,7 @@ public class GuiDialogScribeNotebook : ScribeDialogBase
             rows.Add(new Padding(EdgeInsets.Only(bottom: 6f), content));
         }
 
-        // A pending draft counts as "not empty" so the compose row never flashes under the empty-state
-        // prompt.
-        // 8-unit top padding lives INSIDE the scroll region so the durable divider above sits flush
-        // against the viewport and this breathing room scrolls away with the content.
+        // The top padding is inside the scroll region so it scrolls away with the content.
         Widget body = rows.Count == 0
             ? new Center(child: new Text(Lang.Get("scribe:scribe-gui-history-empty"), bodyStyle))
             : new Scrollbar(controller: sharedScrollController,
@@ -238,14 +210,9 @@ public class GuiDialogScribeNotebook : ScribeDialogBase
                         crossAxisAlignment: CrossAxisAlignment.Stretch))))
               { AutoHide = false };
 
-        // "Add Entry" button: same size/layout as the Read view's "Task Editor" footer button
-        // (ScribeReadContent.BuildFooterButtons) — a bare Button under Padding(Symmetric(horizontal:
-        // 0.04·W)), placed directly as a child of this tab's own CrossAxisAlignment.Stretch Column. The
-        // Column's Stretch gives this non-flex child a TIGHT width constraint (tab width minus the 4%
-        // insets on each side), and RenderBox.Constrain snaps the button's box to exactly that width —
-        // the same mechanism that makes "Task Editor" span (almost) the full tab rather than shrink-wrap.
-        // FontSize fixed at 14 (not window-scaled) to match ScribeReadContent.switchTextStyle, per the mod
-        // author's explicit ask.
+        // Matches the Read view's "Task Editor" footer button: the Stretch Column gives this bare Button a
+        // tight width (tab width minus 4% insets) so it spans the tab. FontSize is fixed at 14 (not
+        // window-scaled) to match ScribeReadContent.switchTextStyle.
         Widget addEntryButton = new Button(
             child: new Text(Lang.Get("scribe:scribe-gui-history-add"),
                 new TextStyle { FontSize = 14, FontFamily = ScribeTaskFont.ButtonFamily, Color = colors.OnPrimary }),
@@ -256,17 +223,13 @@ public class GuiDialogScribeNotebook : ScribeDialogBase
                 right: 0.04f * host.GetLayout(modSystem.MySettings.PixelArtSize).W),
             child: addEntryButton);
 
-        // Shared Row 2 subtitle + durable divider — the History tab has no
-        // Row 3 controls of its own, so the divider follows directly after the subtitle. Replaces the old
-        // bare leading Divider + uniform Column(spacing: 8) gap.
+        // No Row 3 controls here, so the divider follows directly after the subtitle.
         Widget header = ScribeTabHeader.Build(colors, RowStyle,
             "scribe:scribe-gui-nav-history", "scribe:scribe-gui-subtitle-history",
             modSystem.VisualTuning.ShowSubtitleRow);
 
-        // Root the History tab subtree in the player's Task Text Font + window-scaled base size.
-        // Body/kind/date Text widgets all inherit the family from here.
-        // Top inset is 4 (small gap between the title bar and the Row 2 subtitle); left/right/bottom
-        // are 10 like every other tab.
+        // Roots the subtree in the player's Task Text Font + window-scaled size; Text widgets inherit it.
+        // Insets match the other tabs except top (4).
         return ScribeTextDefaults.Wrap(modSystem.MySettings.TaskFontFamily, bodySize, new Padding(
             EdgeInsets.Ltrb(10, 4, 10, 10),
             new Column(
@@ -281,10 +244,8 @@ public class GuiDialogScribeNotebook : ScribeDialogBase
                 })));
     }
 
-    /// <summary>Keeps <see cref="_manualFocusNodes"/> (and its paired live/last-sent text dictionaries)
-    /// in sync with the currently-owned-and-editable Manual entry set: the pending draft (if any) plus
-    /// every Manual entry authored by <paramref name="myName"/>. Mirrors
-    /// <see cref="ScribeDialogBase.SyncGuestbookFocusNodes"/>, keyed by <see cref="HistoryEntry.EntryId"/>.</summary>
+    /// <summary>Keeps <see cref="_manualFocusNodes"/> and the live/last-sent text dictionaries in sync
+    /// with the pending draft plus every Manual entry authored by <paramref name="myName"/>.</summary>
     private void SyncManualFocusNodes(IReadOnlyList<HistoryEntry> entries, string myName)
     {
         var live = new HashSet<Guid>(entries.Where(e => e.Kind == HistoryEventKind.Manual && e.ActorName == myName).Select(e => e.EntryId));
@@ -301,8 +262,7 @@ public class GuiDialogScribeNotebook : ScribeDialogBase
             if (!_manualFocusNodes.ContainsKey(key)) _manualFocusNodes[key] = new FocusNode();
     }
 
-    /// <summary>"Add Entry": mints a new local-only draft and rebuilds so it renders autofocused, or —
-    /// if a draft is already pending — just reclaims focus on it rather than ever starting a second one.</summary>
+    /// <summary>"Add Entry": mints a local-only autofocused draft, or refocuses the pending one.</summary>
     private void StartNewManualEntryDraft()
     {
         if (_manualDraftId is { } existingId)
@@ -316,12 +276,9 @@ public class GuiDialogScribeNotebook : ScribeDialogBase
         ForceRebuild();
     }
 
-    /// <summary>Shared commit path for a Manual entry's field — reached from Enter, blur, AND
-    /// <see cref="OnGuiClosed"/> (the design's three commit triggers). Sends
-    /// <see cref="ScribeAddHistoryEntryMessage"/> the first time the pending draft commits non-empty
-    /// text, else <see cref="ScribeSetHistoryEntryTextMessage"/> for every later edit to an
-    /// already-created entry. A draft that never receives any text is simply never sent — nothing to
-    /// discard server-side.</summary>
+    /// <summary>Commit path for a Manual entry's field (Enter, blur, and <see cref="OnGuiClosed"/>).
+    /// Sends <see cref="ScribeAddHistoryEntryMessage"/> on the draft's first non-empty commit, else
+    /// <see cref="ScribeSetHistoryEntryTextMessage"/>. A draft that never gets text is never sent.</summary>
     private void CommitManualEntry(Guid entryId)
     {
         if (!_manualLiveText.TryGetValue(entryId, out var live)) return;
@@ -363,8 +320,7 @@ public class GuiDialogScribeNotebook : ScribeDialogBase
         }
     }
 
-    /// <summary>Delete button handler. An unsent draft (never given text, so the server has never heard
-    /// of it) is discarded purely locally; an already-created entry sends
+    /// <summary>An unsent draft is discarded locally; a created entry sends
     /// <see cref="ScribeDeleteHistoryEntryMessage"/> and waits for the server sync to drop its row.</summary>
     private void DeleteManualEntry(Guid entryId)
     {
@@ -407,23 +363,16 @@ public class GuiDialogScribeNotebook : ScribeDialogBase
 
     private void OnActiveSlotChanged(ActiveSlotChangeEventArgs _)
     {
-        // Close when the player switches the active hand AWAY from THIS notebook — keyed on the document's
-        // stable DocId, not merely "still some Scribe item." Switching to a DIFFERENT Scribe item (a second
-        // notebook, a tablet) must still close this dialog; only a hotbar reorder that keeps the same item
-        // active leaves it open (its DocId is unchanged). See ActiveHandItemHostsThisDocument.
+        // Keyed on the document's DocId: switching to a different Scribe item must close this dialog.
         if (!ActiveHandItemHostsThisDocument())
             TryClose();
     }
 
     private void OnHotbarSlotModified(int slotId)
     {
-        // An in-place content re-sync of the STILL-HELD active slot (not a hand-switch) must use a
-        // presence-only check, NOT the strict DocId identity guard OnActiveSlotChanged runs.
-        // A first open of a not-yet-crafted item makes the server
-        // re-sync the stack WITHOUT the client-generated document, so its DocId no longer matches — the
-        // strict guard would close the dialog one frame after opening.
-        // Since the physical item never left the hand, close only if it stopped being a Scribe item at all.
-        // See ActiveHandHoldsAnyScribeDocumentItem for the full rationale.
+        // A re-sync of the still-held slot needs a presence-only check, not the DocId guard: a first
+        // open of a not-yet-crafted item re-syncs the stack without the client-generated document, so
+        // the DocId would mismatch and close the dialog a frame after opening.
         if (slotId == capi.World.Player.InventoryManager.ActiveHotbarSlotNumber
             && !ActiveHandHoldsAnyScribeDocumentItem())
             TryClose();
@@ -434,9 +383,7 @@ public class GuiDialogScribeNotebook : ScribeDialogBase
         capi.Event.AfterActiveSlotChanged -= OnActiveSlotChanged;
         if (_hotbar != null)
             _hotbar.SlotModified -= OnHotbarSlotModified;
-        // Dialog closing is the third of the design's three commit triggers (Enter / blur / close) —
-        // flush any in-flight, uncommitted Manual entry text before tearing the fields down. A draft
-        // that never received any text is a no-op here (CommitManualEntry never sends for it).
+        // Flush in-flight Manual entry text before tearing the fields down.
         foreach (var entryId in _manualLiveText.Keys.ToList())
             CommitManualEntry(entryId);
         foreach (var node in _manualFocusNodes.Values)
@@ -449,24 +396,18 @@ public class GuiDialogScribeNotebook : ScribeDialogBase
         base.OnGuiClosed();
     }
 
-    /// <summary>Notebook saves use <see cref="ScribeNotebookSaveMessage"/> so the server can write
-    /// directly into the player's chosen ItemStack (addressed by slot identity, see
-    /// <see cref="ScribeDialogBase.BuildItemSavePacket"/>) rather than routing through a block entity.</summary>
+    /// <summary>Saves via <see cref="ScribeNotebookSaveMessage"/>, addressing the ItemStack by slot identity
+    /// (see <see cref="ScribeDialogBase.BuildItemSavePacket"/>).</summary>
     protected override void SendFlushPacket(byte[] documentBytes)
     {
         capi.Network.GetChannel(ScribeModSystem.NetworkChannelName).SendPacket(BuildItemSavePacket(documentBytes));
     }
 }
 
-/// <summary>One Manual History entry row (the pending draft, or an already-created entry): the
-/// uneditable kind/date line every entry uses (its kind label merged with the author's name, "
-/// <c>{ActorName}'s Note</c>"), then a second line holding either an editable
-/// <see cref="ScribeMultilineField"/> (own entry) or plain read-only text (someone else's). A
-/// <see cref="StatefulWidget"/> (not a plain method, unlike every other History row) purely so it can
-/// own a hover bool via <see cref="State{T}.SetState"/> — its delete button floats over the text/input
-/// line's right edge, shown ONLY while the pointer hovers that line specifically (not the kind/date
-/// line above it), mirroring <see cref="ScribeEditorContent"/>'s row hover-reveal exactly (add-custom-
-/// history-entries Decisions 7-8). Never a grip/drag handle or a pin control, draft or created.</summary>
+/// <summary>One Manual History entry row (pending draft or created): a read-only kind/date line, then
+/// an editable <see cref="ScribeMultilineField"/> (own entry) or read-only text. A
+/// <see cref="StatefulWidget"/> only to own a hover bool: the delete button floats over the text line's
+/// right edge while the pointer hovers that line (not the kind/date line). No grip or pin control.</summary>
 internal sealed class ScribeManualHistoryRow : StatefulWidget
 {
     public ScribeManualHistoryRow(
@@ -522,9 +463,8 @@ internal sealed class ScribeManualHistoryRowState : State<ScribeManualHistoryRow
 {
     private bool hovered;
 
-    /// <summary>Internal vertical padding baked into the field, matching what's passed to
-    /// <see cref="ScribeMultilineField.PadY"/> below — also feeds the button's vertical-centering math,
-    /// which must agree with the field's own padding to land the button mid-line.</summary>
+    /// <summary>Vertical padding passed to <see cref="ScribeMultilineField.PadY"/>; the button's
+    /// vertical-centering math must agree with it.</summary>
     private const float FieldPadY = 4f;
 
     public override Widget Build(BuildContext context)
@@ -546,10 +486,8 @@ internal sealed class ScribeManualHistoryRowState : State<ScribeManualHistoryRow
                 onCommitAndAdvance: w.OnCommit)
             : new Text(w.DetailText, w.BodyStyle);
 
-        // STRUCTURAL STABILITY (mirrors ScribeEditorContent's own row-hover note): index 0 of the Stack
-        // is ALWAYS this Container wrapping the field/text, regardless of hover — only the trailing
-        // Positioned button mounts/unmounts, so the field's live State (caret, in-progress text) never
-        // gets torn down by a mouse move.
+        // Index 0 of the Stack is always this Container; only the trailing button mounts/unmounts, so the
+        // field's State (caret, text) survives hover changes.
         Widget textLine = new Container(style: new BoxStyle(), child: new Row(children: new Widget[] { new Expanded(detailWidget) }));
 
         var stackChildren = new List<Widget> { textLine };
@@ -567,8 +505,7 @@ internal sealed class ScribeManualHistoryRowState : State<ScribeManualHistoryRow
                     onTap: w.OnDelete)));
         }
 
-        // Hover region wraps ONLY the text/input line, not the kind/date line above it — a player asked
-        // for the button to appear specifically when hovering the text, not "anywhere on the entry".
+        // Hover region wraps only the text/input line, not the kind/date line.
         Widget textLineRegion = w.IsAuthor
             ? new MouseRegion(
                 onEnter: _ => { if (!hovered) SetState(() => hovered = true); },

@@ -1,29 +1,18 @@
 namespace Scribe.Core;
 
 /// <summary>
-/// Maps an external mod's <c>(title, bodyText, extraInfo)</c> triple — the public shape
-/// <c>ScribeModSystem.TryCreateExternalTask</c> accepts — onto the <see cref="ScribeBlock"/> shape
-/// Scribe actually stores (add-external-mod-task-api). Pure data, no VS API: the Mod layer resolves
-/// a target document and appends the returned blocks to it.
+/// Maps an external mod's <c>(title, bodyText, extraInfo)</c> triple (the shape
+/// <c>ScribeModSystem.TryCreateExternalTask</c> accepts) onto <see cref="ScribeBlock"/>s. Pure data; the
+/// Mod layer appends the result to a target document.
 /// </summary>
 public static class ScribeExternalTaskMapper
 {
     /// <summary>
-    /// Builds the block(s) for one external task, or an empty list when both <paramref name="title"/>
-    /// and <paramref name="bodyText"/> are null/empty (nothing meaningful to create).
-    ///
-    /// <para><paramref name="title"/>, when present, becomes a Depth-0 checkbox Task. If
-    /// <paramref name="bodyText"/> is also present, it becomes a Depth-1 freeform Text block nested
-    /// beneath it. When <paramref name="title"/> is absent but <paramref name="bodyText"/> is present,
-    /// the body is promoted to a standalone Depth-0 Text block instead of an orphaned subtask.</para>
-    ///
-    /// <para><paramref name="extraInfo"/>, when non-empty, is attached to whichever block ends up at
-    /// Depth 0 (the title Task, or the promoted body Text) — never to a Depth-1 nested note.</para>
-    ///
-    /// <para>All three inputs are clipped (never rejected) to their existing per-kind caps: title and
-    /// extraInfo to <see cref="ScribeDocumentCodec.MaxTaskTextLength"/> (a Task's own cap — extraInfo is
-    /// "capped like a task's own text"), body text to <see cref="ScribeDocumentCodec.MaxTextLength"/> (a
-    /// Text section's cap).</para>
+    /// Builds the block(s) for one external task, or an empty list when both title and body are null/empty.
+    /// A title becomes a Depth-0 Task; a body becomes a Depth-1 Text block beneath it, or a standalone
+    /// Depth-0 Text block when there is no title. <paramref name="extraInfo"/> attaches to whichever block
+    /// ends up at Depth 0. All inputs are clipped (never rejected): title and extraInfo to
+    /// <see cref="ScribeDocumentCodec.MaxTaskTextLength"/>, body to <see cref="ScribeDocumentCodec.MaxTextLength"/>.
     /// </summary>
     public static IReadOnlyList<ScribeBlock> MapToBlocks(string? title, string? bodyText, string? extraInfo)
     {
@@ -42,8 +31,7 @@ public static class ScribeExternalTaskMapper
         }
         else if (clippedBody is not null)
         {
-            // No title: the body stands alone at Depth 0 rather than staying an orphaned subtask,
-            // so it — not a nonexistent title — carries any extraInfo.
+            // No title: the body stands alone at Depth 0 and so carries any extraInfo.
             blocks.Add(new ScribeBlock(ScribeBlockKind.Text, clippedBody, extraInfo: clippedExtraInfo));
         }
         return blocks;

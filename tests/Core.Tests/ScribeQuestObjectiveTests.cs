@@ -2,11 +2,8 @@ using Scribe.Core;
 
 namespace Scribe.Core.Tests;
 
-// Tests for the QuestObjective block kind: a
-// depth-1 subtask modeling one Progression Framework quest objective under its parent Quest Link.
-// Carries target/current like a Tracker but is excluded from carried-inventory counting and from
-// completion (no checkbox) — its progress is driven exclusively by the reconcile/progress-write ops
-// below, never by the carried-inventory scan. All pure-Core (no game install).
+// Tests for the QuestObjective block kind: a depth-1 subtask under a quest Link, tracker-like but excluded
+// from carried-inventory counting and completion. Pure-Core.
 public class ScribeQuestObjectiveTests
 {
     // ---- model fields + exclusions ----
@@ -105,11 +102,8 @@ public class ScribeQuestObjectiveTests
     [Fact]
     public void ReconcileQuestObjectives_PlayerDeletedChildIsNotResurrected()
     {
-        // Mirrors the real calling discipline: objectives are reconciled with
-        // createMissing:true exactly ONCE at accept time; every later tick only pushes progress via
-        // SetQuestObjectiveProgress (TaskId-addressed, so a deleted child can never come back — see
-        // SetQuestObjectiveProgress_ReturnsFalse_ForUnknownTaskId). A createMissing:false reconcile
-        // (Core's own non-recreating contract, mirroring RescaleCraftIngredients) never resurrects either.
+        // Objectives are reconciled with createMissing:true once at accept time; later ticks only push progress via
+        // SetQuestObjectiveProgress (TaskId-addressed), and a createMissing:false reconcile never resurrects a deleted child.
         var doc = new ScribeDocument();
         doc.AddQuestLink(ScribeQuestSource.ProgressionFramework, "seafarer:deliver-rope", "Deliver Rope", null);
         var questLinkId = doc.Blocks[0].TaskId;

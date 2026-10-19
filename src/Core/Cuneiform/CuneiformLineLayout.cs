@@ -1,16 +1,10 @@
 namespace Scribe.Core.Cuneiform;
 
 /// <summary>
-/// One stroke of a laid-out line, positioned in the line's own grid-unit coordinate space (the pen
-/// runs along x; y is the glyph's own grid y). Carries the source glyph's <see cref="GridSize"/> so a
-/// renderer can scale grid units → pixels per glyph. Produced in AUTHORED CONSTRUCTION ORDER across the
-/// whole line, so rendering the first N entries yields a partial reveal.
-///
-/// It also carries a STABLE IDENTITY — the source character index within the line
-/// (<see cref="SourceCharIndex"/>) and the stroke's ordinal within its glyph (<see cref="StrokeOrdinal"/>)
-/// — so a renderer can derive a per-stroke seed (for deterministic hand-written jitter) or a per-letter
-/// reveal schedule that stays stable frame to frame, rather than keying off a frame counter. The identity
-/// does not affect the emitted geometry or order in any way.
+/// One stroke of a laid-out line, in the line's grid-unit coordinate space (pen runs along x). Strokes
+/// are in authored construction order across the line, so the first N entries are a partial reveal.
+/// <see cref="SourceCharIndex"/> and <see cref="StrokeOrdinal"/> give a stable identity for per-stroke
+/// jitter seeds and per-letter reveal schedules; they never affect geometry.
 /// </summary>
 public readonly struct PositionedStroke
 {
@@ -20,14 +14,11 @@ public readonly struct PositionedStroke
     /// <summary>The source glyph's em-grid size, for grid→pixel scaling.</summary>
     public double GridSize { get; }
 
-    /// <summary>Index of the source character (within THIS line) this stroke belongs to — i.e. the same
-    /// local index space as <see cref="CuneiformLine.CharBoundaries"/>. Stable identity for a per-stroke
-    /// jitter seed and a per-letter reveal schedule; never affects geometry.</summary>
+    /// <summary>Index of the source character within THIS line (same index space as
+    /// <see cref="CuneiformLine.CharBoundaries"/>).</summary>
     public int SourceCharIndex { get; }
 
-    /// <summary>This stroke's ordinal within its own glyph (0-based, in authored construction order).
-    /// Combined with <see cref="SourceCharIndex"/> it uniquely and stably identifies a stroke within a
-    /// line without depending on frame or wall-clock state.</summary>
+    /// <summary>0-based ordinal within its glyph, in authored construction order.</summary>
     public int StrokeOrdinal { get; }
 
     public PositionedStroke(GlyphStroke stroke, double gridSize, int sourceCharIndex, int strokeOrdinal)
@@ -40,15 +31,9 @@ public readonly struct PositionedStroke
 }
 
 /// <summary>
-/// The result of laying a string out: the positioned strokes (in construction order) plus the line's
-/// total advance width and its height, all in grid units. <see cref="TotalWidth"/> is the pen position
-/// after the last glyph; <see cref="LineHeight"/> is the em height a renderer sizes the line box to.
-///
-/// For editable text, the line also carries a <see cref="CharBoundaries"/> map — the cumulative pen
-/// position (grid units) at each source-character boundary — so a caller can place a synthetic caret
-/// and hit-test clicks against cuneiform (which has no native caret). <see cref="SourceStart"/> is the
-/// index, in the ORIGINAL laid-out string, of this line's first character (0 for a single line;
-/// non-zero for a wrapped continuation line), so a global character index maps to a line + local index.
+/// A laid-out line: positioned strokes plus total advance width and height, all in grid units.
+/// <see cref="CharBoundaries"/> (pen position per source-character boundary) lets callers place a
+/// synthetic caret and hit-test clicks, since cuneiform has no native caret.
 /// </summary>
 public sealed class CuneiformLine
 {
@@ -62,15 +47,11 @@ public sealed class CuneiformLine
     public double LineHeight { get; }
 
     /// <summary>Cumulative pen position (grid units) at each source-character boundary of THIS line.
-    /// Length is the line's character count + 1: index 0 is the pen before the first character (always
-    /// 0.0) and the last entry equals <see cref="TotalWidth"/>. Every source character advances the pen
-    /// (a space by the word gap, a missing glyph by the missing-glyph gap, a glyph by its footprint plus
-    /// its leading inter-glyph gap), so a caret index maps to a stable position even across spaces and
-    /// unknown characters.</summary>
+    /// Length is character count + 1: index 0 is 0.0 and the last entry equals <see cref="TotalWidth"/>.
+    /// Every character advances the pen, so caret indices stay stable across spaces and unknown characters.</summary>
     public IReadOnlyList<double> CharBoundaries { get; }
 
-    /// <summary>Index, in the original laid-out string, of this line's first character. 0 for a single
-    /// (unwrapped) line; the source offset of the break for a wrapped continuation line.</summary>
+    /// <summary>Index, in the original laid-out string, of this line's first character.</summary>
     public int SourceStart { get; }
 
     public CuneiformLine(
@@ -87,9 +68,8 @@ public sealed class CuneiformLine
         SourceStart = sourceStart;
     }
 
-    /// <summary>The pen position (grid units) of the caret sitting BEFORE the character at
-    /// <paramref name="localCharIndex"/> within this line. The index is clamped to a valid boundary, so
-    /// 0 returns the line start and the character count returns <see cref="TotalWidth"/>.</summary>
+    /// <summary>Pen position (grid units) of the caret before the character at
+    /// <paramref name="localCharIndex"/>; the index is clamped to a valid boundary.</summary>
     public double CaretXAt(int localCharIndex)
     {
         if (CharBoundaries.Count == 0)
@@ -101,9 +81,8 @@ public sealed class CuneiformLine
         return CharBoundaries[idx];
     }
 
-    /// <summary>The local character-boundary index (0..character count) whose pen position is nearest to
-    /// <paramref name="x"/> grid units — i.e. where a click at <paramref name="x"/> should place the
-    /// caret. Ties resolve to the lower index.</summary>
+    /// <summary>The boundary index whose pen position is nearest <paramref name="x"/> (where a click
+    /// should place the caret). Ties resolve to the lower index.</summary>
     public int NearestBoundary(double x)
     {
         if (CharBoundaries.Count == 0)
@@ -128,36 +107,23 @@ public sealed class CuneiformLine
 }
 
 /// <summary>
-/// Lays a single line of text out into positioned cuneiform strokes with proportional advance, using a
-/// <see cref="GlyphBundle"/>. The heart of the cuneiform "font": it absorbs the quirks of the authored
-/// set — uppercase-only (input is folded to uppercase before lookup), no space glyph (a space advances
-/// a fixed word gap and emits no strokes), and possibly-missing glyphs (a small gap, never a throw) —
-/// so callers pass ordinary text and get back drawable geometry.
+/// Lays text out into positioned cuneiform strokes with proportional advance. Absorbs the authored
+/// set's quirks: uppercase-only (input is folded), no space glyph (a space advances a word gap),
+/// and missing glyphs (a small gap, never a throw).
 ///
-/// Positioning matches the glyph-forge export format exactly: each glyph's strokes are offset so the
-/// glyph's own local box-left edge (<see cref="Glyph.LocalBoxLeft"/>) aligns with the pen, the pen then
-/// advances by the glyph's footprint (<see cref="Glyph.AdvanceWidth"/>), and neighbors are separated by
-/// a hard padding floor (<c>rightPadding(prev) + leftPadding(next)</c>) that a per-pair kerning value
-/// MAY widen but MUST NOT narrow past the floor. Game-agnostic (pure BCL), so the spacing/kerning math
-/// is unit-testable on CI without a game install.
+/// Positioning matches the glyph-forge export format: each glyph's <see cref="Glyph.LocalBoxLeft"/>
+/// aligns with the pen, the pen advances by <see cref="Glyph.AdvanceWidth"/>, and neighbors are
+/// separated by a padding floor (<c>rightPadding(prev) + leftPadding(next)</c>) that kerning may
+/// widen but MUST NOT narrow.
 /// </summary>
 public sealed class CuneiformLineLayout
 {
     private readonly GlyphBundle _bundle;
 
     /// <summary>
-    /// Many-to-one character alias map, applied at the SAME pre-lookup layer as uppercase-folding (after
-    /// folding, before <see cref="GlyphBundle.Get"/>). It redirects a character with no authored glyph of
-    /// its own onto an existing authored glyph it visually resembles, so more everyday characters render
-    /// as real ink instead of the missing-glyph gap. Because the substitution happens before lookup, an
-    /// aliased character produces byte-identical strokes and advance to its target (same glyph, same math).
-    ///
-    /// The map is pure DATA so entries are trivial to add/remove without touching layout logic. Entries are
-    /// grouped by dependency:
-    ///   • Ship-now (target already authored): the bracket/brace forms reuse the parenthesis glyphs.
-    ///   • <c>&amp; → +</c>: the shipped bundle carries the <c>+</c> glyph (alongside = % # * @), so the
-    ///     ampersand alias resolves to a real glyph. If a target is absent, its alias falls through to the
-    ///     safe missing-glyph gap (no crash), so an alias to an unauthored target is harmless but pointless.
+    /// Many-to-one alias map applied after uppercase-folding and before <see cref="GlyphBundle.Get"/>:
+    /// a character with no glyph of its own renders as a look-alike authored glyph, with identical
+    /// strokes and advance. An alias to an unauthored target falls through to the missing-glyph gap.
     /// </summary>
     private static readonly IReadOnlyDictionary<char, char> Aliases = new Dictionary<char, char>
     {
@@ -168,18 +134,14 @@ public sealed class CuneiformLineLayout
         ['&'] = '+',
     };
 
-    /// <summary>Word-gap advance (grid units) for a space character, which has no authored glyph.
-    /// Tunable against the in-game harness. Roughly half an em reads as a clear word break without the
-    /// script feeling loose.</summary>
+    /// <summary>Word-gap advance (grid units) for a space, which has no authored glyph.</summary>
     public double WordGapUnits { get; }
 
-    /// <summary>Advance (grid units) for a character with no authored glyph and no special handling — a
-    /// small gap so an unknown character leaves a subtle space rather than crashing or vanishing
-    /// silently. Distinct from (and smaller than) <see cref="WordGapUnits"/>.</summary>
+    /// <summary>Advance (grid units) for a character with no authored glyph; smaller than
+    /// <see cref="WordGapUnits"/>.</summary>
     public double MissingGlyphGapUnits { get; }
 
-    /// <summary>Fallback line height (grid units) when the bundle is empty and no glyph supplies a
-    /// grid size; matches the authored em-grid.</summary>
+    /// <summary>Fallback line height (grid units) when no glyph supplies a grid size.</summary>
     public const double DefaultGridSize = 100.0;
 
     public CuneiformLineLayout(GlyphBundle bundle, double wordGapUnits = 45.0, double missingGlyphGapUnits = 20.0)
@@ -190,12 +152,9 @@ public sealed class CuneiformLineLayout
     }
 
     /// <summary>
-    /// Lays <paramref name="text"/> out into a single <see cref="CuneiformLine"/>. Input is folded to
-    /// uppercase before glyph lookup (the authored set is uppercase-only); spaces advance
-    /// <see cref="WordGapUnits"/> with no strokes; a character with no authored glyph advances
-    /// <see cref="MissingGlyphGapUnits"/> with no strokes (never throws). Strokes are emitted in authored
-    /// construction order across the line. The returned line also carries a per-character advance map
-    /// (<see cref="CuneiformLine.CharBoundaries"/>) for caret placement and click hit-testing.
+    /// Lays <paramref name="text"/> out as a single <see cref="CuneiformLine"/>. Spaces advance
+    /// <see cref="WordGapUnits"/>; characters with no glyph advance <see cref="MissingGlyphGapUnits"/>;
+    /// neither emits strokes, and nothing throws.
     /// </summary>
     public CuneiformLine Layout(string text)
     {
@@ -203,30 +162,18 @@ public sealed class CuneiformLineLayout
     }
 
     /// <summary>
-    /// Lays <paramref name="text"/> out into ONE OR MORE <see cref="CuneiformLine"/>s. A hard line break
-    /// (<c>'\n'</c>, e.g. from Shift+Enter) ALWAYS splits into a new line — even when soft-wrap is
-    /// disabled — so an edited row grows a line per paragraph. Within each paragraph the text
-    /// soft-wraps at word-gap (space/tab) boundaries so that no line exceeds
-    /// <paramref name="maxWidthGridUnits"/> grid units where a break point exists. This is the cuneiform
-    /// analogue of the normal field's wrap (which likewise splits paragraphs on <c>'\n'</c> first, then
-    /// word-wraps each).
-    ///
-    /// A word that is itself wider than the maximum occupies its own line rather than being split
-    /// mid-glyph (layout never throws). A non-positive or infinite <paramref name="maxWidthGridUnits"/>
-    /// disables SOFT wrapping (hard <c>'\n'</c> breaks still apply) and returns one line per paragraph,
-    /// each identical to <see cref="Layout"/>. Each returned line's <see cref="CuneiformLine.SourceStart"/>
-    /// is the index of its first character in <paramref name="text"/> (accounting for the <c>'\n'</c>
-    /// separators consumed between paragraphs), and its <see cref="CuneiformLine.CharBoundaries"/> are
-    /// local to that line.
+    /// Lays <paramref name="text"/> out as one or more lines. A hard <c>'\n'</c> always splits a line;
+    /// within a paragraph, text soft-wraps at space/tab boundaries to fit <paramref name="maxWidthGridUnits"/>.
+    /// A word wider than the maximum gets its own line (never split mid-glyph). A non-positive or infinite
+    /// maximum disables soft wrapping. Each line's <see cref="CuneiformLine.SourceStart"/> is absolute in
+    /// <paramref name="text"/>; its <see cref="CuneiformLine.CharBoundaries"/> are line-local.
     /// </summary>
     public IReadOnlyList<CuneiformLine> LayoutWrapped(string text, double maxWidthGridUnits)
     {
         string source = text ?? string.Empty;
         bool noSoftWrap = !(maxWidthGridUnits > 0.0) || double.IsInfinity(maxWidthGridUnits);
 
-        // Split on hard line breaks first (like the normal field's WrapInto), tracking each paragraph's
-        // global start so wrapped-line SourceStarts stay absolute. An empty paragraph (a bare '\n' or a
-        // trailing '\n') yields one empty line, so a caret can sit on the new blank line.
+        // An empty paragraph (bare or trailing '\n') yields one empty line so a caret can sit on it.
         var lines = new List<CuneiformLine>();
         int paragraphStart = 0;
         foreach (string paragraph in source.Split('\n'))
@@ -238,10 +185,8 @@ public sealed class CuneiformLineLayout
     }
 
     /// <summary>
-    /// Soft-wraps a single paragraph (no interior <c>'\n'</c>) into <paramref name="outLines"/>, stamping
-    /// each line's <see cref="CuneiformLine.SourceStart"/> with its ABSOLUTE index (<paramref name="globalStart"/>
-    /// plus the in-paragraph offset). When <paramref name="noSoftWrap"/> is set, the whole paragraph is one
-    /// line. The final line runs to the paragraph end so trailing whitespace is kept.
+    /// Soft-wraps one paragraph into <paramref name="outLines"/>, stamping absolute
+    /// <see cref="CuneiformLine.SourceStart"/> (<paramref name="globalStart"/> + in-paragraph offset).
     /// </summary>
     private void WrapParagraph(
         string paragraph, int globalStart, double maxWidthGridUnits, bool noSoftWrap, List<CuneiformLine> outLines)
@@ -252,9 +197,8 @@ public sealed class CuneiformLineLayout
             return;
         }
 
-        // Tokenize into words — maximal runs of non-space/tab characters — recording each word's
-        // half-open [start, end) range within the paragraph. Wrapping happens between words only (there
-        // is no kerning across a space, so words lay out independently), so this is the natural unit.
+        // Words are maximal runs of non-space/tab, as half-open [start, end). There is no kerning
+        // across a space, so words lay out independently.
         var words = new List<(int Start, int End)>();
         int wordStart = -1;
         for (int i = 0; i < paragraph.Length; i++)
@@ -275,7 +219,7 @@ public sealed class CuneiformLineLayout
             words.Add((wordStart, paragraph.Length));
         }
 
-        // Empty or whitespace-only paragraph: one line, keeping its whitespace so the caret can sit in it.
+        // Empty or whitespace-only paragraph: one line, keeping its whitespace.
         if (words.Count == 0)
         {
             outLines.Add(LayoutSegment(paragraph, globalStart));
@@ -296,8 +240,7 @@ public sealed class CuneiformLineLayout
 
             if (candidate > maxWidthGridUnits)
             {
-                // Overflow: flush the current line and start a new one with this word. An over-long
-                // word (wider than max on its own) simply becomes a one-word line — never split.
+                // Overflow: flush the line; an over-long word becomes its own line.
                 outLines.Add(LayoutSegment(paragraph.Substring(lineStart, lineEnd - lineStart), globalStart + lineStart));
                 lineStart = words[k].Start;
                 lineEnd = words[k].End;
@@ -310,23 +253,16 @@ public sealed class CuneiformLineLayout
             }
         }
 
-        // The FINAL line runs to the end of the paragraph (not just the last word's end) so a trailing
-        // run of spaces still advances the caret — a space typed at the very end must move the caret
-        // immediately, not vanish until a following glyph forces a new word token. Interior break-spaces
-        // between wrapped lines stay dropped (they are the wrap separators consumed above); only this
-        // last line keeps its trailing whitespace.
+        // The final line runs to the paragraph end so a trailing space still advances the caret.
+        // Interior break-spaces between wrapped lines are dropped.
         outLines.Add(LayoutSegment(paragraph.Substring(lineStart), globalStart + lineStart));
     }
 
     /// <summary>
-    /// The per-character stroke-unit count that drives the stroke-progression reveal timing
-    /// (<see cref="CuneiformReveal"/>): one entry per source character of <paramref name="text"/>, in order,
-    /// so entry <c>i</c> is how long (in stroke-units) character <c>i</c> takes to press in. Each authored
-    /// glyph contributes its stroke count; a space contributes <see cref="CuneiformReveal.SpaceStrokeUnits"/>
-    /// and a character with no authored glyph <see cref="CuneiformReveal.MissingGlyphStrokeUnits"/> (both draw
-    /// nothing but still take time, so a word break / unknown char reads as a beat). It applies the SAME
-    /// uppercase-fold + alias + glyph lookup as <see cref="LayoutSegment"/>, so the units line up exactly with
-    /// the strokes the renderer draws. Pure/BCL — safe for the Core reveal math.
+    /// Per-character stroke-unit counts for <see cref="CuneiformReveal"/> timing, one entry per character
+    /// of <paramref name="text"/>. Glyphs contribute their stroke count; spaces and missing glyphs
+    /// contribute <see cref="CuneiformReveal.SpaceStrokeUnits"/> / <see cref="CuneiformReveal.MissingGlyphStrokeUnits"/>
+    /// (no ink, but a beat). Uses the same fold + alias + lookup as <see cref="LayoutSegment"/>.
     /// </summary>
     public IReadOnlyList<int> StrokeUnitsFor(string text)
     {
@@ -353,11 +289,7 @@ public sealed class CuneiformLineLayout
         return units;
     }
 
-    /// <summary>
-    /// Lays a single segment out, recording the cumulative pen position at every source-character
-    /// boundary. <paramref name="sourceStart"/> is stamped onto the result as
-    /// <see cref="CuneiformLine.SourceStart"/> so wrapped lines can be mapped back to the original string.
-    /// </summary>
+    /// <summary>Lays one segment out; <paramref name="sourceStart"/> becomes <see cref="CuneiformLine.SourceStart"/>.</summary>
     private CuneiformLine LayoutSegment(string text, int sourceStart)
     {
         var positioned = new List<PositionedStroke>();
@@ -377,9 +309,6 @@ public sealed class CuneiformLineLayout
             }
 
             char c = char.ToUpperInvariant(raw);
-            // Alias substitution: at the same pre-lookup layer as folding, redirect a character onto the
-            // authored glyph it resembles (e.g. '[' → '('). Anything neither authored nor aliased still
-            // falls through to the safe missing-glyph gap below.
             if (Aliases.TryGetValue(c, out char alias))
             {
                 c = alias;
@@ -396,17 +325,13 @@ public sealed class CuneiformLineLayout
 
             lineHeight = Math.Max(lineHeight, glyph.GridSize);
 
-            // Separate this glyph from the previous one by the hard padding floor, widened (never
-            // narrowed) by any authored kerning for the ordered pair.
             if (prev is not null)
             {
                 pen += GapBetween(prev, glyph);
             }
 
-            // This glyph's source-character index within the line. boundaries starts as {0.0} and appends
-            // exactly one entry per source character, so before this char's boundary is added its count
-            // minus one is the current character index (0 for the first char, 1 for the second, …). Used as
-            // stable identity on each emitted stroke — it never affects geometry.
+            // boundaries starts as {0.0} and gains one entry per character, so Count - 1 is this
+            // character's index.
             int sourceCharIndex = boundaries.Count - 1;
 
             // Align the glyph's local box-left edge with the pen: renderedX = strokeX - localBoxLeft + pen.
@@ -431,10 +356,7 @@ public sealed class CuneiformLineLayout
     }
 
     /// <summary>
-    /// The inter-glyph gap between an ordered pair: the padding floor (<c>rightPadding(prev) +
-    /// leftPadding(next)</c>) widened by <paramref name="prev"/>'s kerning for <paramref name="next"/>
-    /// when that widens it. A kerning value that would narrow the gap below the floor is clamped to the
-    /// floor (kerning only ever widens here — it never pulls neighbors closer than their paddings allow).
+    /// Gap between an ordered pair: the padding floor widened by kerning; kerning never narrows below the floor.
     /// </summary>
     private static double GapBetween(Glyph prev, Glyph next)
     {

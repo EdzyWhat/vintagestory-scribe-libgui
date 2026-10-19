@@ -8,36 +8,22 @@ using Vintagestory.GameContent;
 namespace Scribe;
 
 /// <summary>
-/// Client-side Harmony postfix that appends a small "Add to Scribe" section — an <b>Add Tracker</b> and an
-/// <b>Add Link</b> clickable link — to the bottom of every item/block Handbook page
-/// This is the ONLY way to create a Tracker or Link task: both need a target
-/// item code, which the Handbook page uniquely provides (the item whose page is open). Clicking a link calls
-/// <see cref="ScribeModSystem.AddFromHandbook"/>, which resolves an open/openable Scribe surface and appends
-/// the block through that dialog's existing save path.
-///
-/// <para>Patches <see cref="CollectibleBehaviorHandbookTextAndExtraInfo.GetHandbookInfo"/> (the survival
-/// mod's handbook-page builder) rather than reimplementing handbook rendering. Harmony/the survival mod both
-/// ship with the base game, so this adds no mod dependency. The postfix only APPENDS to the returned component array — it never mutates
-/// existing entries — so a page with no Scribe items installed is byte-identical to vanilla.</para>
-///
-/// <para>Client-only: the Handbook is a client GUI, so the owning <see cref="Harmony"/> instance is created
-/// in <see cref="ScribeModSystem.StartClientSide"/> and unpatched in <see cref="ScribeModSystem.Dispose"/>.
-/// The postfix never runs server-side.</para>
+/// Client-side Harmony postfix on <see cref="CollectibleBehaviorHandbookTextAndExtraInfo.GetHandbookInfo"/> that
+/// appends an "Add to Scribe" section (Link, Tracker, and Craft links) to every item/block Handbook page.
+/// This is the only way to create a Tracker or Link task: both need the target item code the open page supplies.
+/// Clicking a link calls <see cref="ScribeModSystem.AddFromHandbook"/>.
+/// The postfix only appends to the returned component array, never mutating existing entries.
 /// </summary>
 [HarmonyPatch(typeof(CollectibleBehaviorHandbookTextAndExtraInfo),
     nameof(CollectibleBehaviorHandbookTextAndExtraInfo.GetHandbookInfo))]
 internal static class ScribeHandbookPatch
 {
-    /// <summary>Append the "Add to Scribe" section to the handbook page's component array. Runs after the
-    /// vanilla builder, so <paramref name="__result"/> is the full page; we concatenate our components onto
-    /// it. The link labels reuse the editor picker's <c>scribe-gui-addtracker</c>/<c>scribe-gui-addlink</c>
-    /// keys (one label set for both surfaces — fewer strings for translators).</summary>
+    /// <summary>Append the "Add to Scribe" section to <paramref name="__result"/>, the full vanilla page.</summary>
     // ReSharper disable once InconsistentNaming — Harmony injected parameter name is fixed.
     private static void Postfix(ItemSlot inSlot, ICoreClientAPI capi, ref RichTextComponentBase[] __result)
     {
-        // Carry the page's OWN attributed stack (not a bare code): its meaningful attributes (a lantern's
-        // material/glass/lining) are what make the recipe probe match and the target resolve to the correct
-        // name. Bail on the odd empty page. Encode() collapses to the bare code for an attribute-less item.
+        // Carry the page's own attributed stack, not a bare code: attributes (a lantern's material/glass/lining)
+        // make the recipe probe match and the target resolve to the correct name.
         var stack = inSlot?.Itemstack;
         if (stack?.Collectible?.Code is null || capi is null) return;
         string itemCode = ScribeItemRef.Encode(stack);
@@ -50,28 +36,21 @@ internal static class ScribeHandbookPatch
 
         var appended = new List<RichTextComponentBase>
         {
-            // A little vertical gap, then a bold section heading, matching the vanilla page's spacing.
             new ClearFloatTextComponent(capi, 14f),
             new RichTextComponent(capi, Lang.Get("scribe:scribe-gui-additem-heading") + "\n", headingFont),
 
-            // Link, Tracker, then Craft links (handbook-only labels; the editor Add menu uses scribe-gui-add*).
             new LinkTextComponent(capi, Lang.Get("scribe:scribe-gui-handbook-addlink") + "\n", linkFont,
                 _ => modSystem.AddFromHandbook(ScribeAddKinds.Link, itemCode)),
             new LinkTextComponent(capi, Lang.Get("scribe:scribe-gui-handbook-addtracker") + "\n", linkFont,
                 _ => modSystem.AddFromHandbook(ScribeAddKinds.Tracker, itemCode)),
         };
 
-        // One "Add Crafting Task" link per grid recipe that produces this item. Probed from the live recipe
-        // registry: an item with no grid recipe adds none (only Tracker/Link show), a lone recipe adds a single
-        // plain-labeled link, and a multi-recipe item adds one distinguished link each. The signature the link
-        // carries lets the generator/self-heal re-resolve the exact variant later. Each variant's Label is
-        // already localized by the probe.
+        // One "Add Crafting Task" link per grid recipe producing this item (none if there is no grid recipe).
+        // The signature lets the generator re-resolve the exact variant later.
         foreach (var variant in ScribeCraftRecipeProbe.ProbeVariants(capi, stack))
         {
             string signature = variant.Signature;
-            // The Craft parent's target is the recipe's resolved OUTPUT (already encoded by the probe), so a
-            // parent for an attribute-encoded output names correctly — not necessarily the same string as the
-            // page item's own encoded target.
+            // The recipe's resolved output, which may differ from the page item's own encoded target.
             string craftTarget = variant.OutputCode;
             appended.Add(new LinkTextComponent(capi, variant.Label + "\n", linkFont,
                 _ => modSystem.AddCraftFromHandbook(craftTarget, signature)));

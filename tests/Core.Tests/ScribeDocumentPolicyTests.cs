@@ -36,10 +36,7 @@ public class ScribeDocumentPolicyTests
     }
 
     // --- Tablet preset: 15 blocks of ANY kind, 1 pin ---
-    // The count fed to CanAdd/CanHold is the document's total BlockCount, so
-    // "CanAdd(14)" means "14 blocks of any mix present". The policy math below is kind-agnostic; the
-    // "…Tasks" in method names is a misnomer (see ScribeDocumentTests.FiniteCap_CountsMixedKinds_… for the
-    // mixed-kind behavior).
+    // CanAdd/CanHold receive the document's total BlockCount (blocks of any kind); the "…Tasks" in method names is a misnomer.
 
     [Fact]
     public void Tablet_CapsAtFifteenTasks()
@@ -115,9 +112,7 @@ public class ScribeDocumentPolicyTests
     }
 
     // --- CanHold: the copy/paste capacity check (fits N incoming blocks, not "room for one more") ---
-    // Unlike CanAdd (strict <, "is there room for ONE more beyond the N present"), CanHold asks
-    // "can this document hold a total of N blocks" — an inclusive <= against the cap. It also denies
-    // when read-only. Used by the Transcribe copy target check.
+    // CanHold is an inclusive <= against the cap (can the document hold N blocks in total), unlike CanAdd's strict <; also denies when read-only.
 
     [Fact]
     public void Unlimited_CanHoldAnyTaskCount()
@@ -168,8 +163,7 @@ public class ScribeDocumentPolicyTests
     [Fact]
     public void ScribeDocument_AddTask_StaysUncappedRegardlessOfPolicy()
     {
-        // The document model is tier-agnostic: it never consults a policy. Adding well past the
-        // Tablet cap succeeds at the model layer; enforcement is the host/editor's job.
+        // The document model never consults a policy; enforcement is the host/editor's job.
         var doc = new ScribeDocument();
         for (int i = 0; i < 20; i++)
             Assert.True(doc.AddTask($"task {i}"));

@@ -10,31 +10,23 @@ using SkiaSharp;                  // SKPaint, SKColorFilter, SKColors
 namespace Scribe;
 
 /// <summary>
-/// Shades the whole composed Scribe dialog by the light reaching the player. A transparent single-child wrapper placed once at the shared body/backdrop wrap point in
-/// <see cref="ScribeDialogBase"/>: it renders its child subtree into an offscreen layer
-/// (<c>SaveLayer</c>) and applies ONE <see cref="SKColorFilter.CreateColorMatrix"/> on composite — a single
-/// filter that both scales brightness and skews color temperature. Because the filter runs on the flattened
-/// layer, backdrop + chrome + text are all shaded together and every surface (lectern/notebook/tablet)
-/// inherits it with no per-dialog wiring.
+/// Shades the whole composed Scribe dialog by the light reaching the player. A transparent single-child wrapper
+/// placed once at the shared body/backdrop wrap point in <see cref="ScribeDialogBase"/>: it renders its child
+/// into an offscreen layer (<c>SaveLayer</c>) and applies ONE <see cref="SKColorFilter.CreateColorMatrix"/> on
+/// composite that scales brightness and skews color temperature. Backdrop, chrome and text are shaded together,
+/// so every surface inherits it with no per-dialog wiring.
 ///
-/// <para><b>Why a color matrix, not a multiply overlay.</b> A matrix can BRIGHTEN as well as darken and
-/// composites predictably under premultiplied alpha; a multiply rect can only darken and chews the
-/// anti-aliased text/backdrop alpha edges. Here we only ever darken/tint (brightness ≤ 1), but the matrix
-/// keeps the door open and composites cleanly. Same family as the shipped
-/// <see cref="ScribeGearEffect"/> (a <c>ColorFilter</c> swap on a <see cref="RenderProxyBox"/>) and generalizes
-/// <c>RenderOpacity</c> (an alpha-only <c>SaveLayer</c>).</para>
+/// <para><b>Why a color matrix, not a multiply overlay.</b> A matrix composites predictably under premultiplied
+/// alpha and can brighten as well as darken; a multiply rect can only darken and chews anti-aliased alpha edges.</para>
 ///
-/// <para><b>Brightness comes pre-shaped.</b> The <c>brightness</c> and <c>tint</c> passed in are already the
-/// output of the author-drawn non-linear response curve + the sampler's quantization
-/// (<see cref="ScribeAmbientLightSampler"/>); this widget only turns them into a matrix. Full brightness with
-/// a neutral (1,1,1) tint is the identity, so a fully-lit dialog is visually unchanged.</para>
+/// <para><b>Brightness comes pre-shaped.</b> <c>brightness</c> and <c>tint</c> are already the output of the
+/// response curve + the sampler's quantization (<see cref="ScribeAmbientLightSampler"/>). Full brightness with a
+/// neutral (1,1,1) tint is the identity, so a fully-lit dialog is unchanged.</para>
 ///
-/// <para><b>Paint-cache discipline.</b> The parent only reconfigures this widget (and thus marks it
-/// needing paint, forcing LibGUI to re-record its <c>SKPicture</c>) when the QUANTIZED shade changes — on a
-/// static scene the value is stable and the cache stays valid. Color filters are cached by their quantized
-/// key and NEVER disposed (disposing a filter mid-record corrupts the recording canvas — the
-/// <see cref="ScribeGearEffect"/> discipline). The <c>SaveLayer</c> uses its OWN cached paint, so it never
-/// mutates <c>SharedPaint</c> and can't leak paint state into sibling draws.</para>
+/// <para><b>Paint-cache discipline.</b> The parent reconfigures this widget only when the QUANTIZED shade changes,
+/// so a static scene keeps its cached <c>SKPicture</c>. Color filters are cached by quantized key and NEVER
+/// disposed (disposing a filter mid-record corrupts the recording canvas; see <see cref="ScribeGearEffect"/>).
+/// The <c>SaveLayer</c> uses its OWN cached paint, so it never mutates <c>SharedPaint</c>.</para>
 /// </summary>
 internal sealed class ScribeGlobalTint : SingleChildWidget
 {
@@ -55,19 +47,15 @@ internal sealed class ScribeGlobalTint : SingleChildWidget
     public override void UpdateRenderObject(RenderObject renderObject)
         => ((GlobalTintRender)renderObject).Configure(brightness, tintR, tintG, tintB);
 
-    /// <summary>Fraction of the illumination shade applied to Scribe hover/overlay surfaces (tooltips,
-    /// drop-up-style menus), versus the dialog body's full <c>1.0</c>. <c>0.9</c> = keep 90% of the shade
-    /// delta, i.e. 10% less darkening — a deliberate legibility bump for transient text floating above the
-    /// body. This is the single tunable knob; every hover
-    /// wrap goes through <see cref="ForHover"/> so they all share it.</summary>
+    /// <summary>Fraction of the illumination shade delta applied to hover/overlay surfaces (tooltips, drop-up
+    /// menus) versus the body's full <c>1.0</c>; 0.9 = 10% less darkening, a legibility bump for transient text.
+    /// Every hover wrap goes through <see cref="ForHover"/> so they share it.</summary>
     public const float HoverStrength = 0.9f;
 
     /// <summary>Wrap <paramref name="child"/> in the illumination shade at reduced <see cref="HoverStrength"/>.
-    /// Hover surfaces render in LibGUI's Overlay layer — outside the dialog body's own <see cref="ScribeGlobalTint"/>
-    /// wrap — so without this they'd stay full-brightness while the body is dimmed. The live shade is blended
-    /// a fraction of the way back toward identity (no tint) so hovers track the same light but darken slightly
-    /// less than the body. Identity in → identity out, so at full daylight the <see cref="IsIdentity"/>
-    /// fast-path still elides the SaveLayer entirely.</summary>
+    /// Hover surfaces render in LibGUI's Overlay layer, outside the body's <see cref="ScribeGlobalTint"/>, so they
+    /// need their own shade. Identity in gives identity out, so full daylight still hits the
+    /// <see cref="IsIdentity"/> fast path.</summary>
     public static ScribeGlobalTint ForHover(Widget child, ScribeAmbientLightSampler.Shade shade,
         Gui.Widgets.Framework.Key? key = null)
         => new(child,
@@ -78,14 +66,12 @@ internal sealed class ScribeGlobalTint : SingleChildWidget
             key);
 
     /// <summary>Blend one shade channel toward identity (1.0) keeping <paramref name="keep"/> of its delta:
-    /// <c>keep = 1</c> → unchanged, <c>keep = 0</c> → identity. So a dark <c>0.5</c> at <c>keep = 0.9</c>
-    /// becomes <c>0.55</c> (less darkening), and an identity <c>1.0</c> stays <c>1.0</c>.</summary>
+    /// <c>keep = 1</c> unchanged, <c>keep = 0</c> identity.</summary>
     private static float TowardIdentity(float v, float keep) => 1f + (v - 1f) * keep;
 
-    /// <summary>Shade one solid RGB color (a tooltip bubble's <c>Background</c>/<c>Border</c>) by the
-    /// illumination shade at <see cref="HoverStrength"/> — the same per-channel brightness×tint that
-    /// <see cref="ForHover"/>'s color matrix applies to overlay CONTENT (see <see cref="FilterFor"/>). Alpha
-    /// is preserved so a translucent border stays translucent.</summary>
+    /// <summary>Shade one solid RGB color (a tooltip bubble's <c>Background</c>/<c>Border</c>) by the shade at
+    /// <see cref="HoverStrength"/>, matching <see cref="ForHover"/>'s matrix on overlay content. Alpha is
+    /// preserved.</summary>
     public static Vector4 ShadeColor(Vector4 color, ScribeAmbientLightSampler.Shade shade)
     {
         float b = TowardIdentity(shade.Brightness, HoverStrength);
@@ -97,29 +83,25 @@ internal sealed class ScribeGlobalTint : SingleChildWidget
     }
 
     /// <summary>Build a <see cref="Tooltip"/> whose BUBBLE (not just its text) tracks the illumination shade.
-    /// The stock <see cref="Tooltip"/> draws its own bubble <c>Container</c>, reading <c>Background</c> and
-    /// <c>Border</c> from the nearest <see cref="Theme"/> ABOVE the tooltip in the MAIN tree — colors that sit
-    /// outside the body's <see cref="ScribeGlobalTint"/> layer AND outside <see cref="ForHover"/> (which shades
-    /// only the content). Without this, in low light the bubble text would dim while the parchment bubble behind
-    /// it stayed full-brightness and visibly "stuck out".
+    /// The stock <see cref="Tooltip"/> reads <c>Background</c>/<c>Border</c> from the nearest <see cref="Theme"/>
+    /// ABOVE it in the main tree, outside both the body's tint layer and <see cref="ForHover"/>, so in low light
+    /// the text would dim while the bubble stayed full-brightness.
     ///
-    /// <para>The fix is a Theme "sandwich": wrap the whole Tooltip in a Theme whose scheme is
-    /// <paramref name="baseTheme"/> with <c>Background</c>+<c>Border</c> pushed through <see cref="ShadeColor"/>,
-    /// so the bubble reads the shaded colors. The trigger <paramref name="child"/> is a main-tree descendant of
-    /// that wrapper and would otherwise inherit the shaded scheme and darken TWICE (once here, once again in the
-    /// body's own tint layer), so it is re-wrapped in the unshaded <paramref name="baseTheme"/>. The overlay
-    /// content mounts in the global overlay root (<c>GuiGlobalOverlay</c>), so it never sees this wrapper — we
-    /// shade it directly via <see cref="ForHover"/> here, and callers pass RAW content.</para>
+    /// <para>The fix is a Theme "sandwich": the Tooltip is wrapped in a Theme whose scheme is
+    /// <paramref name="baseTheme"/> with <c>Background</c>+<c>Border</c> run through <see cref="ShadeColor"/>. The
+    /// trigger <paramref name="child"/> would inherit that shaded scheme and darken TWICE (again in the body's tint
+    /// layer), so it is re-wrapped in the unshaded <paramref name="baseTheme"/>. Overlay content mounts in the
+    /// global overlay root and never sees the wrapper, so it is shaded directly via <see cref="ForHover"/>;
+    /// callers pass RAW content.</para>
     ///
-    /// <para>At full daylight the hover shade is the identity, so both the content <see cref="ForHover"/> and the
-    /// bubble colors are unchanged — we skip the sandwich entirely and return a plain Tooltip with zero extra widgets.</para></summary>
+    /// <para>At full daylight the shade is the identity, so the sandwich is skipped and a plain Tooltip is
+    /// returned.</para></summary>
     public static Widget ShadedTooltip(Widget child, Widget content, ThemeData baseTheme,
         ScribeAmbientLightSampler.Shade shade, TimeSpan? waitDuration = null)
     {
         Widget shadedContent = ForHover(content, shade);
 
-        // Identity hover shade → bubble colors unchanged → the extra Theme sandwich is a no-op. Return the plain
-        // Tooltip (the child already sits under the body's own baseTheme, so its colors are correct as-is).
+        // Identity hover shade: the Theme sandwich would be a no-op, so return the plain Tooltip.
         if (IsIdentity(
                 TowardIdentity(shade.Brightness, HoverStrength),
                 TowardIdentity(shade.TintR, HoverStrength),
@@ -133,8 +115,7 @@ internal sealed class ScribeGlobalTint : SingleChildWidget
             Background = ShadeColor(baseTheme.ColorScheme.Background, shade),
             Border = ShadeColor(baseTheme.ColorScheme.Border, shade),
         };
-        // Only Background+Border of this scheme are ever read (by the bubble Container); the constructor
-        // re-derives the other styles but nothing in the tooltip path consumes them.
+        // Only Background+Border are read (by the bubble Container).
         return new Theme(new ThemeData(colorScheme: shadedScheme),
             child: new Tooltip(
                 child: new Theme(baseTheme, child: child),  // restore unshaded theme for the trigger
@@ -143,27 +124,21 @@ internal sealed class ScribeGlobalTint : SingleChildWidget
                 useGlobalOverlay: true));
     }
 
-    /// <summary>Cached brightness+tint color-matrix filters keyed by the packed quantized shade. Never
-    /// disposed (see class remarks — only a handful of distinct buckets ever exist).</summary>
+    /// <summary>Cached brightness+tint color-matrix filters keyed by the packed quantized shade. Never disposed.</summary>
     private static readonly Dictionary<int, SKColorFilter> FilterCache = new();
 
-    /// <summary>The <c>SaveLayer</c> paint, reused across frames. Only its <c>ColorFilter</c> changes; it is
-    /// never <c>SharedPaint</c>, so it can't leak into sibling draws.</summary>
+    /// <summary>The reused <c>SaveLayer</c> paint; never <c>SharedPaint</c>, so it can't leak into sibling draws.</summary>
     private static readonly SKPaint LayerPaint = new() { Color = SKColors.White };
 
-    /// <summary>Whether this shade is the identity (full brightness, neutral tint) — then we skip the
-    /// SaveLayer entirely and paint the child directly, so a fully-lit dialog pays nothing.</summary>
+    /// <summary>Whether the shade is the identity; then the SaveLayer is skipped and the child paints directly.</summary>
     private static bool IsIdentity(float brightness, float r, float g, float b) =>
         brightness >= 0.999f && r >= 0.999f && g >= 0.999f && b >= 0.999f;
 
-    /// <summary>Build (or fetch) the color matrix that multiplies each channel by brightness×tintChannel.
-    /// A 4×5 row-major matrix: out.r = (brightness*tintR)*in.r, etc.; alpha passes through unchanged so the
-    /// dialog's edges stay anti-aliased and transparent regions stay transparent. Keyed by the quantized
-    /// shade so the cache is tiny and stable.</summary>
+    /// <summary>Build (or fetch) the color matrix multiplying each channel by brightness×tintChannel. Alpha
+    /// passes through unchanged so edges stay anti-aliased and transparent regions stay transparent.</summary>
     private static SKColorFilter FilterFor(float brightness, float r, float g, float b)
     {
-        // Pack the already-quantized channels into a stable integer key (8 bits each is ample for our
-        // ≤32 brightness / ≤16 hue buckets).
+        // Pack the quantized channels into an integer key (8 bits each).
         int key = (Q(brightness) << 24) | (Q(r) << 16) | (Q(g) << 8) | Q(b);
         if (FilterCache.TryGetValue(key, out var f)) return f;
 
@@ -193,14 +168,10 @@ internal sealed class ScribeGlobalTint : SingleChildWidget
 
         public void Configure(float brightness, float r, float g, float b)
         {
-            // Repaint only when a channel ACTUALLY changed — and mark ourselves needing paint when one does.
-            // LibGUI's RenderObjectElement.Update calls UpdateRenderObject (→ here) on EVERY reconcile (any
-            // RebuildBody, for any reason) but does NOT itself invalidate the render object; a render object
-            // must mark its own cached SKPicture dirty when a VISUAL field changes. Without the MarkNeedsPaint
-            // below, a shade change on a static dialog (e.g. a read-only hard/fired tablet, which nothing else
-            // repaints) would keep the OLD tint because the picture never re-records. The equality guard keeps
-            // unrelated rebuilds (which re-run this with the same shade) from forcing needless re-records,
-            // preserving the paint-cache discipline.
+            // Repaint only when a channel ACTUALLY changed. LibGUI calls UpdateRenderObject on EVERY reconcile but
+            // does NOT invalidate the render object, so a changed shade must MarkNeedsPaint itself or a static
+            // dialog (e.g. a read-only tablet) would keep the old tint because its picture never re-records. The
+            // equality guard stops unrelated rebuilds from forcing needless re-records.
             if (brightness == this.brightness && r == tintR && g == tintG && b == tintB) return;
             this.brightness = brightness;
             tintR = r; tintG = g; tintB = b;
@@ -215,8 +186,7 @@ internal sealed class ScribeGlobalTint : SingleChildWidget
                 return;
             }
 
-            // Render the whole child subtree into an offscreen layer and apply the brightness/tint matrix on
-            // composite. LayerPaint is our own paint (not SharedPaint), so nothing leaks to siblings.
+            // Render the child into an offscreen layer and apply the matrix on composite.
             LayerPaint.ColorFilter = FilterFor(brightness, tintR, tintG, tintB);
             context.Canvas.SaveLayer(LayerPaint);
             base.Paint(context);

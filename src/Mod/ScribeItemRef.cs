@@ -10,49 +10,37 @@ using Vintagestory.GameContent;   // GuiHandbookItemStackPage, IHandBookPageCode
 namespace Scribe;
 
 /// <summary>
-/// Mod-layer helper for turning a Tracker/Link/Craft block's target string into the game objects the GUI
-/// needs — an <see cref="ItemStack"/> for the row icon + display name, and the Handbook page a Link opens.
-/// Core stores only the string (it is VS-API-free by invariant); this is
-/// where the Mod layer parses it against the live registries. Kept in one place so the read row, editor row,
-/// and pinned HUD all resolve identically.
+/// Resolves a Tracker/Link/Craft block's target string (Core stores only the string) against the live
+/// registries into an <see cref="ItemStack"/> for the row icon and name, and the Handbook page a Link opens.
+/// Shared so the read row, editor row, and pinned HUD resolve identically.
 ///
-/// <para>Two target-string shapes are understood: a <b>bare collectible
-/// code</b> (<c>"game:ingot-copper"</c>) resolves to an attribute-less stack; an
-/// <b>attribute-encoded</b> target (<c>"stack@&lt;code&gt;|&lt;b|i&gt;|&lt;base64(attrJson)&gt;"</c>, produced
-/// by <see cref="Encode"/>) rebuilds the stack's meaningful attributes so items whose identity lives in
-/// <see cref="ItemStack.Attributes"/> — lanterns (material/glass/lining), meals, tool-heads — resolve to the
-/// correct name, Handbook page, and exact variant. The <c>stack@</c> marker cannot collide with a bare
-/// <c>domain:path</c> code or the <see cref="ScribeLinkTarget.GuidePagePrefix"/> guide-page prefix.</para>
+/// <para>Two target shapes: a <b>bare collectible code</b> (<c>"game:ingot-copper"</c>) resolves to an
+/// attribute-less stack; an <b>attribute-encoded</b> target
+/// (<c>"stack@&lt;code&gt;|&lt;b|i&gt;|&lt;base64(attrJson)&gt;"</c>, from <see cref="Encode"/>) rebuilds the
+/// stack's meaningful attributes for items whose identity lives in <see cref="ItemStack.Attributes"/>
+/// (lanterns, meals, tool-heads). The <c>stack@</c> marker cannot collide with a bare <c>domain:path</c> code
+/// or the <see cref="ScribeLinkTarget.GuidePagePrefix"/> prefix.</para>
 /// </summary>
 internal static class ScribeItemRef
 {
-    /// <summary>Marker prefixing an attribute-encoded target so it can't be mistaken for a bare collectible
-    /// code (a <c>domain:path</c> <c>AssetLocation</c>) or a <c>"page:"</c> guide-page reference.</summary>
+    /// <summary>Marker prefixing an attribute-encoded target.</summary>
     private const string StackPrefix = "stack@";
 
-    /// <summary>Field separator for the <b>restricted-wildcard microformat</b>:
-    /// <c>"&lt;wildcardCode&gt;|&lt;allowed,csv&gt;[|&lt;skip,csv&gt;]"</c>. A bare
-    /// <c>domain:path</c> code never contains <c>'|'</c>, and the attribute-encoded <see cref="StackPrefix"/>
-    /// form (which also uses <c>'|'</c>) is always distinguished by its marker first, so this separator only
-    /// ever appears in a wildcard microformat.</summary>
+    /// <summary>Field separator for the restricted-wildcard microformat
+    /// <c>"&lt;wildcardCode&gt;|&lt;allowed,csv&gt;[|&lt;skip,csv&gt;]"</c>. The <see cref="StackPrefix"/> form
+    /// also uses <c>'|'</c> but is always distinguished by its marker first.</summary>
     private const char WildcardSep = '|';
 
-    /// <summary>True when <paramref name="code"/> is an <see cref="Encode"/>d attribute-encoded target (carries
-    /// meaningful stack attributes) rather than a bare collectible code. Lets the Tracker counter pick an
-    /// exact-variant matcher for these and keep the wildcard-friendly collectible match for bare codes.</summary>
+    /// <summary>True when <paramref name="code"/> is an <see cref="Encode"/>d attribute-encoded target, so the
+    /// Tracker counter uses an exact-variant matcher instead of the wildcard-friendly collectible match.</summary>
     public static bool IsAttributeEncoded(string? code)
         => code is not null && code.StartsWith(StackPrefix, StringComparison.Ordinal);
 
-    /// <summary>Build the stored target code for a (possibly restricted) wildcard ingredient.
-    /// An <b>unrestricted</b> wildcard — no <paramref name="allowedVariants"/>
-    /// and no <paramref name="skipVariants"/>, e.g. a plain <c>game:metalplate-*</c> whose <c>*</c>-prefix
-    /// already IS the family — stores the bare wildcard code. A
-    /// <b>restricted</b> wildcard — one carrying an allowed/skip variant list, e.g. the Hunter's Backpack's
-    /// <c>{ code: "*", allowedVariants: ["papyrustops","cattailtops"] }</c> — stores a Mod-side microformat
-    /// <c>"&lt;code&gt;|&lt;allowed,csv&gt;[|&lt;skip,csv&gt;]"</c> so the counter can honor the variant filter.
-    /// Without it a bare <c>game:*</c> would match every carried item and resolve its display to
-    /// <c>game:item-air</c>. The stored value stays a plain string, so
-    /// Core's document schema is untouched.</summary>
+    /// <summary>Build the stored target code for a (possibly restricted) wildcard ingredient. An unrestricted
+    /// wildcard (e.g. <c>game:metalplate-*</c>) stores the bare code. One with an allowed/skip variant list
+    /// (e.g. <c>{ code: "*", allowedVariants: [...] }</c>) stores the
+    /// <c>"&lt;code&gt;|&lt;allowed,csv&gt;[|&lt;skip,csv&gt;]"</c> microformat so the counter honors the filter;
+    /// a bare <c>game:*</c> would match every carried item and display as <c>game:item-air</c>.</summary>
     public static string EncodeWildcard(AssetLocation code, string[]? allowedVariants, string[]? skipVariants)
     {
         string bare = code.ToString();
@@ -66,10 +54,9 @@ internal static class ScribeItemRef
         return sb.ToString();
     }
 
-    /// <summary>Parse an <see cref="EncodeWildcard"/> restricted-wildcard microformat into its base wildcard
-    /// <paramref name="code"/> plus the allowed/skip variant arrays. Returns false — leaving all out-params
-    /// null — for a bare code (no <see cref="WildcardSep"/>), an attribute-encoded <see cref="StackPrefix"/>
-    /// target, or a malformed base location, so callers fall through to their existing bare-code handling.</summary>
+    /// <summary>Parse an <see cref="EncodeWildcard"/> microformat into its base wildcard and allowed/skip
+    /// variant arrays. Returns false (out-params null) for a bare code, a <see cref="StackPrefix"/> target, or a
+    /// malformed base location.</summary>
     public static bool TryParseWildcard(string? code, out AssetLocation? baseCode,
         out string[]? allowedVariants, out string[]? skipVariants)
     {
@@ -92,14 +79,10 @@ internal static class ScribeItemRef
     private static string[]? SplitCsv(string s)
         => string.IsNullOrEmpty(s) ? null : s.Split(',', StringSplitOptions.RemoveEmptyEntries);
 
-    /// <summary>Encode an <see cref="ItemStack"/> into a target string that preserves its meaningful,
-    /// identity-bearing attributes. Mirrors
-    /// <see cref="GuiHandbookItemStackPage.PageCodeForStack"/>: clone the attributes, strip every
-    /// <see cref="GlobalConstants.IgnoredStackAttributes"/> key plus <c>durability</c> (transient/noise), take
-    /// a deterministic <c>SortedCopy(true)</c>, and JSON-serialize. When nothing meaningful remains the result
-    /// is the <b>bare code</b> (<c>stack.Collectible.Code.ToString()</c>), so common items store a plain code. Otherwise the attributes are base64-wrapped
-    /// (delimiter-safe through persistence and the HUD) into
-    /// <c>"stack@&lt;code&gt;|&lt;b|i&gt;|&lt;base64(attrJson)&gt;"</c>.</summary>
+    /// <summary>Encode a stack's identity-bearing attributes into a target string, mirroring
+    /// <see cref="GuiHandbookItemStackPage.PageCodeForStack"/> (strip <see cref="GlobalConstants.IgnoredStackAttributes"/>
+    /// plus <c>durability</c>, sort, JSON-serialize). With nothing meaningful left the result is the bare code;
+    /// otherwise <c>"stack@&lt;code&gt;|&lt;b|i&gt;|&lt;base64(attrJson)&gt;"</c> (base64 is delimiter-safe).</summary>
     public static string Encode(ItemStack stack)
     {
         string bareCode = stack.Collectible.Code.ToString();
@@ -107,16 +90,13 @@ internal static class ScribeItemRef
         var attributes = stack.Attributes;
         if (attributes is null || attributes.Count == 0) return bareCode;
 
-        // Clone + strip the same noise PageCodeForStack strips, so identity keys on the meaningful variant
-        // attributes (material/glass/lining) and ignores durability/temperature/tool-mode/etc.
         ITreeAttribute meaningful = attributes.Clone();
         foreach (string ignored in GlobalConstants.IgnoredStackAttributes)
             meaningful.RemoveAttribute(ignored);
         meaningful.RemoveAttribute("durability");
         if (meaningful.Count == 0) return bareCode;
 
-        // SortedCopy(true) gives a deterministic ordering so the encoded string (and any signature derived
-        // from it) is stable across sessions — the same determinism PageCodeForStack relies on.
+        // Sorted so the encoded string (and any signature derived from it) is stable across sessions.
         var sorted = meaningful.SortedCopy(true);
         string attrJson = TreeAttribute.ToJsonToken(sorted);
         string base64 = Convert.ToBase64String(Encoding.UTF8.GetBytes(attrJson));
@@ -124,12 +104,10 @@ internal static class ScribeItemRef
         return StackPrefix + bareCode + "|" + classFlag + "|" + base64;
     }
 
-    /// <summary>Build an <see cref="ItemStack"/> from a target string, probing the item registry first then
-    /// blocks for a bare code (the same order <see cref="ScribeTrackerCounter"/> uses), or rebuilding the
-    /// full attributed stack for an <see cref="Encode"/>d <c>"stack@"</c> target. Returns null for a null/
-    /// empty/malformed code or one that resolves to neither — callers then fall back to showing the raw code.
-    /// Every parse/registry miss degrades to null (never throws), so a legacy bare code, a target for a
-    /// removed mod's item, or a corrupt blob all fail soft.</summary>
+    /// <summary>Build an <see cref="ItemStack"/> from a target string: items then blocks for a bare code (the
+    /// order <see cref="ScribeTrackerCounter"/> uses), or the full attributed stack for a <c>"stack@"</c>
+    /// target. Any empty, malformed, unregistered, or corrupt input returns null (never throws); callers show
+    /// the raw code.</summary>
     public static ItemStack? ResolveStack(IWorldAccessor world, string? code)
     {
         if (string.IsNullOrEmpty(code)) return null;
@@ -148,12 +126,9 @@ internal static class ScribeItemRef
         return null;
     }
 
-    /// <summary>Rebuild an attributed <see cref="ItemStack"/> from an <see cref="Encode"/>d <c>"stack@"</c>
-    /// target: split off the collectible code, the <c>b</c>/<c>i</c> class flag, and the base64 attribute
-    /// blob (neither a <c>domain:path</c> code nor standard base64 contains <c>'|'</c>, so the three fields
-    /// split cleanly), resolve the collectible from the block or item registry per the flag, and hydrate its
-    /// attributes via <see cref="TreeAttribute.FromJson"/>. Any malformed field, registry miss, or bad blob
-    /// returns null (the caller then shows the raw code) — never throws.</summary>
+    /// <summary>Rebuild an attributed stack from an <see cref="Encode"/>d target. Neither a <c>domain:path</c>
+    /// code nor base64 contains <c>'|'</c>, so the three fields split cleanly. Any malformed field, registry
+    /// miss, or bad blob returns null.</summary>
     private static ItemStack? DecodeAttributed(IWorldAccessor world, string code)
     {
         try
@@ -187,19 +162,14 @@ internal static class ScribeItemRef
         catch { return null; }
     }
 
-    /// <summary>The player-facing name for a resolved stack, falling back to the raw code when the stack
-    /// can't be resolved (a mod that provided the item was removed, say) so a Tracker/Link row still reads
-    /// as something rather than blank.</summary>
+    /// <summary>The stack's name, falling back to the raw code (e.g. a removed mod's item) so the row is never blank.</summary>
     public static string DisplayName(ItemStack? stack, string? fallbackCode)
         => stack?.GetName() ?? fallbackCode ?? "";
 
-    /// <summary>Resolve the display icon-stack + name for a Tracker/Link row from its snapshot
-    /// <paramref name="code"/>. A guide-page or quest Link (a <c>"page:"</c>-
-    /// or <c>"quest:"</c>-prefixed code) has no item to draw, so it resolves to <c>(null, LinkLabel)</c> —
-    /// the caller draws a book glyph in place of an <c>ItemStackDisplay</c> and shows the stored title
-    /// (falling back to the bare page/quest code if no label was captured). Every other code is an item/block resolved to a stack whose name is used. Shared by the
-    /// read/editor rows, the Pin Tab, and the HUD so all three classify and label a Link identically.
-    /// <paramref name="linkLabel"/> is ignored for item/Tracker codes (where it is null anyway).</summary>
+    /// <summary>Resolve the icon stack and name for a Tracker/Link row. A <c>"page:"</c> or <c>"quest:"</c> Link
+    /// has no item, so it resolves to <c>(null, linkLabel)</c> (falling back to the bare page/quest code) and
+    /// the caller draws a book glyph. Every other code resolves to a stack and its name.
+    /// <paramref name="linkLabel"/> is ignored for item/Tracker codes. Shared by the rows, Pin Tab, and HUD.</summary>
     public static (ItemStack? Stack, string? Name) ResolveDisplay(IWorldAccessor world, string? code, string? linkLabel)
     {
         if (ScribeLinkTarget.IsGuidePage(code))
@@ -209,10 +179,8 @@ internal static class ScribeItemRef
         var stack = ResolveStack(world, code);
         if (stack is null && code is not null && code.Contains('*'))
         {
-            // A genuine wildcard/family ingredient code (e.g. "game:metalplate-*", stored by a Crafting Task's
-            // child Tracker) resolves to no single stack. Show a representative family member's icon + a
-            // readable "any variant" family label instead of the raw code. The
-            // STORED code stays the wildcard, so counting still matches every member.
+            // A wildcard family code (e.g. "game:metalplate-*") resolves to no single stack: show a representative
+            // member's icon and an "any variant" label. The stored code stays the wildcard so counting matches all.
             var member = ResolveWildcardMember(world, code);
             if (member is not null)
                 return (member, Lang.Get("scribe:scribe-gui-craft-any-family", member.GetName()));
@@ -220,23 +188,14 @@ internal static class ScribeItemRef
         return (stack, DisplayName(stack, code));
     }
 
-    /// <summary>Resolve a representative stack for a wildcard/family code — used both for a Tracker row's
-    /// display icon+name and by <see cref="ScribeTrackerCounter"/> to pick the counting ingredient's item
-    /// class. Two shapes:
-    /// <list type="bullet">
-    /// <item>A <b>restricted-wildcard microformat</b> (<see cref="EncodeWildcard"/>) resolves a concrete member
-    /// by substituting its first resolvable allowed variant into the wildcard's <c>*</c> (e.g.
-    /// <c>game:*</c> + <c>"papyrustops"</c> → <c>game:papyrustops</c>, matching how
-    /// <c>WildcardUtil.MatchesVariants</c> extracts the variant), so the representative is always a real
-    /// family member — never <c>game:item-air</c>.</item>
-    /// <item>A <b>bare wildcard</b> (e.g. <c>game:metalplate-*</c>) takes the first member the wildcard-aware
-    /// registries return (<see cref="IWorldAccessor.SearchItems"/> then <see cref="IWorldAccessor.SearchBlocks"/>),
-    /// skipping the <c>air</c> sentinel so a degenerate bare <c>*</c> can never surface "Item-Air".</item>
-    /// </list>
-    /// Null when the code is malformed or the family has no live member (caller falls back to the raw code).</summary>
+    /// <summary>Resolve a representative stack for a wildcard code, for a Tracker row's icon and name and for
+    /// <see cref="ScribeTrackerCounter"/>'s item class. A restricted microformat substitutes its first resolvable
+    /// allowed variant into the <c>*</c> (e.g. <c>game:*</c> + <c>"papyrustops"</c> → <c>game:papyrustops</c>); a
+    /// bare wildcard takes the first <see cref="IWorldAccessor.SearchItems"/> then
+    /// <see cref="IWorldAccessor.SearchBlocks"/> match, skipping the <c>air</c> sentinel. Null when malformed or
+    /// the family has no live member.</summary>
     public static ItemStack? ResolveWildcardMember(IWorldAccessor world, string code)
     {
-        // Restricted-wildcard microformat: prefer a concrete allowed-variant member (guaranteed non-air).
         if (TryParseWildcard(code, out var baseLoc, out var allowed, out _) && baseLoc is not null)
         {
             if (allowed is not null)
@@ -245,7 +204,7 @@ internal static class ScribeItemRef
                     var member = ResolveConcreteMember(world, baseLoc, variant);
                     if (member is not null) return member;
                 }
-            // No allowed variant resolved → fall through to a filtered search on the bare wildcard code.
+            // No allowed variant resolved: search on the bare wildcard code.
             code = baseLoc.ToString();
         }
 
@@ -253,18 +212,15 @@ internal static class ScribeItemRef
         try { loc = new AssetLocation(code); }
         catch { return null; }
 
-        // Air-exclusion guard: SearchItems("*") returns game:item-air first — never present air (or any
-        // air sentinel) as a family representative, for ANY wildcard shape.
+        // SearchItems("*") returns game:item-air first; never present air as a family representative.
         if (FirstNonAir(world.SearchItems(loc)) is { } item) return new ItemStack(item);
         if (FirstNonAir(world.SearchBlocks(loc)) is { } block) return new ItemStack(block);
         return null;
     }
 
-    /// <summary>Build the concrete member of <paramref name="wildCard"/> for one allowed
-    /// <paramref name="variant"/> by replacing the single <c>*</c> in its path (e.g. <c>metalplate-*</c> +
-    /// <c>"copper"</c> → <c>metalplate-copper</c>; <c>*</c> + <c>"papyrustops"</c> → <c>papyrustops</c>), then
-    /// resolving it from the item registry first, then blocks. Null when there is no <c>*</c> to fill or the
-    /// resolved code is not registered.</summary>
+    /// <summary>Substitute <paramref name="variant"/> for the <c>*</c> in the path (<c>metalplate-*</c> +
+    /// <c>"copper"</c> → <c>metalplate-copper</c>) and resolve it as item then block. Null if there is no
+    /// <c>*</c> or the code is unregistered.</summary>
     private static ItemStack? ResolveConcreteMember(IWorldAccessor world, AssetLocation wildCard, string variant)
     {
         if (!wildCard.Path.Contains('*')) return null;
@@ -274,9 +230,8 @@ internal static class ScribeItemRef
         return null;
     }
 
-    /// <summary>The first non-<c>air</c> collectible in a wildcard search result. The <c>air</c> sentinel
-    /// (item and block alike register code path <c>"air"</c>) sorts first in a bare-<c>*</c> search and would
-    /// otherwise be shown as the family representative.</summary>
+    /// <summary>The first non-<c>air</c> collectible; the <c>air</c> sentinel (path <c>"air"</c>) sorts first in
+    /// a bare-<c>*</c> search.</summary>
     private static T? FirstNonAir<T>(T[]? found) where T : CollectibleObject
     {
         if (found is null) return null;
@@ -285,23 +240,15 @@ internal static class ScribeItemRef
         return null;
     }
 
-    /// <summary>Open the Handbook page (or, for a Progression Framework Quest Link, that backend's own Quest
-    /// Log dialog) a Link/Tracker points at. Four flavors of <paramref name="code"/>: a <c>"page:"</c>-
-    /// prefixed <b>guide-page</b> code opens that raw Handbook page directly (no item to resolve); a
-    /// <c>"quest:"</c>-prefixed <b>Progression Framework quest</b> code opens that backend's Quest Log dialog
-    /// via <see cref="ScribeProgressionFrameworkQuestCatalog.TryOpenQuestLog"/> instead of any Handbook page —
-    /// a quest has no Handbook page; a <c>"quest:"</c>-prefixed <b>VS Quest</b> code remains a Layer-1 no-op
-    /// (there is no Handbook page or live navigation target for a manually-linked VS Quest;
-    /// the row still renders correctly via <see cref="ResolveDisplay"/>, it
-    /// simply doesn't open anything on click); anything else is an item/attribute-encoded code, resolved to a
-    /// stack whose Handbook page is opened. No-op when the code is empty/doesn't resolve, or the relevant mod
-    /// isn't loaded — never toggles any completion state.
+    /// <summary>Open the Handbook page a Link/Tracker points at. A <c>"page:"</c> code opens that raw page; a
+    /// Progression Framework <c>"quest:"</c> code opens that backend's Quest Log via
+    /// <see cref="ScribeProgressionFrameworkQuestCatalog.TryOpenQuestLog"/>; a VS Quest <c>"quest:"</c> code
+    /// does nothing (no page or navigation target exists); anything else resolves to a stack and opens its
+    /// page. No-op when the code is empty or unresolved. Never toggles completion state.
     ///
-    /// <para>The page code prefers the collectible's own <see cref="IHandBookPageCodeProvider"/> when it
-    /// implements one (e.g. <c>BlockMeal</c> maps every meal-with-ingredients to one shared page), falling
-    /// back to <see cref="GuiHandbookItemStackPage.PageCodeForStack"/> when the interface is absent, returns
-    /// null, or throws — a cheap correctness win for meals that never degrades the
-    /// item-page behavior.</para></summary>
+    /// <para>The page code prefers the collectible's <see cref="IHandBookPageCodeProvider"/> (e.g.
+    /// <c>BlockMeal</c> maps every meal to one shared page), falling back to
+    /// <see cref="GuiHandbookItemStackPage.PageCodeForStack"/> if absent, null, or throwing.</para></summary>
     public static void OpenHandbookPage(ICoreClientAPI capi, string? code)
     {
         if (string.IsNullOrEmpty(code)) return;
@@ -322,8 +269,7 @@ internal static class ScribeItemRef
         string? pageCode = null;
         if (stack.Collectible is IHandBookPageCodeProvider provider)
         {
-            // Guarded: a collectible's own page-code provider could throw or hand back an unopenable code, so
-            // fall back to the generic item-stack page code rather than let it break navigation.
+            // A provider may throw or return an unopenable code; fall back rather than break navigation.
             try { pageCode = provider.HandbookPageCodeForStack(capi.World, stack); }
             catch { pageCode = null; }
         }
@@ -333,9 +279,7 @@ internal static class ScribeItemRef
         OpenHandbookByPageCode(capi, pageCode);
     }
 
-    /// <summary>Open a raw Handbook page by its page code (e.g. <c>"craftinginfo-knapping"</c> or an
-    /// item-stack page code) through the registered <c>"handbook"</c> link protocol. No-op when the page
-    /// code is empty or the protocol isn't registered.</summary>
+    /// <summary>Open a Handbook page by code through the <c>"handbook"</c> link protocol; no-op if empty or unregistered.</summary>
     private static void OpenHandbookByPageCode(ICoreClientAPI capi, string? pageCode)
     {
         if (string.IsNullOrEmpty(pageCode)) return;

@@ -2,8 +2,7 @@ using ProtoBuf;
 
 namespace Scribe;
 
-/// <summary>Client → server: release the single-editor lock on a document host (sent on GUI close).
-/// Addressed by <see cref="DocIdBytes"/> (replacing the former PosX/Y/Z fields).</summary>
+/// <summary>Client → server: release the single-editor lock on a document host (sent on GUI close).</summary>
 [ProtoContract]
 public sealed class ScribeReleaseLockMessage
 {

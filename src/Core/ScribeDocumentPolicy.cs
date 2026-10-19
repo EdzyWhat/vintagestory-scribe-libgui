@@ -1,62 +1,40 @@
 namespace Scribe.Core;
 
 /// <summary>
-/// A per-tier cap on how much a <see cref="ScribeDocument"/> may hold, applied at the host/editor
-/// mutation boundary rather than inside the document model. <see cref="ScribeDocument"/> backs every
-/// writing surface (Lectern, Notebook, tablet) and must stay tier-agnostic and uncapped — putting a
-/// limit inside it would leak the tablet tier into the shared model and risk silently limiting the
-/// notebook. Instead each host reports the policy for its tier and consults <see cref="CanAdd"/> /
-/// <see cref="CanPin"/> before letting the editor grow the document or the player pin a task.
-///
-/// <para>A <c>null</c> limit means "uncapped": <see cref="Unlimited"/> is the default every existing
-/// host reports, so notebook and lectern behavior is unchanged. The tablet tier reports
-/// <see cref="Tablet"/> (at most <see cref="StandardMaxBlocks"/> task blocks, 1 pin). This type has no
-/// dependency on the Vintage Story API and is unit-tested in <c>Core.Tests</c>.</para>
+/// A per-tier cap on how much a <see cref="ScribeDocument"/> may hold, applied at the host/editor mutation
+/// boundary so the document model stays tier-agnostic and uncapped. Hosts consult <see cref="CanAdd"/> /
+/// <see cref="CanPin"/> before growing the document or pinning. A <c>null</c> limit means uncapped
+/// (<see cref="Unlimited"/>, the default); the tablet tier reports <see cref="Tablet"/>.
 /// </summary>
 public readonly record struct ScribeDocumentPolicy
 {
-    /// <summary>The shared block cap for the capped surfaces (tablet, chalkboard). A single source of
-    /// truth so raising the cap moves both together, even though the two hosts otherwise report distinct
-    /// policies (the tablet also caps pins; the chalkboard doesn't).</summary>
+    /// <summary>The shared block cap for the capped surfaces (tablet, chalkboard).</summary>
     public const int StandardMaxBlocks = 15;
 
-    /// <summary>Maximum number of task blocks the document may hold, or <c>null</c> for uncapped.
-    /// Counts TASK blocks specifically (the user's "10 tasks"), not freeform text sections — a future
-    /// text-block cap would be a separate limit so the two never get conflated.</summary>
+    /// <summary>Maximum number of blocks the document may hold, or <c>null</c> for uncapped.</summary>
     public int? MaxBlocks { get; init; }
 
-    /// <summary>Maximum number of tasks the player may pin from this document, or <c>null</c> for
-    /// uncapped.</summary>
+    /// <summary>Maximum number of tasks the player may pin from this document, or <c>null</c> for uncapped.</summary>
     public int? MaxPins { get; init; }
 
-    /// <summary>When <c>true</c>, the document may not be edited at all: both <see cref="CanAdd"/> and
-    /// <see cref="CanPin"/> deny regardless of count. Reported by <see cref="UneditableTablet"/> for a hard
-    /// or fired tablet (tablet-firing); the editable tiers leave it false.</summary>
+    /// <summary>When <c>true</c>, both <see cref="CanAdd"/> and <see cref="CanPin"/> deny regardless of count
+    /// (a hard or fired tablet).</summary>
     public bool ReadOnly { get; init; }
 
-    /// <summary>The uncapped policy every existing host (Lectern, Notebook, Clockmaker's) reports, so
-    /// those tiers stay behaviorally unchanged: no block cap, no pin cap, editable.</summary>
+    /// <summary>The uncapped, editable policy reported by Lectern, Notebook, and Clockmaker's.</summary>
     public static readonly ScribeDocumentPolicy Unlimited = new();
 
-    /// <summary>The scratch-tier tablet cap: at most <see cref="StandardMaxBlocks"/> task blocks and 1 pin.
-    /// Editable. Applies to a WET clay/wax tablet only; a hardened or fired tablet reports
-    /// <see cref="UneditableTablet"/> instead.</summary>
+    /// <summary>A WET tablet: at most <see cref="StandardMaxBlocks"/> blocks and 1 pin, editable.</summary>
     public static readonly ScribeDocumentPolicy Tablet = new() { MaxBlocks = StandardMaxBlocks, MaxPins = 1 };
 
-    /// <summary>The read-only preset a non-editable tablet (hardened or fired — tablet-firing) reports:
-    /// <see cref="CanAdd"/> and <see cref="CanPin"/> always deny, so no task can be added and no task can be
-    /// pinned. The block/pin caps are also pinned to 0 so the preset denies even if <see cref="ReadOnly"/>
-    /// were ever cleared. Distinct from <see cref="Tablet"/> so a wet tablet's editable behavior is
-    /// untouched.</summary>
+    /// <summary>A hardened or fired tablet: add and pin always deny. Caps are also 0 so it denies even if
+    /// <see cref="ReadOnly"/> were cleared.</summary>
     public static readonly ScribeDocumentPolicy UneditableTablet =
         new() { MaxBlocks = 0, MaxPins = 0, ReadOnly = true };
 
-    /// <summary>Whether one more block (of ANY kind) may be added given the document's
-    /// <paramref name="currentBlockCount"/>. The cap is "N of anything" — tasks, notes,
-    /// trackers, links, and craft parents all count equally. Always <c>true</c> when <see cref="MaxBlocks"/> is
-    /// <c>null</c> (uncapped) and always <c>false</c> when <see cref="ReadOnly"/>; otherwise <c>true</c> only
-    /// while the count is still below the cap. A negative count is treated as 0 so a garbled caller can't wrap
-    /// past the cap.</summary>
+    /// <summary>Whether one more block (of ANY kind) may be added given <paramref name="currentBlockCount"/>.
+    /// False when <see cref="ReadOnly"/>; true when uncapped; otherwise true while below the cap. A negative
+    /// count is treated as 0.</summary>
     public bool CanAdd(int currentBlockCount)
     {
         if (ReadOnly) return false;
@@ -64,16 +42,10 @@ public readonly record struct ScribeDocumentPolicy
         return Math.Max(0, currentBlockCount) < max;
     }
 
-    /// <summary>Whether a whole document of <paramref name="blockCount"/> blocks (of any kind) may be HELD by
-    /// this tier at once — the Transcribe copy-paste target check. A copy REPLACES the target document, so the
-    /// result's block count equals the source's; the target is a valid destination only if it can hold that
-    /// many. Always <c>false</c> when <see cref="ReadOnly"/> (a hard/fired tablet can't be written at all,
-    /// so it fails this too), always <c>true</c> when <see cref="MaxBlocks"/> is <c>null</c> (uncapped);
-    /// otherwise <c>true</c> only when the count fits at-or-under the cap (<c>&lt;=</c>, not <c>&lt;</c>:
-    /// exactly filling the tier is a legal destination). A negative count is treated as 0.
-    ///
-    /// <para>Distinct from <see cref="CanAdd"/> (which asks "is there room for ONE MORE beyond the current
-    /// count?", a strict <c>&lt;</c>): <see cref="CanHold"/> asks "does this whole count fit?".</para></summary>
+    /// <summary>Whether a whole document of <paramref name="blockCount"/> blocks fits this tier — the
+    /// Transcribe copy-paste target check (a copy REPLACES the target). False when <see cref="ReadOnly"/>,
+    /// true when uncapped, otherwise true at-or-under the cap (<c>&lt;=</c>, unlike <see cref="CanAdd"/>'s
+    /// strict <c>&lt;</c>). A negative count is treated as 0.</summary>
     public bool CanHold(int blockCount)
     {
         if (ReadOnly) return false;
@@ -81,10 +53,8 @@ public readonly record struct ScribeDocumentPolicy
         return Math.Max(0, blockCount) <= max;
     }
 
-    /// <summary>Whether one more pin may be added given the player's <paramref name="currentPinCount"/> for
-    /// this document. Always <c>false</c> when <see cref="ReadOnly"/> (a hard/fired tablet — tablet-firing),
-    /// always <c>true</c> when <see cref="MaxPins"/> is <c>null</c> (uncapped); otherwise <c>true</c> only
-    /// while the count is still below the cap. A negative count is treated as 0.</summary>
+    /// <summary>Whether one more pin may be added given <paramref name="currentPinCount"/>. False when
+    /// <see cref="ReadOnly"/>, true when uncapped, otherwise true while below the cap. A negative count is treated as 0.</summary>
     public bool CanPin(int currentPinCount)
     {
         if (ReadOnly) return false;

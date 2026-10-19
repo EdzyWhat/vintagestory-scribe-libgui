@@ -7,14 +7,9 @@ namespace Scribe;
 
 /// <summary>
 /// The Assignment Desk's placed-block entity. A thin subclass of
-/// <see cref="BlockEntityScribeWritingStation"/>: it shares all document, persistence, editor-lock, and
-/// guestbook logic with the Lectern/Scriptorium and supplies only its own identity/config.
-///
-/// <para>Reuses the Lectern's GUI page art as a placeholder backdrop, and its physical block
-/// model/textures are cloned from the Scriptorium's shape (see <c>assignmentdesk.json</c>).</para>
-///
-/// <para><see cref="PageAspect"/> is a fixed <c>W × 1.2W</c> ratio rather than an art-derived value, so
-/// the dialog's layout does not depend on the backdrop art.</para>
+/// <see cref="BlockEntityScribeWritingStation"/> supplying only its identity/config. Reuses the Lectern's
+/// page art as a placeholder; <see cref="PageAspect"/> is a fixed <c>W × 1.2W</c> so the dialog layout does
+/// not depend on the art.
 /// </summary>
 public sealed class BlockEntityAssignmentDesk : BlockEntityScribeWritingStation
 {
@@ -32,11 +27,9 @@ public sealed class BlockEntityAssignmentDesk : BlockEntityScribeWritingStation
     protected override ScribeBoxTuningTarget? TuningTarget => ScribeBoxTuningTarget.AssignmentDesk;
 
     // ── Staging slot ─────────────────────────────────────────────────────────
-    //
-    // A single Scribe-items-only slot the Create Assignments tab uses to stage an existing document
-    // (Notebook, Tablet, or a picked-up Lectern/Scriptorium/Assignment Desk item) for multi-row
-    // selection and batch-send. Mirrors BlockEntityScriptorium's inventory verbatim — same slot type,
-    // same lazy-init/persistence/packet-routing shape — just with one slot instead of three.
+    // A Scribe-items-only slot the Create Assignments tab uses to stage an existing document for
+    // multi-row selection and batch-send, plus the Task Notice supply/output slots. Same lazy-init/
+    // persistence/packet-routing shape as BlockEntityScriptorium's inventory.
 
     /// <summary>Staging + Task Notice supply/output slots (the "Send a Notice" delivery mode).</summary>
     private const int SlotCount = 3;
@@ -51,13 +44,11 @@ public sealed class BlockEntityAssignmentDesk : BlockEntityScribeWritingStation
     /// notice here for the sender to collect and hand-deliver.</summary>
     public const int NoticeOutputSlotIndex = 2;
 
-    /// <summary>Tree sub-key the inventory persists under, kept separate from the document/lock keys. A
-    /// block whose tree lacks this sub-tree loads with empty slots.</summary>
+    /// <summary>Tree sub-key for the inventory; a tree lacking it loads with empty slots.</summary>
     private const string InventoryTreeKey = "assignmentDeskInventory";
 
-    /// <summary>Created lazily via <see cref="EnsureInventory"/> so it exists before whichever of
-    /// <see cref="FromTreeAttributes"/> / <see cref="Initialize"/> the VS block-entity lifecycle runs
-    /// first (chunk-load runs FromTree first; a fresh place runs Initialize first).</summary>
+    /// <summary>Created lazily via <see cref="EnsureInventory"/> because chunk-load runs FromTreeAttributes
+    /// first while a fresh place runs Initialize first.</summary>
     private InventoryGeneric? inventory;
 
     /// <summary>The Assignment Desk's staging inventory (the Create Assignments tab watches this).</summary>
@@ -83,9 +74,8 @@ public sealed class BlockEntityAssignmentDesk : BlockEntityScribeWritingStation
         EnsureInventory();
         base.Initialize(api);
 
-        // Bind the inventory to the block-entity packet channel (the network-readiness gate). Without
-        // LateInitialize + Pos, LibGUI's SlotController silently drops every slot click, logging
-        // "[gui] Skipped slot activation … not network-ready". Mirrors BlockEntityScriptorium.Initialize.
+        // Bind the inventory to the block-entity packet channel. Without LateInitialize + Pos, LibGUI's
+        // SlotController silently drops every slot click ("Skipped slot activation … not network-ready").
         inventory!.LateInitialize("scribeassignmentdesk-" + Pos, api);
         inventory.Pos = Pos;
     }
@@ -109,10 +99,9 @@ public sealed class BlockEntityAssignmentDesk : BlockEntityScribeWritingStation
         }
     }
 
-    /// <summary>Standard vanilla container packet flow (mirrors <c>BlockEntityScriptorium</c>): slot
-    /// operations (packet id &lt; 1000) go to the inventory's network util; 1000/1001 open/close the
-    /// inventory for the acting player. Rides the built-in block-entity packet channel, NOT the mod's
-    /// "scribe" channel (which carries document edits — a separate concern).</summary>
+    /// <summary>Standard vanilla container packet flow (mirrors <c>BlockEntityScriptorium</c>): packet id
+    /// &lt; 1000 goes to the inventory's network util; 1000/1001 open/close it for the player. Rides the
+    /// block-entity packet channel, NOT the mod's "scribe" channel.</summary>
     public override void OnReceivedClientPacket(IPlayer player, int packetid, byte[] data)
     {
         if (packetid < 1000)
@@ -132,9 +121,8 @@ public sealed class BlockEntityAssignmentDesk : BlockEntityScribeWritingStation
         }
     }
 
-    /// <summary>Drop the staged item when the block is broken, so it is never destroyed by breaking the
-    /// block (mirrors <c>BlockEntityScriptorium.OnBlockBroken</c>). THIS block's own document is carried
-    /// onto the block-item separately by <see cref="BlockScribeWritingStation.GetDrops"/>.</summary>
+    /// <summary>Drops the staged item when the block is broken. The block's own document is carried onto
+    /// the item by <see cref="BlockScribeWritingStation.GetDrops"/>.</summary>
     public override void OnBlockBroken(IPlayer? byPlayer = null)
     {
         base.OnBlockBroken(byPlayer);

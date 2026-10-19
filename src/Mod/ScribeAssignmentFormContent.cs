@@ -18,15 +18,10 @@ using Vintagestory.API.Config;   // Lang
 namespace Scribe;
 
 /// <summary>
-/// The Assignment Desk's Create Assignments tab: a staging slot for an
-/// existing Scribe item, that item's rows rendered Read-view-style with independent Selected checkboxes
-/// (<see cref="ScribeAssignmentStageContent"/>), a "Delete from source on send" toggle, and the
-/// target-player picker + batch-Send button. Staging-and-select ONLY — the Sent history lives on its own
-/// Sent Assignment History tab (<see cref="ScribeDialogBase.BuildSentAssignmentHistoryContent"/>).
-///
-/// <para>Creation happens by delegating existing, already-authored rows rather than typing a bare
-/// checkbox task.</para>
-/// </summary>
+/// The Assignment Desk's Create Assignments tab: a staging slot for an existing Scribe item, that item's rows
+/// rendered Read-view-style with independent Selected checkboxes (<see cref="ScribeAssignmentStageContent"/>),
+/// a "Delete from source on send" toggle, and the target-player picker + batch-Send button. Staging and
+/// selection only; Sent history lives on its own tab (<see cref="ScribeDialogBase.BuildSentAssignmentHistoryContent"/>).
 internal sealed class ScribeAssignmentFormContent : StatefulWidget
 {
     public ScribeAssignmentFormContent(
@@ -80,36 +75,28 @@ internal sealed class ScribeAssignmentFormContent : StatefulWidget
         ShowSubtitleRow = showSubtitleRow;
     }
 
-    /// <summary>Every other online player, as (uid, display name) — the target-player picker's options.
-    /// An offline player can't be targeted (client has no UID→name directory for them); documented MVP
-    /// scope, not a hidden limitation.</summary>
+    /// <summary>Every other online player, as (uid, display name). Offline players can't be targeted (the
+    /// client has no UID-to-name directory for them).</summary>
     public IReadOnlyList<(string Uid, string Name)> TargetPlayers { get; }
-    /// <summary>Dialog-owned target selection — lifted out of this
-    /// widget's own State so the dialog can react to a target CHANGE (firing the Hybrid range check and
-    /// resetting any manual delivery-toggle override), mirroring <see cref="ScribeInboxContent.ActiveFilterGroup"/>.
-    /// Null only when <see cref="TargetPlayers"/> is empty.</summary>
+    /// <summary>Dialog-owned target selection, lifted out of this State so the dialog can react to a target
+    /// change (Hybrid range check, resetting a manual delivery override). Null only when <see cref="TargetPlayers"/> is empty.</summary>
     public string? SelectedTargetUid { get; }
     public Action<string> OnTargetSelected { get; }
-    /// <summary>The dialog-built staging slot widget (owns the SlotController; kept opaque here so this
-    /// class stays free of LibGUI Inventory-widget/SlotController concerns).</summary>
+    /// <summary>The dialog-built staging slot widget, opaque here (the dialog owns the SlotController).</summary>
     public Widget StagingSlot { get; }
-    /// <summary>The staged item's rows, empty when nothing is staged or the staged item has no readable
-    /// document.</summary>
+    /// <summary>The staged item's rows; empty when nothing is staged or it has no readable document.</summary>
     public IReadOnlyList<ScribeReadRowData> StagedRows { get; }
     public ISet<Guid> SelectedTaskIds { get; }
     public Action<Guid> OnToggleSelected { get; }
-    /// <summary>UI-only session state — the dialog owns it, resetting to false on every
-    /// tab (re)open; never a saved preference.</summary>
+    /// <summary>UI-only session state owned by the dialog; resets to false on every tab (re)open.</summary>
     public bool DeleteFromSource { get; }
     public Action<bool> OnToggleDeleteFromSource { get; }
-    /// <summary>Send every selected staged row as its own independent assignment to
-    /// <see cref="SelectedTargetUid"/>.</summary>
+    /// <summary>Sends every selected staged row as its own assignment to <see cref="SelectedTargetUid"/>.</summary>
     public Action OnSendBatch { get; }
-    /// <summary>True while the "Submitted to Player" stamp is playing over the staging slot — disables the
-    /// Send button for the animation's duration so a second tap
-    /// can't queue another send before the first one's flourish has finished.</summary>
+    /// <summary>True while the "Submitted to Player" stamp plays over the staging slot; disables Send so a
+    /// second tap can't queue another send mid-flourish.</summary>
     public bool Sending { get; }
-    /// <summary>Whether the Desk's own document has an eligible task to pull in — gates the empty-state's "pull from Desk" button.</summary>
+    /// <summary>Whether the Desk's own document has an eligible task to pull in (gates the empty-state button).</summary>
     public bool CanPullFromDesk { get; }
     /// <summary>Enters the Desk's local Editor through the dialog-owned lock-aware path.</summary>
     public Action OnCreateTasks { get; }
@@ -117,30 +104,22 @@ internal sealed class ScribeAssignmentFormContent : StatefulWidget
     public Action OnPullFromDesk { get; }
     public ScribeRowStyle Style { get; }
     public ScrollController ScrollController { get; }
-    /// <summary>The server's current `scribeDeliveryMode` world config —
-    /// gates whether the Local Inboxes / Send a Notice toggle shows at all (<see cref="ScribeDeliveryPolicy.ShowsToggle"/>
-    /// — Hybrid only) and whether the notice slots show (<see cref="ScribeDeliveryPolicy.RequiresNotice"/>).</summary>
+    /// <summary>The server's `scribeDeliveryMode` world config; gates the Local Inboxes / Send a Notice toggle
+    /// (<see cref="ScribeDeliveryPolicy.ShowsToggle"/>) and the notice slots (<see cref="ScribeDeliveryPolicy.RequiresNotice"/>).</summary>
     public ScribeDeliveryMode DeliveryMode { get; }
-    /// <summary>The EFFECTIVE delivery choice for this send — already resolved by the dialog (manual
-    /// override if the player tapped the toggle, otherwise the Hybrid range-check default, or the fixed
-    /// value implied by a non-Hybrid mode). This widget never computes a default itself.</summary>
+    /// <summary>The effective delivery choice, already resolved by the dialog; this widget never computes a default.</summary>
     public ScribeDeliveryChoice DeliveryChoice { get; }
-    /// <summary>Tapping either half of the Local Inboxes / Send a Notice toggle; always freely
-    /// overridable, with no blocked/grayed state.</summary>
+    /// <summary>Tapping either half of the toggle; always freely overridable.</summary>
     public Action<ScribeDeliveryChoice> OnDeliveryChoiceChanged { get; }
-    /// <summary>The blank-notice stacking supply slot widget, built by the dialog exactly like
-    /// <see cref="StagingSlot"/> — non-null only when <see cref="ScribeDeliveryPolicy.RequiresNotice"/>
-    /// says the current mode/choice needs it.</summary>
+    /// <summary>The blank-notice supply slot, built like <see cref="StagingSlot"/>; non-null only when
+    /// <see cref="ScribeDeliveryPolicy.RequiresNotice"/> says it is needed.</summary>
     public Widget? NoticeSupplySlot { get; }
-    /// <summary>The sealed-notice non-stacking output slot widget — same visibility rule as
-    /// <see cref="NoticeSupplySlot"/>.</summary>
+    /// <summary>The sealed-notice output slot; same visibility rule as <see cref="NoticeSupplySlot"/>.</summary>
     public Widget? NoticeOutputSlot { get; }
-    /// <summary>Opens the delivery-mode explanation Handbook page —
-    /// a dialog-owned callback since <c>ToggleHandbookPage</c> is <c>protected</c> on
-    /// <see cref="ScribeDialogBase"/> and unreachable from this plain widget.</summary>
+    /// <summary>Opens the delivery-mode Handbook page; a dialog callback since <c>ToggleHandbookPage</c> is
+    /// <c>protected</c> on <see cref="ScribeDialogBase"/>.</summary>
     public Action OnOpenDeliveryInfo { get; }
-    /// <summary>Whether <see cref="ScribeTabHeader.Build"/> renders its Row 2 subtitle line, read from
-    /// <c>modSystem.VisualTuning.ShowSubtitleRow</c>.</summary>
+    /// <summary>Whether <see cref="ScribeTabHeader.Build"/> renders its Row 2 subtitle line.</summary>
     public bool ShowSubtitleRow { get; }
 
     public override State CreateState() => new ScribeAssignmentFormContentState();
@@ -155,11 +134,8 @@ internal sealed class ScribeAssignmentFormContentState : State<ScribeAssignmentF
         var players = Widget.TargetPlayers;
         string? selectedTargetUid = Widget.SelectedTargetUid;
 
-        // Row 3 (the send-to controls) renders entirely in Caudex, matching the title/subtitle rows above
-        // it — unlike the tab's general content below the divider, which follows the player's Task Text
-        // Font. The picker's popup menu renders in a global overlay outside the tab subtree the ambient
-        // DefaultTextStyle ancestor covers anyway, so its font must be set explicitly regardless (same
-        // reasoning as ScribePinnedContent's policy-picker dropdown).
+        // Row 3 (send-to controls) renders in Caudex like the title/subtitle rows above it. The picker's popup
+        // renders in a global overlay outside the ambient DefaultTextStyle, so its font must be set explicitly.
         var targetDropdownStyle = Theme.Of(context).DropdownStyle;
         targetDropdownStyle = targetDropdownStyle with { TextStyle = targetDropdownStyle.TextStyle with { FontFamily = ScribeTaskFont.ButtonFamily } };
 
@@ -181,8 +157,7 @@ internal sealed class ScribeAssignmentFormContentState : State<ScribeAssignmentF
             enabled: canSend,
             onTap: canSend ? _ => Widget.OnSendBatch() : null);
 
-        // "Send to" row as a LibGUI flex Row: a fixed-width label, the player picker taking the flexible remaining space,
-        // and the fixed-width Send button.
+        // "Send to" row: fixed-width label, flexible picker, fixed-width Send button.
         Widget sendToRow = new Row(
             crossAxisAlignment: CrossAxisAlignment.Center,
             spacing: 8f,
@@ -222,10 +197,7 @@ internal sealed class ScribeAssignmentFormContentState : State<ScribeAssignmentF
                     new TextStyle { FontSize = style.FontSize * 0.85f, Color = colors.OnSurfaceVariant, SoftWrap = true }),
             });
 
-        // Inscribed in a rounded box with a slight inner glow emulating a shadow — reads as a recessed "tray" the staged rows sit inside, distinguishing this list
-        // from the plain-background rows/controls around it. Corner radius/border echo the staging slot's
-        // own rounding; BoxShadow.Inset paints INSIDE the box (see BoxShadow's remarks), which is what
-        // reads as a shadow cast INTO the box rather than one the box casts onto the page behind it.
+        // A rounded tray with an inset shadow (BoxShadow.Inset paints inside the box) so the staged rows read as recessed.
         Widget stageBox = new Container(
             style: new BoxStyle
             {
@@ -250,15 +222,12 @@ internal sealed class ScribeAssignmentFormContentState : State<ScribeAssignmentF
                 style: style,
                 scrollController: Widget.ScrollController));
 
-        // Row 3 = ONLY the send-to controls. Everything else — the staging-slot hint, delete-checkbox,
-        // delivery toggle, and notice slots — sits in the scrollable/general content below the divider.
+        // Row 3 holds only the send-to controls; everything else sits below the divider.
         Widget header = ScribeTabHeader.Build(colors, style,
             "scribe:scribe-tab-assignment", "scribe:scribe-tab-subtitle-assignment", Widget.ShowSubtitleRow, sendToRow);
 
-        // Content below the divider: the delete-checkbox gets its own line at the very TOP of the content
-        // section, then the staging hint, the scrollable stage tray, and — when shown — the notice slots
-        // sitting directly above the Local Inboxes/Send a Notice group. The 8-unit top padding sits on this
-        // content block as a whole, so the durable divider above stays flush against it.
+        // Below the divider: delete-checkbox, staging hint, scrollable stage tray, then the notice slots (when
+        // shown) above the delivery group. The 8-unit top padding keeps the divider flush against the content.
         var contentChildren = new List<Widget> { deleteFromSourceRow, stagingArea, new Expanded(child: stageBox) };
         if (noticeSlotsRow is not null) contentChildren.Add(noticeSlotsRow);
         if (deliveryRow is not null) contentChildren.Add(deliveryRow);
@@ -269,10 +238,7 @@ internal sealed class ScribeAssignmentFormContentState : State<ScribeAssignmentF
             mainAxisSize: MainAxisSize.Max,
             children: contentChildren));
 
-        // Rooted in the same Task Text Font + inset every other tab uses (ScribeReadContent/
-        // ScribePinnedContent/the Guestbook/the Timer tab), so the Divider sits inset rather than spanning
-        // edge-to-edge. Top inset is 4 (a small gap between the title bar and the Row 2 subtitle);
-        // left/right/bottom are 10.
+        // Same Task Text Font + inset as every other tab so the Divider sits inset; top inset 4, others 10.
         return ScribeTextDefaults.Wrap(style.TaskFontFamily, style.FontSize, new Padding(EdgeInsets.Ltrb(10, 4, 10, 10), child: new Column(
             spacing: 0,
             crossAxisAlignment: CrossAxisAlignment.Stretch,
@@ -280,10 +246,9 @@ internal sealed class ScribeAssignmentFormContentState : State<ScribeAssignmentF
             children: new Widget[] { header, new Expanded(child: content) })));
     }
 
-    /// <summary>The "Local Inboxes" / "Send a Notice" toggle + its info button. Hybrid-only (<see cref="ScribeDeliveryPolicy.ShowsToggle"/>) — a
-    /// non-Hybrid mode has only one legal delivery path, so there is nothing to choose between and no
-    /// toggle renders at all. Two plain segment buttons rather than a custom pill (a plain enabled Button
-    /// pair reads unambiguously as always-tappable, with no blocked/grayed state).</summary>
+    /// <summary>The "Local Inboxes" / "Send a Notice" toggle plus its info button. Hybrid-only
+    /// (<see cref="ScribeDeliveryPolicy.ShowsToggle"/>): other modes have one legal path. Two plain segment
+    /// buttons read as always-tappable.</summary>
     private Widget? BuildDeliveryRow(ColorScheme colors, ScribeRowStyle style)
     {
         if (!ScribeDeliveryPolicy.ShowsToggle(Widget.DeliveryMode)) return null;
@@ -300,24 +265,17 @@ internal sealed class ScribeAssignmentFormContentState : State<ScribeAssignmentF
             variant: sendNotice ? ButtonVariant.Primary : ButtonVariant.Secondary,
             onTap: _ => Widget.OnDeliveryChoiceChanged(ScribeDeliveryChoice.SendNotice));
 
-        // A short hover hint plus a click-through to the full Handbook explanation, mirroring
-        // GuiDialogScribeScriptorium's info-button precedent (a Tooltip wrapping a Button that opens a
-        // "craftinginfo-scribe-X" page) rather than cramming the long-form text into the tooltip itself.
+        // Hover hint plus click-through to the full Handbook page, mirroring GuiDialogScribeScriptorium's info button.
         //
-        // Sized to match the two Buttons beside it — computed from the buttons' own font metrics + Gui's stock Button padding/border (6+6 vertical,
-        // ~1+1 border; ButtonStyle.Default) rather than hardcoded, so it tracks any future font/theme
-        // change. ScribeRowButton's box AND glyph both scale with Size by the same proportion, so growing
-        // Size alone would grow the icon just as much as the padding around it — IconScale is pulled down
-        // to counter that, landing the icon only slightly bigger than a style.ControlSize rendering
-        // while the surrounding padding (box minus glyph) does most of the growth.
+        // Sized from the buttons' own font metrics + stock Button padding/border (6+6 vertical, ~1+1 border)
+        // so it tracks font/theme changes. ScribeRowButton scales box and glyph together, so IconScale is
+        // pulled down to keep the icon only slightly bigger than a style.ControlSize rendering.
         const float buttonFontSize = 12.5f;
         var buttonFontMetrics = TextLayoutHelper.GetFont(ScribeTaskFont.ButtonFamily, buttonFontSize, FontWeight.Normal).Metrics;
         float buttonLineH = buttonFontMetrics.Descent - buttonFontMetrics.Ascent + buttonFontMetrics.Leading;
         float buttonTotalH = buttonLineH + 12f /* ButtonStyle.Default vertical padding, 6+6 */ + 2f /* ~1px border each side */;
-        // -2f: 1px less internal padding on every side, so the box reads a touch smaller than the two
-        // Buttons beside it. The icon's target size (oldGlyph * 1.15f) is independent of that —
-        // infoIconScale is solved against infoSize, so the 2px comes entirely out of ScribeRowButton's own
-        // padding, not the glyph.
+        // -2f: the box reads a touch smaller than the two Buttons; the icon target (oldGlyph * 1.15f) is independent
+        // because infoIconScale is solved against infoSize.
         float infoSize = buttonTotalH + ScribeRowButton.BoxShrink - 2f; // so the drawn box == buttonTotalH - 2
 
         float oldPad = MathF.Max(3f, style.ControlSize * 0.18f);
@@ -341,11 +299,8 @@ internal sealed class ScribeAssignmentFormContentState : State<ScribeAssignmentF
             children: new Widget[] { localInboxesBtn, sendNoticeBtn, infoButton });
     }
 
-    /// <summary>The blank-notice supply + sealed-notice output slots — shown whenever the
-    /// current mode/choice actually requires sealing a notice on Send, per the same
-    /// <see cref="ScribeDeliveryPolicy.RequiresNotice"/> check the server re-derives independently. A
-    /// single source of truth for "do the notice slots show" means the Hybrid toggle and the fixed
-    /// AlwaysPhysical/AlwaysInstant modes all fall out of one rule rather than three separate ones.</summary>
+    /// <summary>The blank-notice supply + sealed-notice output slots, shown whenever
+    /// <see cref="ScribeDeliveryPolicy.RequiresNotice"/> (the same check the server re-derives) says Send seals a notice.</summary>
     private Widget? BuildNoticeSlotsRow(ColorScheme colors, ScribeRowStyle style)
     {
         if (!ScribeDeliveryPolicy.RequiresNotice(Widget.DeliveryMode, Widget.DeliveryChoice)) return null;

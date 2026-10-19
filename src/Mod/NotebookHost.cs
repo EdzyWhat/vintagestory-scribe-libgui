@@ -7,14 +7,9 @@ using Vintagestory.API.Server;
 namespace Scribe;
 
 /// <summary>
-/// <see cref="IScribeDocumentHost"/> adapter for the player-held Notebook item. Wraps the
-/// player's held <see cref="ItemSlot"/> and persists the document into
-/// <c>ItemStack.Attributes["scribeDocument"]</c> via <see cref="ScribeDocumentAttributes"/>.
-///
-/// Registered into <see cref="ScribeModSystem"/>'s host registry when the notebook dialog
-/// opens (client side) and also during server-side save handling (implicitly via the ItemStack).
-/// Owner-only: <see cref="IsLockedByOther"/> always returns false because only one player
-/// can hold the item at a time.
+/// <see cref="IScribeDocumentHost"/> adapter for the player-held Notebook item. Wraps the held
+/// <see cref="ItemSlot"/> and persists the document into the ItemStack via <see cref="ScribeDocumentAttributes"/>.
+/// Owner-only: <see cref="IsLockedByOther"/> is always false.
 /// </summary>
 public class NotebookHost : IScribeDocumentHost, IHistoryRecordable
 {
@@ -27,37 +22,28 @@ public class NotebookHost : IScribeDocumentHost, IHistoryRecordable
     private byte _readViewFilterCategory;
     private HashSet<Guid> _collapsedGroupIds;
 
-    /// <param name="backdrop">The dialog backdrop this host reports via <see cref="BackdropSpec"/>.
-    /// Defaults to <see cref="ScribeBackdrops.NotebookPage"/> (the plain Notebook's art); the Clockmaker's
-    /// Notebook item passes <see cref="ScribeBackdrops.ClockmakerPage"/> so it draws distinct art even
-    /// though both items share this host class.</param>
+    /// <param name="backdrop">Dialog backdrop; defaults to <see cref="ScribeBackdrops.NotebookPage"/>. The
+    /// Clockmaker's Notebook passes <see cref="ScribeBackdrops.ClockmakerPage"/>.</param>
     public NotebookHost(ItemSlot slot, ScribeBackdropSpec? backdrop = null)
     {
         _slot = slot;
         _backdrop = backdrop ?? ScribeBackdrops.NotebookPage;
         var stack = slot.Itemstack!;
-        // A documentless stack gets an in-memory placeholder only — NOT written back here. Writing it
-        // here would race the ambient OnHistoryScanTick sweep (and any other host construction) for
-        // who gets to mint the stack's real DocId first; the two sides can disagree and leave the
-        // player's own client permanently proposing a DocId the server never adopted.
-        // OnServerReceivedNotebookSave's own bootstrap branch is the only place a fresh
-        // DocId is ever persisted onto a stack that doesn't have one yet.
+        // A documentless stack gets an in-memory placeholder only, NOT written back: writing here would race
+        // the ambient OnHistoryScanTick sweep for who mints the real DocId first, leaving the client proposing
+        // a DocId the server never adopted. OnServerReceivedNotebookSave's bootstrap branch is the only place
+        // a fresh DocId is persisted.
         _document = ScribeDocumentAttributes.TryReadFrom(stack, out var doc) && doc is not null
             ? doc
             : new ScribeDocument();
         _history = HistoryStore.Deserialize(stack.Attributes.GetBytes("scribeHistory"));
-        // Read View filter pill + subtask-group collapse state, the
-        // item-hosted counterpart of the block entity's tree-attribute fields. Absent attributes (a
-        // never-opened item) default to All / fully-expanded via GetInt/GetBytes's own defaults.
+        // Read View state; absent attributes default to All / fully-expanded.
         _readViewFilterCategory = (byte)stack.Attributes.GetInt("scribeReadViewFilter", 0);
         _collapsedGroupIds = ScribeReadViewFilter.DeserializeGuidSet(stack.Attributes.GetBytes("scribeReadViewCollapsed"));
     }
 
-    /// <summary>Attach server context so write-through operations can push the updated document
-    /// back to the player's client after mutating the ItemStack. Also records this player's one-time
-    /// PickedUp entry (deduplicated per actor, skipped for the crafter) via
-    /// <see cref="RecordPickedUpIfNew"/> — reached both from the notebook-opened network handler and
-    /// whenever the server resolves the host for a task interaction or death event.</summary>
+    /// <summary>Attaches server context so write-through can push the updated document to the client, and
+    /// records this player's one-time PickedUp entry via <see cref="RecordPickedUpIfNew"/>.</summary>
     public void AttachServerContext(ICoreServerAPI sapi, IServerPlayer player)
     {
         _sapi = sapi;
@@ -67,28 +53,21 @@ public class NotebookHost : IScribeDocumentHost, IHistoryRecordable
 
     public ScribeDocument Document => _document;
 
-    /// <summary>The <c>InventoryID</c> of the slot this host is bound to, so a client save packet can name
-    /// the EXACT slot it edited and the server writes back there rather than re-guessing by active hand.
-    /// Null when the slot isn't in a resolvable inventory (defensive — a
-    /// held/carried item always is); the packet then omits identity and the server falls back to active
-    /// hand. Client-side only in practice (a server-constructed host never sends a save packet).</summary>
+    /// <summary>The <c>InventoryID</c> of the bound slot, so a client save packet names the EXACT slot edited.
+    /// Null when the slot has no resolvable inventory (the server then falls back to the active hand).</summary>
     public string? SlotInventoryId => _slot.Inventory?.InventoryID;
 
-    /// <summary>The slot index of <see cref="_slot"/> within <see cref="SlotInventoryId"/>, or -1 when the
-    /// slot has no resolvable inventory. Pairs with <see cref="SlotInventoryId"/> to address the exact
-    /// save target.</summary>
+    /// <summary>The slot index within <see cref="SlotInventoryId"/>, or -1 when unresolvable.</summary>
     public int SlotId => _slot.Inventory?.GetSlotId(_slot) ?? -1;
 
-    /// <summary>The notebook's history chronicle. Persisted in <c>ItemStack.Attributes["scribeHistory"]</c>
-    /// and flushed alongside the document in <see cref="Flush"/>.</summary>
+    /// <summary>The notebook's history chronicle, persisted in <c>scribeHistory</c> and flushed with the document.</summary>
     public HistoryStore History => _history;
 
     public bool IsLockedByOther(string viewerUid) => false;
 
     public void ApplyLocalOptimisticEdit(ScribeDocument doc) => _document = doc;
 
-    /// <summary>Replaces the in-memory history store from freshly deserialized bytes pushed by the
-    /// server. Used by the client-side network receive path to refresh the History tab.</summary>
+    /// <summary>Replaces the in-memory history from bytes pushed by the server (client receive path).</summary>
     public void ApplyHistoryUpdate(byte[]? historyBytes)
     {
         if (historyBytes is not null)
@@ -97,25 +76,21 @@ public class NotebookHost : IScribeDocumentHost, IHistoryRecordable
 
     public ScribeBackdropSpec BackdropSpec => _backdrop;
 
-    /// <summary>The dialog layout for this item. <c>virtual</c> so a subclass can re-proportion its own
-    /// dialog (the tablet overrides the side-column / title-band / inner-height fractions) without touching
-    /// the notebook's; the base keeps the default proportions and the notebook art's 1160/1024 aspect.</summary>
+    /// <summary><c>virtual</c> so a subclass (the tablet) can re-proportion its dialog; the base uses default
+    /// proportions and the notebook art's 1160/1024 aspect.</summary>
     public virtual ScribeLayout GetLayout(float pixelArtSize) => new ScribeLayout(pixelArtSize, 1160f / 1024f);
 
     public virtual string DefaultDocumentTitle => Lang.Get("scribe:doctitle-notebook");
 
-    /// <summary>The notebook tier is uncapped. Declared here (implementing the interface member for the
-    /// whole <see cref="NotebookHost"/> hierarchy) and <c>virtual</c> so <see cref="TabletHost"/> can
-    /// override it to the tablet cap — a bare <c>Policy</c> member on the subclass would NOT re-map the
-    /// interface, which is fixed at the type that declares the interface (this one), so calls through
-    /// <see cref="IScribeDocumentHost"/> would wrongly resolve to the default.</summary>
+    /// <summary>The notebook tier is uncapped. Declared <c>virtual</c> here so <see cref="TabletHost"/> can
+    /// override it: a bare member on the subclass would not re-map the interface, which is fixed at the
+    /// declaring type.</summary>
     public virtual ScribeDocumentPolicy Policy => ScribeDocumentPolicy.Unlimited;
 
-    /// <summary>The Notebook has no guestbook. This property is never called because
-    /// <see cref="GuiDialogScribeNotebook"/> does not add a Visitors nav button.</summary>
+    /// <summary>Never called: <see cref="GuiDialogScribeNotebook"/> adds no Visitors nav button.</summary>
     public GuestbookStore Guestbook => throw new NotSupportedException("Notebook has no guestbook.");
 
-    // ── Server-side write-through — mutate the in-memory document then persist to the ItemStack ──
+    // Server-side write-through: mutate the in-memory document, then persist to the ItemStack
 
     public void SetTaskDoneFromReader(Guid taskId, bool done)
     {
@@ -144,12 +119,9 @@ public class NotebookHost : IScribeDocumentHost, IHistoryRecordable
     public byte ReadViewFilterCategory => _readViewFilterCategory;
     public IReadOnlyCollection<Guid> CollapsedGroupIds => _collapsedGroupIds;
 
-    /// <summary>Overwrites this item's persisted Read View filter pill + collapsed-group set,
-    /// driven by <see cref="ScribeSetReadViewStateMessage"/>. Writes
-    /// straight to the ItemStack and marks the slot dirty; unlike <see cref="Flush"/> this does not push a
-    /// <see cref="ScribeNotebookSaveMessage"/> back — the sending client already applied the change
-    /// optimistically to its own open dialog, and a Notebook/Tablet has exactly one viewer (the holder),
-    /// so there is no other client to converge.</summary>
+    /// <summary>Overwrites the persisted Read View filter pill + collapsed-group set. Writes straight to the
+    /// ItemStack without pushing a <see cref="ScribeNotebookSaveMessage"/>: the sender already applied it
+    /// optimistically and the holder is the only viewer.</summary>
     public void SetReadViewStateFromReader(byte filterCategory, IReadOnlyCollection<Guid> collapsedGroupIds)
     {
         _readViewFilterCategory = filterCategory;
@@ -175,10 +147,8 @@ public class NotebookHost : IScribeDocumentHost, IHistoryRecordable
         return true;
     }
 
-    /// <summary>Set a Tracker's live <see cref="ScribeBlock.CurrentQuantity"/> by stable TaskId — the
-    /// item-surface write-through for the client count engine, mirroring
-    /// <see cref="SetTaskTextFromReader"/>. Routes through the Core clamp and only persists on a real
-    /// change; a no-op / unknown id / non-Tracker returns false without flushing.</summary>
+    /// <summary>Sets a Tracker's live <see cref="ScribeBlock.CurrentQuantity"/>. Persists only on a real change;
+    /// an unknown id or non-Tracker returns false without flushing.</summary>
     public bool SetTrackerCurrentQuantityFromReader(Guid taskId, int qty)
     {
         var block = _document.FindByTaskId(taskId);
@@ -189,12 +159,9 @@ public class NotebookHost : IScribeDocumentHost, IHistoryRecordable
         return true;
     }
 
-    /// <summary>Set a QuestObjective's live <see cref="ScribeBlock.CurrentQuantity"/> by stable TaskId — the
-    /// item-surface write-through for the client-side quest watcher, mirroring
-    /// <see cref="SetTrackerCurrentQuantityFromReader"/> but gated on <c>IsQuestObjective</c> and clamped
-    /// into <c>[0, TargetQuantity]</c> via <see cref="ScribeDocument.SetQuestObjectiveProgress"/> — never
-    /// overflow-visible like a Tracker's count. A no-op / unknown id / non-QuestObjective returns false
-    /// without flushing.</summary>
+    /// <summary>Sets a QuestObjective's live <see cref="ScribeBlock.CurrentQuantity"/>, clamped into
+    /// <c>[0, TargetQuantity]</c> (unlike a Tracker's overflow). An unknown id or non-QuestObjective returns
+    /// false without flushing.</summary>
     public bool SetQuestObjectiveProgressFromReader(Guid taskId, int qty)
     {
         var block = _document.FindByTaskId(taskId);
@@ -206,17 +173,15 @@ public class NotebookHost : IScribeDocumentHost, IHistoryRecordable
         return true;
     }
 
-    /// <summary>Writes the document AND history store back to the ItemStack, marks the slot dirty, and
-    /// pushes a full sync to the player's client. Public so server-side tools (e.g. the demo seeder)
-    /// can persist seeded content through the normal flow — mirrors the already-public
-    /// <see cref="FlushHistory"/>.</summary>
+    /// <summary>Writes the document AND history back to the ItemStack, marks the slot dirty, and pushes a full
+    /// sync to the client. Public so server-side tools (e.g. the demo seeder) can persist through the normal flow.</summary>
     public void Flush()
     {
         if (_slot.Itemstack is not { } stack) return;
         ScribeDocumentAttributes.WriteTo(stack, _document);
         stack.Attributes.SetBytes("scribeHistory", _history.Serialize());
         _slot.MarkDirty();
-        // Push the updated document (and history bytes) back to the player's client.
+        // Push the updated document and history back to the player's client.
         if (_sapi is not null && _player is not null)
         {
             _sapi.Network.GetChannel(ScribeModSystem.NetworkChannelName).SendPacket(new ScribeNotebookSaveMessage
@@ -228,8 +193,7 @@ public class NotebookHost : IScribeDocumentHost, IHistoryRecordable
         }
     }
 
-    /// <summary>Writes only the history store back to the ItemStack and pushes a sync to the client.
-    /// Cheaper than <see cref="Flush"/> when only history changed (avoids re-serializing the document).</summary>
+    /// <summary>Writes only the history back and syncs; cheaper than <see cref="Flush"/>.</summary>
     public void FlushHistory()
     {
         if (_slot.Itemstack is not { } stack) return;
@@ -246,12 +210,9 @@ public class NotebookHost : IScribeDocumentHost, IHistoryRecordable
         }
     }
 
-    /// <summary>Server-side: creates a new Manual history entry authored by <paramref name="player"/>
-    /// (the packet SENDER — never a client-claimed identity) with the given client-minted
-    /// <paramref name="entryId"/> and text, then flushes and syncs. A no-op if the store's
-    /// <c>MaxManual</c> sliding-window somehow rejected it (defensive; <c>TryAddEntry</c> currently
-    /// never rejects a Manual add outright, it drops the oldest instead — see
-    /// <see cref="Scribe.Core.HistoryStore.TryAddEntry"/>).</summary>
+    /// <summary>Server-side: creates a Manual history entry authored by <paramref name="player"/> (the packet
+    /// SENDER, never a client-claimed identity) with the client-minted <paramref name="entryId"/>. A no-op if
+    /// the store rejects it.</summary>
     public void AddManualEntry(ICoreServerAPI sapi, IServerPlayer player, Guid entryId, string text)
     {
         var added = _history.TryAddEntry(new HistoryEntry
@@ -266,18 +227,14 @@ public class NotebookHost : IScribeDocumentHost, IHistoryRecordable
         if (added) FlushHistory();
     }
 
-    /// <summary>Server-side: updates an existing Manual entry's text, authorized by matching
-    /// <paramref name="player"/>'s own name against the entry's stored author — see
-    /// <see cref="Scribe.Core.HistoryStore.TrySetManualEntryText"/>. Silently no-ops on an author
-    /// mismatch or unknown <paramref name="entryId"/>.</summary>
+    /// <summary>Server-side: updates a Manual entry's text, authorized by matching the player's name against
+    /// the stored author. Silently no-ops on an author mismatch or unknown id.</summary>
     public void SetManualEntryText(IServerPlayer player, Guid entryId, string text)
     {
         if (_history.TrySetManualEntryText(entryId, player.PlayerName, text)) FlushHistory();
     }
 
-    /// <summary>Server-side: deletes a Manual entry, authorized the same way as
-    /// <see cref="SetManualEntryText"/>. Silently no-ops on an author mismatch or unknown
-    /// <paramref name="entryId"/>.</summary>
+    /// <summary>Server-side: deletes a Manual entry, authorized like <see cref="SetManualEntryText"/>.</summary>
     public void DeleteManualEntry(IServerPlayer player, Guid entryId)
     {
         if (_history.TryDeleteManualEntry(entryId, player.PlayerName)) FlushHistory();
@@ -285,10 +242,8 @@ public class NotebookHost : IScribeDocumentHost, IHistoryRecordable
 
     private void RecordPickedUpIfNew(ICoreServerAPI sapi, IServerPlayer player)
     {
-        // The crafter already has a "Crafted by X" entry standing in for their acquisition, so don't
-        // also give them a redundant "Picked up" line. Other players still get their own first-pickup
-        // entry (deduplicated per actor by TryAddEntry). The Crafted entry stores the crafter's name
-        // in ActorName (see ItemScribeNotebook.OnCreatedByCrafting).
+        // The crafter's "Crafted by X" entry already stands in for acquisition, so skip the "Picked up" line.
+        // Other players are deduplicated per actor by TryAddEntry.
         bool isCrafter = _history.Entries.Any(
             e => e.Kind == HistoryEventKind.Crafted && e.ActorName == player.PlayerName);
         if (isCrafter) return;
@@ -300,22 +255,15 @@ public class NotebookHost : IScribeDocumentHost, IHistoryRecordable
             InGameDate      = FormatDate(sapi),
             InGameTimestamp = sapi.World.Calendar.TotalDays,
         });
-        // FlushHistory, not Flush: this only ever mutates _history, never _document. Flush would also
-        // persist _document, which on a stack that had none yet would stamp a fresh DocId as a pure side
-        // effect of AttachServerContext being called (e.g. from the ambient OnHistoryScanTick sweep) —
-        // racing the player's own client for who mints the item's real DocId first.
+        // FlushHistory, not Flush: Flush would also persist _document, stamping a fresh DocId on a stack that
+        // had none (e.g. from the OnHistoryScanTick sweep) and racing the client to mint the real one.
         if (added) FlushHistory();
     }
 
-    /// <summary>Records the one-time PickedUp entry directly on a held notebook's ItemStack — history
-    /// ONLY, deliberately never touching the <c>scribeDocument</c> attribute. This is the path used by
-    /// the notebook-opened network handler, where the server sees a notebook that was just picked up
-    /// and opened but has never synced a document (a notebook's DocId is generated client-side and only
-    /// reaches the server on the first edit; crafting writes only <c>scribeHistory</c>). Avoids
-    /// constructing a full <see cref="NotebookHost"/> (and the document read it would trigger) just to
-    /// touch history. Crafter is suppressed and other players are deduplicated per actor, exactly
-    /// like <see cref="RecordPickedUpIfNew"/>. Returns the updated history bytes to push to the client
-    /// (so an open dialog can refresh its History tab) when an entry was added, else null.</summary>
+    /// <summary>Records the one-time PickedUp entry directly on a held notebook's ItemStack: history ONLY, never
+    /// the document attribute (a notebook's DocId reaches the server only on first edit). Avoids constructing
+    /// a full host. Crafter is suppressed and others deduplicated, like <see cref="RecordPickedUpIfNew"/>.
+    /// Returns the updated history bytes when an entry was added, else null.</summary>
     public static byte[]? TryRecordPickedUpOnSlot(ICoreServerAPI sapi, ItemSlot slot, IServerPlayer player)
     {
         if (slot.Itemstack is not { } stack) return null;
@@ -342,9 +290,7 @@ public class NotebookHost : IScribeDocumentHost, IHistoryRecordable
 
     internal static string FormatDate(ICoreServerAPI sapi) => FormatDate(sapi.World);
 
-    /// <summary>Client-side counterpart of <see cref="FormatDate(ICoreServerAPI)"/>, used only to preview
-    /// a pending Manual entry draft's date before the server confirms creation with its own authoritative
-    /// stamp — <see cref="IWorldAccessor.Calendar"/> is shared by both client and server world accessors.</summary>
+    /// <summary>Client-side date formatter, used to preview a pending Manual entry draft before the server stamps it.</summary>
     internal static string FormatDate(IWorldAccessor world)
     {
         var cal = world.Calendar;
@@ -352,17 +298,13 @@ public class NotebookHost : IScribeDocumentHost, IHistoryRecordable
         return FormatCalendarDate(dayOfMonth, cal.MonthName, cal.Year);
     }
 
-    /// <summary>Builds the player-facing in-game date string from its parts through the localizable
-    /// <c>scribe:date-format</c> template ({0}=day, {1}=localized month, {2}=year), so the surrounding
-    /// prose (the word "Year", ordering) is translatable rather than baked into C#. Every history/guestbook
-    /// date stamp in the mod routes through here so the format lives in exactly one place.</summary>
+    /// <summary>Builds the in-game date string through the localizable <c>scribe:date-format</c> template
+    /// ({0}=day, {1}=localized month, {2}=year). Every history/guestbook date stamp routes through here.</summary>
     internal static string FormatCalendarDate(int dayOfMonth, EnumMonth monthName, int year)
         => Lang.Get("scribe:date-format", dayOfMonth, Lang.Get("month-" + monthName), year);
 
-    /// <summary>Formats the calendar date for a stored <c>Calendar.TotalDays</c> timestamp, so live
-    /// History rows can rebuild <c>scribe:date-format</c> in the viewing client's locale rather than
-    /// showing a server-baked date string. Same month/year/day-of-month math as
-    /// <see cref="FormatDateDaysAgo"/> (clamped at 0).</summary>
+    /// <summary>Formats a stored <c>Calendar.TotalDays</c> timestamp in the viewing client's locale
+    /// (clamped at 0; same math as <see cref="FormatDateDaysAgo"/>).</summary>
     internal static string FormatDateFromTimestamp(IWorldAccessor world, double totalDays)
     {
         var cal = world.Calendar;
@@ -375,19 +317,13 @@ public class NotebookHost : IScribeDocumentHost, IHistoryRecordable
         return FormatCalendarDate(dayOfMonth, monthName, year);
     }
 
-    /// <summary>Formats the calendar date <paramref name="daysAgo"/> in-game days before now, so seeded
-    /// demo History/Guestbook entries span multiple days rather than all reading "today". Mirrors
-    /// <see cref="FormatDate"/> but derives month/year/day-of-month from <c>TotalDays - daysAgo</c>
-    /// (clamped at 0 so it never underflows into a negative calendar). Display-only; plausibility, not
-    /// calendar exactness, is the bar.</summary>
+    /// <summary>Formats the date <paramref name="daysAgo"/> in-game days before now (clamped at 0), so seeded
+    /// demo entries span multiple days. Display-only.</summary>
     internal static string FormatDateDaysAgo(ICoreServerAPI sapi, int daysAgo)
         => FormatDateFromTimestamp(sapi.World, CalendarTotalDaysAgo(sapi, daysAgo));
 
-    /// <summary>The raw <c>Calendar.TotalDays</c> value <paramref name="daysAgo"/> in-game days
-    /// before now (clamped at 0), i.e. the sortable-timestamp counterpart of
-    /// <see cref="FormatDateDaysAgo"/> — used by the demo seeder so a seeded <see cref="HistoryEntry"/>
-    /// carries a real <see cref="HistoryEntry.InGameTimestamp"/> matching its displayed date, rather
-    /// than defaulting to 0 and sorting as if it happened "now".</summary>
+    /// <summary>The raw <c>Calendar.TotalDays</c> <paramref name="daysAgo"/> days before now (clamped at 0): the
+    /// sortable counterpart of <see cref="FormatDateDaysAgo"/> for seeded entries.</summary>
     internal static double CalendarTotalDaysAgo(ICoreServerAPI sapi, int daysAgo)
         => Math.Max(0, sapi.World.Calendar.TotalDays - daysAgo);
 }

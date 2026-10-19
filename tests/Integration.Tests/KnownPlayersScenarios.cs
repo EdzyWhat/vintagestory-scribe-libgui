@@ -5,14 +5,10 @@ using Scribe;
 namespace Integration.Tests;
 
 /// <summary>
-/// Proves the server-side registry every
-/// online client's known-players sync gets broadcast from — <see cref="ScribeModSystem.OnPlayerNowPlaying"/>
-/// upserting a joining player, and an already-known player staying in the registry once a second
-/// player joins (the same snapshot <c>BroadcastKnownPlayers</c> would push to both). Atlas does not
-/// round-trip real network packets (see <c>NoticeLifecycleScenarios</c>'s own remarks), so the
-/// client-side cached snapshot itself is untestable here — this asserts the server-authoritative data
-/// the broadcast is built from, which is what actually answers "does the registry now include the new
-/// joiner."
+/// Server-side known-players registry: <see cref="ScribeModSystem.OnPlayerNowPlaying"/> upserts a joining
+/// player, and an already-known player stays once a second player joins (the snapshot
+/// <c>BroadcastKnownPlayers</c> pushes). Atlas does not round-trip network packets, so this asserts the
+/// server-authoritative data the broadcast is built from, not the client-side cache.
 /// </summary>
 public class KnownPlayersScenarios : AtlasScenarioBase
 {

@@ -14,14 +14,9 @@ using Vintagestory.API.Config;    // Lang
 namespace Scribe;
 
 /// <summary>
-/// The "this notice isn't addressed to you" warning popup: shown when a player holding a sealed Task Notice taps Accept but isn't its recorded recipient.
-/// Layered over the already-open <see cref="GuiDialogTaskNotice"/> (same <see cref="DrawOrder"/> band —
-/// same-band dialogs stack fine by open-order, per <see cref="GuiDialogScribeQuestPrompt"/>'s own doc
-/// comment). A purpose-built, one-shot dialog — not a reusable "Yes/No modal" primitive: it
-/// exists only for the duration of one Accept click's decision, constructed on demand and disposed on
-/// either button, mirroring <see cref="ItemScribeTaskNotice"/>'s own on-demand construction of
-/// <see cref="GuiDialogTaskNotice"/> rather than <see cref="GuiDialogScribeQuestPrompt"/>'s self-managing
-/// subscribe-and-tick pattern (there is no pending-queue concept here).
+/// The "this notice isn't addressed to you" popup, shown when a non-recipient taps Accept on a sealed Task Notice.
+/// Layered over <see cref="GuiDialogTaskNotice"/> in the same <see cref="DrawOrder"/> band; a one-shot dialog
+/// constructed on demand and disposed on either button.
 /// </summary>
 public sealed class GuiDialogTaskNoticeRedirectConfirm : GuiBase
 {
@@ -36,7 +31,7 @@ public sealed class GuiDialogTaskNoticeRedirectConfirm : GuiBase
 
     public override string DialogCode => "scribetasknoticeredirectconfirm";
 
-    /// <summary>Matches <see cref="GuiDialogTaskNotice"/>'s own band — this opens layered over it.</summary>
+    /// <summary>Matches <see cref="GuiDialogTaskNotice"/>'s band; opens layered over it.</summary>
     public override double DrawOrder => 0.2;
 
     protected override WindowConfig CreateWindowConfig() => new()

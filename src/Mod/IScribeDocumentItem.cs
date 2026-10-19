@@ -4,44 +4,26 @@ using Vintagestory.API.Common;
 namespace Scribe;
 
 /// <summary>
-/// Marker for the player-held item classes that persist a Scribe document on their ItemStack (the
-/// Notebook, the Clockmaker's Notebook, and the clay/wax Tablet). The server-side save/pickup/pin/history
-/// paths and the dialog's active-slot check gate on this interface rather than an exhaustive
-/// <c>is (ItemScribeNotebook or ItemClockmakerNotebook or …)</c> type list, so a new document-bearing
-/// item is recognized everywhere just by implementing it — without which its edits are silently dropped
-/// server-side (the stack is never written, so a drop/pickup round-trip wipes it).
-///
-/// <para>Beyond the marker role it exposes one client-side seam, <see cref="OpenScribeDialog"/>, so a
-/// caller that only has the slot (the Handbook "Add to Scribe" resolution in
-/// <c>ScribeModSystem.AddFromHandbook</c>) can open the item's own Scribe dialog and act on it, without
-/// duplicating each item's host-wiring/registration. It exists only to make "is this one of Scribe's
-/// document items, and open it?" a single, extensible check.</para>
+/// Marker for player-held item classes that persist a Scribe document on their ItemStack (Notebook,
+/// Clockmaker's Notebook, Tablet). Server save/pickup/pin/history paths and the dialog's active-slot check
+/// gate on this interface; an item that lacks it has its edits silently dropped server-side.
+/// It also exposes <see cref="OpenScribeDialog"/> so a slot-only caller (Handbook "Add to Scribe") can open
+/// the item's dialog without duplicating host-wiring.
 /// </summary>
 public interface IScribeDocumentItem
 {
-    /// <summary>Open this carried item's Scribe dialog on the client and return it, so a caller can
-    /// immediately act on the just-opened surface (the Handbook "Add to Scribe" fallback opens the last-used
-    /// Scribe item this way, then appends a Tracker/Link). Wires and registers
-    /// the host exactly as the item's own right-click open does, and records itself as the last-opened Scribe
-    /// item. Returns the opened <see cref="ScribeDialogBase"/>, or <c>null</c> if it can't be opened on this
-    /// side/state.</summary>
+    /// <summary>Opens this carried item's Scribe dialog on the client, wired and registered like the item's own
+    /// right-click open, and records it as the last-opened Scribe item. Returns the dialog, or <c>null</c> if
+    /// it can't be opened on this side/state.</summary>
     ScribeDialogBase? OpenScribeDialog(ItemSlot slot, ICoreClientAPI capi);
 
-    /// <summary>Whether this carried item can currently RECEIVE a Handbook-originated append — i.e. its
-    /// stored document is editable right now. Notebooks are always writeable (the default); a Tablet is
-    /// writeable only while wet — a hardened or fired tablet is read-only. The Handbook "Add to Scribe"
-    /// resolver (<c>ScribeModSystem.AddFromHandbook</c>) skips non-writeable carried items and moves on to
-    /// the next one, so a Tracker/Link never lands on (and silently no-ops against) a read-only tablet.
-    /// Default <c>true</c> for the always-writeable items.</summary>
+    /// <summary>Whether the stored document is editable right now (a hardened or fired tablet is read-only).
+    /// The Handbook "Add to Scribe" resolver skips non-writeable items. Default <c>true</c>.</summary>
     bool IsSlotWriteable(ItemSlot slot) => true;
 
-    /// <summary>The document-capacity/editability policy for the item currently in <paramref name="slot"/>
-    /// — the item-level counterpart of <see cref="IScribeDocumentHost.Policy"/>. The Transcribe copy uses
-    /// it to validate a target: a copy is refused unless <c>DocumentPolicy(target).CanHold(sourceBlockCount)</c>,
-    /// which in one check rejects both a read-only target (a hardened/fired tablet — <c>ReadOnly</c>) and one
-    /// too small to hold the source's blocks of any kind (a wet tablet at its "10 of anything" cap). Defaults to
-    /// <see cref="Scribe.Core.ScribeDocumentPolicy.Unlimited"/> — the always-writeable, uncapped tiers
-    /// (Notebook, Clockmaker's, picked-up Lectern/Scriptorium) need no override; only <see cref="ItemScribeTablet"/>
-    /// reports a finite/read-only policy from its live clay state.</summary>
+    /// <summary>The capacity/editability policy for the item in <paramref name="slot"/> (item-level counterpart
+    /// of <see cref="IScribeDocumentHost.Policy"/>). Transcribe refuses a target unless
+    /// <c>DocumentPolicy(target).CanHold(sourceBlockCount)</c>. Defaults to Unlimited; only
+    /// <see cref="ItemScribeTablet"/> overrides it.</summary>
     Scribe.Core.ScribeDocumentPolicy DocumentPolicy(ItemSlot slot) => Scribe.Core.ScribeDocumentPolicy.Unlimited;
 }

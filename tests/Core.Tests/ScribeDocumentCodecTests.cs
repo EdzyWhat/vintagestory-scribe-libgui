@@ -132,8 +132,7 @@ public class ScribeDocumentCodecTests
     [Fact]
     public void TryDeserialize_V11Bytes_Succeeds_AndDefaultsExtraInfoNull()
     {
-        // v11 carried LinkDescription but NOT the v12 ExtraInfo field. A hand-built v11 blob must
-        // still read via progressive reads, with ExtraInfo defaulting to null.
+        // v11 lacks ExtraInfo; a hand-built v11 blob must still read, with ExtraInfo null.
         var docId = Guid.NewGuid();
         var taskId = Guid.NewGuid();
         using var ms = new MemoryStream();
@@ -177,8 +176,7 @@ public class ScribeDocumentCodecTests
     [Fact]
     public void TryDeserialize_V12Bytes_Succeeds_AndDefaultsAssignedTimestampNull()
     {
-        // v12 carried ExtraInfo but NOT the v13 assigned timestamp. A hand-built v12 assigned block
-        // must still read, with AssignedTimestamp defaulting to null.
+        // v12 lacks the v13 assigned timestamp; a hand-built v12 assigned block must still read, with AssignedTimestamp null.
         var docId = Guid.NewGuid();
         var taskId = Guid.NewGuid();
         using var ms = new MemoryStream();
@@ -313,10 +311,7 @@ public class ScribeDocumentCodecTests
     [Fact]
     public void TryDeserialize_V5Bytes_Succeeds_AndDefaultsTrackerLinkFields()
     {
-        // v5 is the OLDEST accepted version (MinVersion) — it is the last SHIPPED layout and must stay
-        // readable via progressive reads. It has a title but no per-block Tracker/Link fields, so those
-        // must default (ApplyPreV6Defaults). The legacy pinned-task migration list is always empty (a
-        // v3→v4 concern).
+        // v5 is the oldest accepted version (MinVersion) and must stay readable: Tracker/Link fields default (ApplyPreV6Defaults) and the legacy pinned list is empty.
         using var ms = new MemoryStream();
         using (var w = new BinaryWriter(ms, System.Text.Encoding.UTF8, leaveOpen: true))
         {
@@ -354,8 +349,7 @@ public class ScribeDocumentCodecTests
     [Fact]
     public void TryDeserialize_V6Bytes_Succeeds_AndDefaultsLinkLabel()
     {
-        // v6 carried the Tracker/Link item fields but NOT the v7 LinkLabel. A hand-built v6 blob must
-        // read via progressive reads: its Tracker/Link fields round-trip, and LinkLabel defaults null.
+        // v6 lacks LinkLabel; Tracker/Link fields round-trip and LinkLabel defaults null.
         var docId = Guid.NewGuid();
         var taskId = Guid.NewGuid();
         using var ms = new MemoryStream();
@@ -396,9 +390,7 @@ public class ScribeDocumentCodecTests
     [Fact]
     public void TryDeserialize_V7Bytes_Succeeds_AndDefaultsRecipeSignature()
     {
-        // v7 carried Tracker/Link fields and LinkLabel but NOT the v8 RecipeSignature. A hand-built
-        // v7 blob must read via progressive reads: its v7 fields round-trip, and RecipeSignature
-        // defaults empty.
+        // v7 lacks RecipeSignature; v7 fields round-trip and RecipeSignature defaults empty.
         var docId = Guid.NewGuid();
         var taskId = Guid.NewGuid();
         using var ms = new MemoryStream();
@@ -442,8 +434,7 @@ public class ScribeDocumentCodecTests
     [Fact]
     public void TryDeserialize_V4Bytes_FailsSafely()
     {
-        // v4 is older than MinVersion (5), so it stays out of the accepted window [v5, v8]. A
-        // well-formed v4 payload must be rejected outright rather than misread.
+        // v4 is below MinVersion (5); a well-formed v4 payload must be rejected, not misread.
         using var ms = new MemoryStream();
         using (var w = new BinaryWriter(ms, System.Text.Encoding.UTF8, leaveOpen: true))
         {
@@ -491,9 +482,7 @@ public class ScribeDocumentCodecTests
     [Fact]
     public void TryDeserialize_UnsupportedOlderVersionBytes_FailsSafely()
     {
-        // The reader accepts any version in [MinVersion=5, Version=8] (progressive reads).
-        // A v2-shaped payload is older than that and must be rejected outright, not misread by
-        // reading v5+ fields (ids, title, tracker/link/label) that aren't present.
+        // The reader accepts [MinVersion=5, Version=8]; a v2-shaped payload must be rejected, not misread as v5+.
         using var ms = new MemoryStream();
         using (var w = new BinaryWriter(ms))
         {
@@ -555,8 +544,7 @@ public class ScribeDocumentCodecTests
     [Fact]
     public void TryDeserialize_AtTextLengthCap_Succeeds()
     {
-        // The hard MaxTextLength cap applies to freeform Text sections (Task blocks clip instead — see
-        // the task-clip tests below), so exercise it with a Text section.
+        // The hard MaxTextLength cap applies to freeform Text sections (Task blocks clip instead).
         var original = new ScribeDocument();
         original.AddTextSection(new string('a', ScribeDocumentCodec.MaxTextLength));
 
@@ -571,8 +559,7 @@ public class ScribeDocumentCodecTests
     [Fact]
     public void TryDeserialize_OverTextLengthCap_IsClippedNotRejected()
     {
-        // An over-long freeform note CLIPS to MaxTextLength (rather than rejecting the whole document,
-        // which would lose data) — matching the Task clip backstop — and any following blocks survive.
+        // An over-long note CLIPS to MaxTextLength rather than rejecting the document; following blocks survive.
         var original = new ScribeDocument();
         original.AddTextSection(new string('a', ScribeDocumentCodec.MaxTextLength + 500));
         original.AddTask("survivor");
@@ -652,8 +639,7 @@ public class ScribeDocumentCodecTests
     [Fact]
     public void TryDeserialize_CurrentVersion_WhitespaceTitle_SuppliesDefaultTitle()
     {
-        // A document serialized with a whitespace-only title (e.g. player cleared it before the
-        // blur-normalize fired) must deserialize to the default title, not whitespace.
+        // A whitespace-only title must deserialize to the default title.
         var original = new ScribeDocument();
         original.Title = "   "; // whitespace — normalize-on-blur should prevent this, codec clips as backstop
 

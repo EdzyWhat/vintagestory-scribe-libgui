@@ -16,13 +16,10 @@ public sealed partial class ScribeModSystem
 {
     /// <summary>
     /// Clockmaker's Notebook crafting is gated by the vanilla <c>tinkerer</c> trait via the recipe's
-    /// native <c>requiresTrait</c> field (enforced data-only by the survival mod's CharacterSystem).
-    /// A server operator can disable that requirement world-wide with the
-    /// <c>scribeClockmakerRequiresTrait</c> worldconfig boolean (default: enforced). When disabled we
-    /// null out <see cref="GridRecipe.RequiresTrait"/> on the loaded recipe(s) so the game matches for
-    /// every player — this is the reliable bypass (a second MatchesGridRecipe handler is last-writer-wins
-    /// and cannot dependably override the survival mod's deny). Runs in StartServerSide, which is after
-    /// grid recipes register and after World.Config is populated from the savegame.
+    /// <c>requiresTrait</c>. The <c>scribeClockmakerRequiresTrait</c> worldconfig boolean (default enforced) lets
+    /// an operator disable it by nulling <see cref="GridRecipe.RequiresTrait"/> on the loaded recipes; a second
+    /// MatchesGridRecipe handler can't dependably override the survival mod's deny. Runs in StartServerSide,
+    /// after grid recipes register and World.Config is populated.
     /// </summary>
     private static void ApplyClockmakerTraitGate(ICoreServerAPI api)
     {
@@ -78,11 +75,8 @@ public sealed partial class ScribeModSystem
                         int    len   = r.ReadInt32();
                         byte[] blob  = r.ReadBytes(len);
                         var    store = TimerStore.Deserialize(blob);
-                        // Resume Running timers AND fired-but-undismissed timers. A Fired timer carries its
-                        // FiredElapsedSeconds (codec v2), so its client-driven auto-disappear resumes the
-                        // remaining window rather than restarting a fresh 30 s — see the matching filter in
-                        // OnGameWorldSave. (A v1 save never persisted Fired timers, so no legacy Fired blob
-                        // with elapsed=0 can flash a full window on load.)
+                        // Resume Running and fired-but-undismissed timers; a Fired timer carries FiredElapsedSeconds so its
+                        // auto-disappear resumes rather than restarts (matches the filter in OnGameWorldSave).
                         if (store.Status == TimerStatus.Running && store.RemainingSeconds > 0)
                             timerStores[uid] = store;
                         else if (store.Status == TimerStatus.Fired)
@@ -116,11 +110,8 @@ public sealed partial class ScribeModSystem
 
         if (timerStores is not null)
         {
-            // Persist Running AND fired-but-undismissed timers. A fired timer is a notification the player
-            // may not have acknowledged yet; dropping it on save would silently lose it across a relog.
-            // Its FiredElapsedSeconds (codec v2) is persisted with it, so the client-driven auto-disappear
-            // resumes the remaining window on rejoin rather than restarting a fresh 30 s.
-            // Idle timers are dropped.
+            // Persist Running and fired-but-undismissed timers (dropping a fired one would lose an unacknowledged
+            // notification); FiredElapsedSeconds is saved so auto-disappear resumes. Idle timers are dropped.
             var persisted = timerStores
                 .Where(kv => kv.Value.Status is TimerStatus.Running or TimerStatus.Fired)
                 .ToList();

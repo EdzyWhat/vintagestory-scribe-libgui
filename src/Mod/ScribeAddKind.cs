@@ -5,105 +5,64 @@ using Scribe.Core;
 namespace Scribe;
 
 /// <summary>
-/// One kind the editor footer's add control can create: its stable id, the lang key for its menu/button label, and the delegate that
-/// appends it to the scratch document. The picker builds its inline kind list and its primary-button label from the
-/// registry (<see cref="ScribeAddKinds"/>), and <see cref="ScribeDialogBase.OnClickAdd"/> dispatches to
-/// <see cref="Add"/> — so adding a future kind (Tracked/Linked) is one registry entry, with the footer
-/// widget and the other kinds untouched.
-///
-/// <para>This lives in <c>src/Mod/</c>, not Core: <see cref="Add"/> references the mod's editing intent
-/// (and future kinds reach VS-API item pickers). The Core model stores the block kinds; this
-/// is only the UI entry point.</para>
+/// One kind the editor footer's add control can create. The picker builds its kind list and button label from
+/// <see cref="ScribeAddKinds"/>, and <see cref="ScribeDialogBase.OnClickAdd"/> dispatches to <see cref="Add"/>,
+/// so a new kind is one registry entry. Lives in <c>src/Mod/</c>, not Core, because <see cref="Add"/>
+/// references mod editing intent.
 /// </summary>
-/// <param name="Id">Stable identifier (not player-facing); used for equality/diagnostics.</param>
-/// <param name="LabelLangKey">Fully-qualified lang key for the label shown on the primary button and in
-/// the kind list, e.g. <c>"scribe:scribe-gui-addtask"</c>.</param>
-/// <param name="Add">Inserts a block of this kind at the given document index; returns whether a block was
-/// added (mirrors <see cref="ScribeDocument.InsertTask"/> / <see cref="ScribeDocument.InsertTextSection"/>).
-/// The second parameter is the target item code (e.g. <c>"game:ingot-copper"</c>) for the item-bound
-/// kinds (Tracker/Link); Task and Note ignore it. The third is the insert index from
-/// <see cref="ScribeDocument.InsertIndex"/>. Kinds with <see cref="RequiresItemContext"/> return
-/// false when the item code is null (there is nothing to track/link), so a footer click without an item is a
-/// safe no-op that the caller turns into a guide action instead.</param>
-/// <param name="RequiresItemContext">True for kinds that only make sense against a specific item
-/// (Tracker/Link): they cannot be created from a bare footer click, only from a Handbook page's
-/// "Add to Scribe" link that supplies the item code. The editor footer detects this and dispatches a
-/// non-mutating guide action (open the explainer / point at the Handbook link) rather than adding a row.
-/// Task and Note are false — the ordinary immediate add.</param>
+/// <param name="Id">Stable identifier (not player-facing).</param>
+/// <param name="LabelLangKey">Fully-qualified lang key for the button/list label, e.g. <c>"scribe:scribe-gui-addtask"</c>.</param>
+/// <param name="Add">Inserts a block at (document, item code, insert index); returns whether one was added.
+/// Item-bound kinds (Tracker/Link) return false on a null item code; Task and Note ignore it.</param>
+/// <param name="RequiresItemContext">True for kinds creatable only from a Handbook "Add to Scribe" link that
+/// supplies the item code; a bare footer click dispatches a non-mutating guide action instead.</param>
 internal sealed record ScribeAddKind(
     string Id,
     string LabelLangKey,
     Func<ScribeDocument, string?, int, bool> Add,
     bool RequiresItemContext = false);
 
-/// <summary>
-/// The live registry of kinds the add picker offers, in menu order. Registers
-/// five: the two freeform kinds <see cref="Task"/> and <see cref="Note"/>, plus the three item-bound kinds
-/// <see cref="Tracker"/>, <see cref="Craft"/>, and <see cref="Link"/>. A future kind is added by registering a new <see cref="ScribeAddKind"/> in
-/// <see cref="Live"/>; the footer contract does not change.
-/// </summary>
+/// <summary>The registry of kinds the add picker offers, in menu order.</summary>
 internal static class ScribeAddKinds
 {
-    /// <summary>A checkbox task — the plain "Add task" behavior. Counts against a finite tier's
-    /// 10-entry cap like every other kind; this is the DEFAULT add so one click
-    /// still adds a task. Ignores the item-code param (a task has no bound item).</summary>
+    /// <summary>A checkbox task; the DEFAULT add. Ignores the item code.</summary>
     public static readonly ScribeAddKind Task = new(
         Id: "task",
         LabelLangKey: "scribe:scribe-gui-addtask",
         Add: (doc, _, at) => doc.InsertTask(at, ""));
 
-    /// <summary>A freeform note — a <see cref="ScribeBlockKind.Text"/> block with no checkbox and no
-    /// completion state. Counts against a finite tier's cap like every other kind (the cap is "N of
-    /// anything", not task-scoped), so on a full tablet/chalkboard a note trips the "full" notice too.
-    /// Reuses the existing <c>scribe-gui-addtext</c> label ("Add Note"). Ignores the item-code param.</summary>
+    /// <summary>A freeform note (<see cref="ScribeBlockKind.Text"/>, no checkbox). Counts against a finite
+    /// tier's cap like every kind. Ignores the item code.</summary>
     public static readonly ScribeAddKind Note = new(
         Id: "note",
         LabelLangKey: "scribe:scribe-gui-addtext",
         Add: (doc, _, at) => doc.InsertTextSection(at, ""));
 
-    /// <summary>An item Tracker — a <see cref="ScribeBlockKind.Tracker"/> block bound to a specific item
-    /// code, whose <c>have/need</c> counter follows the viewer's carried inventory.
-    /// Counts against a finite tier's cap like every other kind. <see cref="ScribeAddKind.RequiresItemContext"/>
-    /// is true: it can only be created from a Handbook page's "Add to Scribe" link (which supplies the item
-    /// code), never from a bare footer click — so <see cref="ScribeAddKind.Add"/> is a no-op when the code is
-    /// null. Target quantity defaults to 1 (the row's stepper edits it afterward).</summary>
+    /// <summary>An item Tracker bound to an item code; <c>have/need</c> follows the viewer's carried inventory.
+    /// Requires item context; target quantity defaults to 1.</summary>
     public static readonly ScribeAddKind Tracker = new(
         Id: "tracker",
         LabelLangKey: "scribe:scribe-gui-addtracker",
         Add: (doc, code, at) => code is not null && doc.InsertTracker(at, code, 1),
         RequiresItemContext: true);
 
-    /// <summary>An item Link — a <see cref="ScribeBlockKind.Link"/> block whose label opens the referenced
-    /// item's Handbook page on click. Counts against a finite tier's cap like every
-    /// other kind (the cap is "N of anything"). <see cref="ScribeAddKind.RequiresItemContext"/> is true for the
-    /// same reason as <see cref="Tracker"/> — the item code comes from the Handbook link, so
-    /// <see cref="ScribeAddKind.Add"/> no-ops on a null code.</summary>
+    /// <summary>An item Link whose label opens the item's Handbook page. Requires item context, like
+    /// <see cref="Tracker"/>.</summary>
     public static readonly ScribeAddKind Link = new(
         Id: "link",
         LabelLangKey: "scribe:scribe-gui-addlink",
         Add: (doc, code, at) => code is not null && doc.InsertLink(at, code),
         RequiresItemContext: true);
 
-    /// <summary>A Crafting Task — a <see cref="ScribeBlockKind.Craft"/> parent bound to a recipe, whose
-    /// generated ingredient subtasks track progress toward crafting the output. Counts
-    /// against a finite tier's cap like every other kind. <see cref="ScribeAddKind.RequiresItemContext"/> is true:
-    /// like Tracker/Link it can only be created from a Handbook page's "Add Crafting Task" link, which supplies
-    /// the recipe SIGNATURE (not just an item code) via <c>ScribeDialogBase.TryAddCraftFromHandbook</c> →
-    /// <c>ScribeDocument.AddCraft</c>. A bare footer click therefore has no recipe to bind, so
-    /// <see cref="ScribeAddKind.Add"/> is a no-op (returns false) and the footer dispatches the Handbook guide
-    /// instead — the same non-mutating flow Tracker/Link use.</summary>
+    /// <summary>A Crafting Task bound to a recipe. Requires item context: the recipe SIGNATURE comes from the
+    /// Handbook link via <c>ScribeDialogBase.TryAddCraftFromHandbook</c>, so <see cref="ScribeAddKind.Add"/>
+    /// always returns false and the footer dispatches the Handbook guide.</summary>
     public static readonly ScribeAddKind Craft = new(
         Id: "craft",
         LabelLangKey: "scribe:scribe-gui-addcraft",
         Add: (_, _, _) => false,
         RequiresItemContext: true);
 
-    /// <summary>The kinds the add picker offers, in the order they appear in the picker's inline list
-    /// (Task → Item Tracker → Crafting Task → Link → Note). The first entry (<see cref="Task"/>) is the initial
-    /// default for the primary button. The three item-bound kinds (<see cref="Tracker"/>,
-    /// <see cref="Craft"/>, <see cref="Link"/>) <see cref="ScribeAddKind.RequiresItemContext"/>, so a footer
-    /// click on any of them dispatches a guide action (point at the Handbook link) rather than adding a row.
-    /// Adding a future kind is one registry entry here; the footer contract does
-    /// not change.</summary>
+    /// <summary>The kinds in picker order; the first (<see cref="Task"/>) is the initial primary-button default.</summary>
     public static readonly IReadOnlyList<ScribeAddKind> Live = new[] { Task, Tracker, Craft, Link, Note };
 }

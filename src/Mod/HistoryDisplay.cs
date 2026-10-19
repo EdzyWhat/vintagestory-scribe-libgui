@@ -4,12 +4,10 @@ using Vintagestory.API.Config;
 
 namespace Scribe;
 
-/// <summary>Formats live-schema History sentences in the viewing client's locale, and calendar
-/// dates for any row whose <see cref="HistoryEntry.InGameTimestamp"/> is a real calendar day
-/// (<c>&gt;= 0</c>). Pre-v3 migrated rows keep their baked <see cref="HistoryEntry.InGameDate"/>
-/// (synthetic negative timestamps are sort-order only). Pool and PvP-verb existence checks use
-/// <see cref="Lang.HasTranslation"/> (current locale only), never <see cref="Lang.Get"/>, so an
-/// English fallback cannot count as a hit in a short locale.</summary>
+/// <summary>Formats live-schema History sentences in the viewing client's locale, and calendar dates for rows
+/// whose <see cref="HistoryEntry.InGameTimestamp"/> is a real day (<c>&gt;= 0</c>); migrated rows keep their baked
+/// date (synthetic negative timestamps are sort-order only). Existence checks use <see cref="Lang.HasTranslation"/>
+/// (current locale only), never <see cref="Lang.Get"/>, so an English fallback cannot count as a hit.</summary>
 internal static class HistoryDisplay
 {
     private static readonly Dictionary<string, int> PoolSizeCache = new();
@@ -103,8 +101,7 @@ internal static class HistoryDisplay
         return value == key ? entry.RefCode : value;
     }
 
-    /// <summary>Mirrors <c>Entity.GetPrefixAndCreatureName</c> from a stored <c>domain:path</c>
-    /// code, so display does not need the dead entity instance.</summary>
+    /// <summary>Mirrors <c>Entity.GetPrefixAndCreatureName</c> from a stored code, since the dead entity is unavailable.</summary>
     internal static string CreatureName(string entityCode)
     {
         int colon = entityCode.IndexOf(':');

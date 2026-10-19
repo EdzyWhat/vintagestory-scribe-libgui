@@ -8,9 +8,8 @@ namespace Integration.Tests;
 /// <summary>
 /// Server-authoritative edit round trip. A submitted edit is only applied when
 /// it comes from the current lock holder, and applying it marks the block entity dirty
-/// (persist + re-sync). RollbackWorld resets the world in place between scenarios, which is
-/// enough here -- these scenarios only assert on in-memory server state right after the
-/// edit, not on a real save/load round trip (that's PersistenceScenarios).
+/// (persist + re-sync). RollbackWorld resets the world in place between scenarios; these assert only on
+/// in-memory server state, not a save/load round trip (see PersistenceScenarios).
 /// </summary>
 public class ServerAuthoritativeEditScenarios : AtlasScenarioBase
 {

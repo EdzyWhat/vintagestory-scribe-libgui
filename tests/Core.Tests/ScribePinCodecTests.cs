@@ -2,9 +2,7 @@ using Scribe.Core;
 
 namespace Scribe.Core.Tests;
 
-// Tests for the per-player pin + settings codec. The same bytes are used for network sync and
-// save-game persistence, so the round-trip must be exact and any malformed/hostile input must
-// fail safely (return false) rather than throw or over-allocate.
+// Tests for the pin + settings codec. Round-trips must be exact; malformed input must fail safe.
 public class ScribePinCodecTests
 {
     private static ScribePinnedRef Pin(string text = "Find copper", bool done = false, bool orphaned = false,
@@ -105,8 +103,7 @@ public class ScribePinCodecTests
     [Fact]
     public void TryDeserialize_V1Bytes_KindAndLinkTarget_AreUpgraded()
     {
-        // Hand-build a v1 SPIN blob (no Kind/LinkTarget fields) exactly as the v1 codec wrote it, and
-        // assert the migration defaults them (Kind→Task, LinkTarget→null) rather than merely deserializing.
+        // Hand-build a v1 blob (no Kind/LinkTarget); migration must default them.
         var docId = Guid.NewGuid();
         var taskId = Guid.NewGuid();
         using var ms = new MemoryStream();
@@ -168,10 +165,8 @@ public class ScribePinCodecTests
     [Fact]
     public void TryDeserialize_V2Bytes_TrackerFields_AreDefaulted()
     {
-        // Hand-build a v2 SPIN blob (Kind + LinkTarget present, but no v3 Tracker fields) exactly as the
-        // v2 codec wrote it, and assert the progressive read stops after LinkTarget and defaults the
-        // Tracker fields (TargetItemCode→null, TargetQuantity→1, CurrentQuantity→0) rather than mis-reading
-        // trailing bytes. Kind/LinkTarget from the v2 payload must still round-trip.
+        // Hand-build a v2 blob (no v3 Tracker fields); the progressive read must default them
+        // (TargetItemCode null, TargetQuantity 1, CurrentQuantity 0) while keeping Kind/LinkTarget.
         var docId = Guid.NewGuid();
         var taskId = Guid.NewGuid();
         using var ms = new MemoryStream();
@@ -234,10 +229,7 @@ public class ScribePinCodecTests
     [Fact]
     public void TryDeserialize_V3Bytes_LinkLabel_IsDefaulted()
     {
-        // Hand-build a v3 SPIN blob (Tracker fields present, but no v4 LinkLabel) exactly as the v3
-        // codec wrote it, and assert the progressive read stops after the Tracker fields and defaults
-        // LinkLabel→null rather than mis-reading trailing bytes. Kind/LinkTarget/Tracker fields must still
-        // round-trip.
+        // Hand-build a v3 blob (no v4 LinkLabel); the progressive read must default it to null.
         var docId = Guid.NewGuid();
         var taskId = Guid.NewGuid();
         using var ms = new MemoryStream();
@@ -303,8 +295,7 @@ public class ScribePinCodecTests
     [Fact]
     public void TryDeserialize_V4Bytes_Depth_IsDefaulted()
     {
-        // Hand-build a v4 SPIN blob (LinkLabel present, but no v5 Depth) as the pre-subtasks codec wrote it,
-        // and assert the progressive read stops after LinkLabel and defaults Depth→0 rather than mis-reading.
+        // Hand-build a v4 blob (no v5 Depth); the progressive read must default Depth to 0.
         var docId = Guid.NewGuid();
         var taskId = Guid.NewGuid();
         using var ms = new MemoryStream();
@@ -399,9 +390,7 @@ public class ScribePinCodecTests
     [Fact]
     public void TryDeserialize_V5Bytes_IsAcceptedAssignment_IsDefaulted()
     {
-        // Hand-build a v5 SPIN blob (Depth present, but no v6 IsAcceptedAssignment) as the pre-assignment
-        // codec wrote it, and assert the progressive read stops after Depth and defaults
-        // IsAcceptedAssignment→false rather than mis-reading.
+        // Hand-build a v5 blob (no v6 IsAcceptedAssignment); the progressive read must default it to false.
         var docId = Guid.NewGuid();
         var taskId = Guid.NewGuid();
         using var ms = new MemoryStream();
@@ -463,9 +452,7 @@ public class ScribePinCodecTests
     [Fact]
     public void TryDeserialize_V6Bytes_AssignmentProvenance_IsDefaulted()
     {
-        // Hand-build a v6 SPIN blob (IsAcceptedAssignment present, but no v7 provenance fields) as the
-        // pre-provenance codec wrote it, and assert the progressive read stops after IsAcceptedAssignment
-        // and defaults the new fields (empty/null) rather than mis-reading.
+        // Hand-build a v6 blob (no v7 provenance); the progressive read must default the new fields.
         var docId = Guid.NewGuid();
         var taskId = Guid.NewGuid();
         using var ms = new MemoryStream();
@@ -524,9 +511,7 @@ public class ScribePinCodecTests
     [Fact]
     public void TryDeserialize_V7Bytes_ExtraInfo_IsDefaulted()
     {
-        // Hand-build a v7 SPIN blob (assignment provenance present, but no v8 ExtraInfo field) as the
-        // pre-ExtraInfo codec wrote it, and assert the progressive read stops after AcceptedDate and
-        // defaults ExtraInfo to null rather than mis-reading.
+        // Hand-build a v7 blob (no v8 ExtraInfo); the progressive read must default it to null.
         var docId = Guid.NewGuid();
         var taskId = Guid.NewGuid();
         using var ms = new MemoryStream();
@@ -672,10 +657,7 @@ public class ScribePinCodecTests
     }
 
     // ---- Player-preference defaults + normalize guards ----
-    //
-    // Settings are not a codec blob — they persist as client-local JSON, so there is no serialize/deserialize round-trip to cover here. What
-    // survives in Core are the default values and the clamp/normalize guards applied when loading the
-    // (hand-editable, untrusted) config; those are exercised directly below.
+    // Settings persist as client-local JSON, not a codec blob; only defaults and normalize guards live in Core.
 
     [Fact]
     public void Settings_DefaultInstance_SinksAndShowsThreeRows()

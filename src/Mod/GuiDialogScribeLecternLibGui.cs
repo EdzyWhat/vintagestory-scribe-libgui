@@ -7,28 +7,23 @@ namespace Scribe;
 
 /// <summary>
 /// The Lectern block's dialog — a thin sealed subclass of <see cref="ScribeDialogBase"/>.
-/// All view state, build methods, lock orchestration, autosave, title editing, scroll management,
-/// and nav-button layout live in the base class. The Lectern adds only the Guestbook nav button.
+/// The Lectern adds only the Guestbook nav button.
 /// </summary>
 public sealed class GuiDialogScribeLecternLibGui : ScribeDialogBase
 {
     public GuiDialogScribeLecternLibGui(BlockPos pos, IScribeDocumentHost host, ICoreClientAPI capi)
         : base(pos, host, capi)
     {
-        // Guest Book is the Lectern's default view — what a plain right-click opens.
-        // See EnterGrantedView below.
+        // Guest Book is what a plain right-click opens (see EnterGrantedView).
         DefaultToVisitorsView();
     }
 
-    /// <summary>The Lectern is a shared placed block: editor access requires a server lock round-trip,
-    /// so <see cref="ScribeDialogBase.RequestEditorAccess"/> sends a request and the grant lands
-    /// asynchronously in <see cref="ScribeDialogBase.EnterEditorMode"/>. A Handbook "Add to Scribe" click
-    /// therefore stashes its append and waits for that grant.</summary>
+    /// <summary>Shared placed block: <see cref="ScribeDialogBase.RequestEditorAccess"/> sends a request and
+    /// the grant lands asynchronously in <see cref="ScribeDialogBase.EnterEditorMode"/>, so a Handbook
+    /// "Add to Scribe" click stashes its append and waits for the grant.</summary>
     protected override bool EditorAccessIsAsync => true;
 
-    /// <summary>Guest Book is the Lectern's first tab — it reads
-    /// before Read/Edit/Pinned in <see cref="ScribeDialogBase.BuildRightColNav"/>'s nav order, rather
-    /// than after Pinned like the Inbox tab below.</summary>
+    /// <summary>Guest Book comes before Read/Edit/Pinned in the nav order.</summary>
     protected override IEnumerable<Widget> GetLeadingNavButtons()
     {
         var colors = ScribeTheme.For(modSystem.MySettings.PixelArtDisplay).ColorScheme;
@@ -42,18 +37,14 @@ public sealed class GuiDialogScribeLecternLibGui : ScribeDialogBase
             activeColor: IsVisitorsView ? ScribeRowConstants.NavActiveGuestbook : null);
     }
 
-    /// <summary>Right-click always lands on Guest Book rather than
-    /// the base's Read view; Read is still reachable via its own nav button.
-    /// Crouch+right-click is unaffected: it's the quick-add gesture handled entirely in
-    /// <see cref="BlockScribeWritingStation.OnBlockInteractStart"/>, upstream of any dialog view.</summary>
+    /// <summary>Right-click lands on Guest Book rather than the base's Read view. Crouch+right-click
+    /// (quick-add) is handled upstream in <see cref="BlockScribeWritingStation.OnBlockInteractStart"/>.</summary>
     public override void EnterGrantedView() => OnClickSwitchToVisitors();
 
     protected override IEnumerable<Widget> GetExtraNavButtons()
     {
         var colors = ScribeTheme.For(modSystem.MySettings.PixelArtDisplay).ColorScheme;
-        // Gated on assignment history: a player
-        // who has never received an assignment gets no Inbox nav button here — the Assignment Desk and
-        // standalone Inbox block are unaffected, they always show their Inbox surface.
+        // Players who have never received an assignment get no Inbox nav button here.
         if (modSystem.MyReceivedAssignments.Count > 0)
         {
             yield return TitleButton(

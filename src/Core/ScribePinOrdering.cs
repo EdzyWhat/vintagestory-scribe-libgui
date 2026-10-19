@@ -1,34 +1,25 @@
 namespace Scribe.Core;
 
 /// <summary>
-/// The HUD's display order for a player's pins: pin order, with completed tasks sunk below the
-/// not-completed ones. Pure and game-agnostic so it can be unit-tested and shared by any surface
-/// that renders the pin set. The Mod layer decides <em>when</em> a just-completed row sinks (a
-/// brief undo window lives in the HUD); this only defines the resting order.
+/// The HUD's display order for a player's pins: pin order with completed tasks sunk below the others.
+/// Pure and shared by any surface that renders the pin set; this defines only the resting order.
 /// </summary>
 public static class ScribePinOrdering
 {
     /// <summary>
-    /// Returns <paramref name="pins"/> reordered for display: all not-done pins first, then all
-    /// done pins, each group keeping the input's relative order. The input is not mutated.
+    /// Returns <paramref name="pins"/> reordered for display: not-done pins first, then done pins, each group
+    /// keeping input order. Done-ness is read from <see cref="ScribePinnedRef.LastKnownDone"/>, the same
+    /// snapshot the HUD renders. The input is not mutated.
     /// </summary>
-    /// <remarks>
-    /// The sort is stable (a partition, really), so within each group the caller's pin order is
-    /// preserved — matching "pin order, completed at the bottom." Done-ness is read from
-    /// <see cref="ScribePinnedRef.LastKnownDone"/>, the same snapshot the HUD renders, so the order
-    /// stays consistent with what the player sees even when a task's source is unloaded.
-    /// </remarks>
     public static IReadOnlyList<ScribePinnedRef> ForDisplay(IReadOnlyList<ScribePinnedRef> pins)
     {
         ArgumentNullException.ThrowIfNull(pins);
 
         var ordered = new List<ScribePinnedRef>(pins.Count);
-        // Not-done first, preserving order.
         foreach (var pin in pins)
         {
             if (!pin.LastKnownDone) ordered.Add(pin);
         }
-        // Then done, preserving order.
         foreach (var pin in pins)
         {
             if (pin.LastKnownDone) ordered.Add(pin);
@@ -37,16 +28,11 @@ public static class ScribePinOrdering
     }
 
     /// <summary>
-    /// Inserts <paramref name="newPin"/> into <paramref name="pins"/> using the source document's
-    /// owned-run geometry (refine-crafting-tasks-1-3-2 D6) and the player's <paramref name="insertEdge"/>
-    /// (update-pins-1-3-3). Depth-0: insert at <paramref name="insertEdge"/>, then gather already-pinned
-    /// children whose <c>TaskId</c> is in that parent's current owned run (preserving their relative
-    /// pin order). Depth-1: walk back to the document parent; if that parent is pinned, insert after
-    /// its contiguous HUD cluster (parent, then following pins in the owned run) — this branch ignores
-    /// <paramref name="insertEdge"/>, since a subtask always attaches to its pinned parent rather than the
-    /// list edge; otherwise insert at <paramref name="insertEdge"/>. Never auto-pins the parent. An
-    /// unresolvable source (null document, or the task missing) also inserts at <paramref name="insertEdge"/>.
-    /// Caller has already checked uniqueness and the pin cap; this only chooses the insert index.
+    /// Inserts <paramref name="newPin"/> into <paramref name="pins"/>. Depth-0: insert at
+    /// <paramref name="insertEdge"/>, then gather already-pinned children in that parent's owned run. Depth-1:
+    /// if its document parent is pinned, insert after that parent's contiguous cluster (ignoring
+    /// <paramref name="insertEdge"/>); otherwise insert at the edge. Never auto-pins the parent. An unresolvable
+    /// source also inserts at the edge. The caller has already checked uniqueness and the pin cap.
     /// </summary>
     public static void PlaceNewPin(List<ScribePinnedRef> pins, ScribePinnedRef newPin, ScribeDocument? source,
         ScribePinInsert insertEdge = ScribePinInsert.Bottom)
@@ -101,17 +87,14 @@ public static class ScribePinOrdering
         pins.Insert(insertAt, newPin);
     }
 
-    /// <summary>Insert a pin with no pinned-parent relationship at the player's chosen edge: index 0 for
-    /// <see cref="ScribePinInsert.Top"/>, appended for <see cref="ScribePinInsert.Bottom"/>.</summary>
+    /// <summary>Inserts a pin with no pinned parent at the player's chosen edge.</summary>
     private static void InsertAtEdge(List<ScribePinnedRef> pins, ScribePinnedRef newPin, ScribePinInsert insertEdge)
     {
         if (insertEdge == ScribePinInsert.Top) pins.Insert(0, newPin);
         else pins.Add(newPin);
     }
 
-    /// <summary>Pull already-pinned owned-run children to sit immediately after the newly appended
-    /// parent pin, preserving their relative order. Pins from other documents, and pins whose tasks
-    /// are not in this owned run, stay where they are.</summary>
+    /// <summary>Pulls already-pinned owned-run children to sit right after the new parent pin, keeping their relative order.</summary>
     private static void GatherOwnedRunChildren(List<ScribePinnedRef> pins, ScribePinnedRef parentPin,
         ScribeDocument source, int parentBlockIndex)
     {
@@ -142,16 +125,11 @@ public static class ScribePinOrdering
     }
 
     /// <summary>
-    /// Manual drag-reorder of an existing pin (same-depth-reorder): moves the pin at
-    /// <paramref name="from"/> — together with its owned-run cluster, if it is a depth-0 pin with
-    /// already-pinned depth-1 children immediately following it in <paramref name="pins"/> — to land
-    /// at <paramref name="to"/>. Clustering and same-depth drop-target validity are both computed from
-    /// the pin list's own <see cref="ScribePinnedRef.Depth"/> values via <see cref="ScribeReorderValidity"/>
-    /// (positionally, over the current pin list — no source document resolution needed, so this works
-    /// even when a pin's source document is unloaded). Returns <c>false</c> without mutating
-    /// <paramref name="pins"/> when the target is invalid (cross-depth), <paramref name="from"/> equals
-    /// <paramref name="to"/>, the drop lands inside the dragged pin's own cluster, or either index is
-    /// out of range.
+    /// Manual drag-reorder: moves the pin at <paramref name="from"/> (with its cluster of following pinned
+    /// depth-1 children, if depth-0) to land at <paramref name="to"/>. Clustering and drop validity come from
+    /// the pins' own <see cref="ScribePinnedRef.Depth"/> via <see cref="ScribeReorderValidity"/>, so no source
+    /// document is needed. Returns <c>false</c> without mutating when the target is cross-depth, equals
+    /// <paramref name="from"/>, lands inside the dragged cluster, or an index is out of range.
     /// </summary>
     public static bool Reorder(List<ScribePinnedRef> pins, int from, int to)
     {
@@ -164,9 +142,7 @@ public static class ScribePinOrdering
         if (from == to || dropOnCluster || !ScribeReorderValidity.IsValidDropTarget(depths, start, end, to))
             return false;
 
-        // Resolve the actual destination so dropping forward onto a pinned parent with its own pinned
-        // children lands AFTER that parent's whole cluster rather than wedging between it and its
-        // first child (the upward direction already lands correctly with no adjustment).
+        // Dropping forward onto a pinned parent lands AFTER its whole cluster, not between it and its first child.
         int destination = ScribeReorderValidity.ResolveDestination(depths, start, to);
         int len = end - start;
         var slice = pins.GetRange(start, len);

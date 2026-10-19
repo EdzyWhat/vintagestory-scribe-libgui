@@ -15,68 +15,40 @@ using Vintagestory.API.Server;
 namespace Scribe;
 
 /// <summary>
-/// Mod entry point. Registers the lectern's block/block-entity classes and the network
-/// channel used for server-authoritative document edits. Per-side setup (hotkeys, GUI,
-/// lock bookkeeping) happens in <see cref="StartClientSide"/>/<see cref="StartServerSide"/>.
-///
-/// Also owns the per-player pin layer: the server-side <see cref="ScribePinStore"/> (pins +
-/// a live DocId→position index), its save-game persistence, the identity-addressed pin/complete
-/// handlers, and the per-player push of a player's own pins to their client. The client caches its
-/// own pushed set so the lectern GUI can query <see cref="IsPinnedForMe"/>. Per-player display/
-/// behavior preferences are NOT server state — they are client-local JSON (<see cref="MySettings"/>).
+/// Mod entry point. Registers block/item classes and the network channel, and owns the per-player
+/// pin layer (server pin store + persistence, pin/complete handlers, per-player push). Display and
+/// behavior preferences are client-local JSON (<see cref="MySettings"/>), not server state.
 /// </summary>
 public sealed partial class ScribeModSystem : ModSystem
 {
     public const string NetworkChannelName = "scribe";
 
-    /// <summary>Savegame key for the persisted pin store. (Per-player display/behavior preferences are
-    /// NOT persisted server-side — they are client-local JSON; see <see cref="HudConfigFileName"/>.)</summary>
+    /// <summary>Savegame key for the persisted pin store.</summary>
     private const string PinStoreSaveKey   = "scribe:pins:v1";
     private const string TimerStoreSaveKey = "scribe:timer:v1";
 
-    /// <summary>Savegame key for the persisted assignment store (<see cref="ScribeAssignmentStore"/>).</summary>
     private const string AssignmentStoreSaveKey = "scribe:assignments:v1";
 
-    /// <summary>Savegame key for the persisted per-player quest-decision ledger
-    /// (<see cref="ScribeQuestDecisionStore"/>).</summary>
     private const string QuestDecisionStoreSaveKey = "scribe:questdecisions:v1";
 
-    /// <summary>Savegame key for the persisted pending-history-entry store
-    /// (<see cref="PendingHistoryStore"/>) — see fix-death-history-inventory-race.</summary>
     private const string PendingHistoryStoreSaveKey = "scribe:pendinghistory:v1";
 
-    /// <summary>Client-local JSON file holding ALL of this player's Scribe preferences — completion
-    /// policy, HUD rows/anchor/offsets/width/collapse, and the HUD/window font-size scales — per-player,
-    /// cross-world, never server-synced. As of add-settings-tab this is the SINGLE client-local
-    /// preference store: the former <c>scribe-client-config.json</c> row-tuning file was retired and its
-    /// one live knob (the font size) folded in here as the two font scales. An existing
-    /// <c>scribe-client-config.json</c> on disk is simply left unread (harmless).</summary>
+    /// <summary>Client-local JSON holding all of this player's Scribe preferences (completion policy, HUD layout, font scales); per-player, cross-world, never server-synced.</summary>
     public const string HudConfigFileName = "scribe-hud-config.json";
 
-    /// <summary>DEV-ONLY client-local JSON holding the live gearworks-layout tuning knobs
-    /// (<see cref="ScribeGearTuning"/>), opened via the <c>.geartune</c> command. Separate from the real
-    /// preference file so this throwaway art-tuning aid never touches player settings; delete alongside the
-    /// tool when the layout is finalized.</summary>
+    /// <summary>DEV-ONLY client-local JSON for the <c>.geartune</c> gearworks-layout knobs (<see cref="ScribeGearTuning"/>); kept apart from player settings.</summary>
     public const string GearTuningConfigFileName = "scribe-gear-tuning.json";
 
-    /// <summary>DEV-ONLY client-local JSON holding the live block-box tuning knobs
-    /// (<see cref="ScribeBoxTuning"/>), opened via the <c>.boxtune</c> command. Separate from the real
-    /// preference file so this throwaway hitbox-tuning aid never touches player settings; delete alongside
-    /// the tool once the tuned numbers are baked back into the blocktype JSON files.</summary>
+    /// <summary>DEV-ONLY client-local JSON for the <c>.boxtune</c> block-box knobs (<see cref="ScribeBoxTuning"/>); kept apart from player settings.</summary>
     public const string BoxTuningConfigFileName = "scribe-box-tuning.json";
 
-    /// <summary>Client-local JSON holding the author-facing visual-tuning knobs
-    /// (<see cref="ScribeVisualTuning"/>) for the ambient light sampler and unseen-assignment particle
-    /// effect — optionally editable via a config-library mod's GUI reading the shared
-    /// <c>configlib-patches.json</c> manifest. Not a player preference file.</summary>
+    /// <summary>Client-local JSON for author-facing visual-tuning knobs (<see cref="ScribeVisualTuning"/>), optionally editable via the shared <c>configlib-patches.json</c> manifest. Not a player preference file.</summary>
     public const string VisualTuningConfigFileName = "scribe-visual-tuning.json";
 
     private ICoreClientAPI? capi;
     private ICoreServerAPI? sapi;
 
-    /// <summary>Client-side shared no-op UI sound player, lazily built on first
-    /// use while the mute preference is on and reused across dialogs (it's stateless). See
-    /// <see cref="GetUiSoundPlayer"/>.</summary>
+    /// <summary>Shared no-op UI sound player, built lazily while the mute preference is on. See <see cref="GetUiSoundPlayer"/>.</summary>
     private SilentSoundPlayer? silentSoundPlayer;
 
     /// <summary>Server-side pin/settings store. Null on a pure client.</summary>
@@ -88,26 +60,15 @@ public sealed partial class ScribeModSystem : ModSystem
     /// <summary>Server-side per-player quest-decision ledger. Null on a pure client.</summary>
     private ScribeQuestDecisionStore? questDecisionStore;
 
-    /// <summary>Client-side cache of THIS player's own synced quest-decision ledger, populated by the
-    /// server push (<see cref="ScribeQuestDecisionSetMessage"/>) on join and on any change — consulted by
-    /// <see cref="OnQuestAccepted"/>/<see cref="OnQuestCompleted"/> so the prompt-suppress check never needs
-    /// a round trip. Never another player's.</summary>
+    /// <summary>Client cache of THIS player's quest-decision ledger, pushed by the server; lets the prompt-suppress check avoid a round trip.</summary>
     private readonly ScribeQuestDecisionSet myQuestDecisions = new();
 
-    /// <summary>Server-side reflection bridge to the CarryOn mod family, so Notebooks/Tablets inside
-    /// a CarryOn-carried container also participate in history recording. Null on a pure client.
-    /// See <see cref="CarryOnBridge"/>.</summary>
+    /// <summary>Server-side reflection bridge to CarryOn so carried containers join history recording. Null on a pure client.</summary>
     private CarryOnBridge? carryOnBridge;
 
-    /// <summary>Server-side store of Death entries queued against a document that was evicted from
-    /// the dying player's inventory by something else during the same death dispatch (e.g. another
-    /// mod's own corpse-creating <c>OnEntityDeath</c> handler) — see fix-death-history-inventory-race.
-    /// Flushed by <see cref="OnHistoryScanTick"/> the next time the target document is seen in a live
-    /// carried slot. Null on a pure client.</summary>
+    /// <summary>Server-side store of Death entries queued for a document evicted from the dying player's inventory mid-dispatch; flushed by <see cref="OnHistoryScanTick"/> once the document is seen in a carried slot. Null on a pure client.</summary>
     private PendingHistoryStore? pendingHistoryStore;
 
-    /// <summary>Test/tooling accessor for <see cref="pendingHistoryStore"/>, mirroring the existing
-    /// <see cref="PinStore"/>/<see cref="AssignmentStore"/> public accessors.</summary>
     public PendingHistoryStore? PendingHistoryStore => pendingHistoryStore;
 
     /// <summary>Server-side per-player timer store. Keyed by PlayerUID. Null on a pure client.</summary>
@@ -117,48 +78,28 @@ public sealed partial class ScribeModSystem : ModSystem
     private long timerTickListenerId;
     private long timerDisplayTickId;
 
-    /// <summary>Client-side cache of THIS player's own pins, populated by the server push. Keyed by
-    /// (docId, taskId) for O(1) <see cref="IsPinnedForMe"/> lookups from the GUI.</summary>
+    /// <summary>Client cache of THIS player's pins, keyed by (docId, taskId) for <see cref="IsPinnedForMe"/>.</summary>
     private readonly HashSet<(Guid, Guid)> myPins = new();
 
-    /// <summary>Client-side cache of THIS player's full pin list (in server order), populated by the
-    /// same push as <see cref="myPins"/>. The HUD consumes this for each pin's text/done snapshot;
-    /// the lectern only needs the <see cref="myPins"/> key set for its tint.</summary>
+    /// <summary>Client cache of THIS player's pin list in server order (the HUD reads it; the lectern only needs <see cref="myPins"/>).</summary>
     private IReadOnlyList<ScribePinnedRef> myPinList = Array.Empty<ScribePinnedRef>();
 
-    /// <summary>Client-side optimistic pin/unpin overlay, keyed by (OwnerDocId, TaskId): a non-null value is
-    /// a pin the player just requested that hasn't been confirmed by the authoritative push yet (its display
-    /// snapshot); a null value is a pin the player just requested REMOVED. Exists because pin placement is
-    /// server-side (<see cref="ScribePinStore.SetPin"/>), and in singleplayer the embedded server's tick loop
-    /// — and therefore its handling of the network message — is paused for as long as the Handbook holds the
-    /// client paused (update-pins-1-3-3): without this overlay every pin-consuming surface (HUD, Pin Tab,
-    /// dialog row tint) would show nothing until the player unpaused. Cleared per-key once
-    /// <see cref="OnClientReceivedPinnedSet"/> confirms the server agrees (see <see cref="ReconcileOptimisticPins"/>).</summary>
+    /// <summary>Optimistic pin overlay keyed by (OwnerDocId, TaskId): non-null = pin requested but unconfirmed (display snapshot); null = removal requested. Needed because in singleplayer the embedded server is paused while the Handbook pauses the client. Cleared per key by <see cref="ReconcileOptimisticPins"/>.</summary>
     private readonly Dictionary<(Guid, Guid), ScribePinnedRef?> optimisticPinOverlay = new();
 
-    /// <summary>Insertion order of <see cref="optimisticPinOverlay"/>'s keys, so <see cref="RebuildDisplayPinList"/>
-    /// replays optimistic pin-ADDs through <see cref="ScribePinOrdering.PlaceNewPin"/> in the order they actually
-    /// happened — load-bearing when a parent is pinned and then a child is pinned under it while both are still
-    /// unconfirmed, since the child's placement depends on the parent already being in the working list.</summary>
+    /// <summary>Insertion order of <see cref="optimisticPinOverlay"/> keys; <see cref="RebuildDisplayPinList"/> replays adds in this order because a child's placement depends on its unconfirmed parent already being in the list.</summary>
     private readonly List<(Guid, Guid)> optimisticPinOrder = new();
 
-    /// <summary>Per-optimistic-pin placement inputs (the source document + the player's Pin Insert edge),
-    /// captured at the moment of the optimistic add so <see cref="RebuildDisplayPinList"/> can call
-    /// <see cref="ScribePinOrdering.PlaceNewPin"/> the same way the server will. Not used for an optimistic
-    /// remove (no placement to compute).</summary>
+    /// <summary>Placement inputs captured at optimistic-add time so <see cref="RebuildDisplayPinList"/> can call <see cref="ScribePinOrdering.PlaceNewPin"/> as the server will. Unused for removals.</summary>
     private readonly Dictionary<(Guid, Guid), (ScribeDocument? Source, ScribePinInsert InsertEdge)> optimisticPinPlan = new();
 
-    /// <summary>The list <see cref="MyPins"/> actually returns: <see cref="myPinList"/> with
-    /// <see cref="optimisticPinOverlay"/> applied. Recomputed (not derived per-read) whenever either input
-    /// changes, since <c>MyPins</c> is read many times per frame across the HUD/Pin Tab/dialog rows.</summary>
+    /// <summary><see cref="myPinList"/> with <see cref="optimisticPinOverlay"/> applied; recomputed on input change because <c>MyPins</c> is read many times per frame.</summary>
     private IReadOnlyList<ScribePinnedRef> displayPinList = Array.Empty<ScribePinnedRef>();
 
-    /// <summary>Client-side cache of THIS player's SENT assignments (their Assignment-tab history),
-    /// populated by the server push. Empty until the first push arrives.</summary>
+    /// <summary>Client cache of THIS player's sent assignments (Assignment-tab history), from the server push.</summary>
     private IReadOnlyList<ScribeBlock> mySentAssignments = Array.Empty<ScribeBlock>();
 
-    /// <summary>Client-side cache of THIS player's RECEIVED assignments (their Inbox), populated by
-    /// the same push as <see cref="mySentAssignments"/>.</summary>
+    /// <summary>Client cache of THIS player's received assignments (Inbox), from the same push.</summary>
     private IReadOnlyList<ScribeBlock> myReceivedAssignments = Array.Empty<ScribeBlock>();
 
     /// <summary>This player's sent assignments (Assignment-tab history) — never another player's.</summary>
@@ -167,141 +108,79 @@ public sealed partial class ScribeModSystem : ModSystem
     /// <summary>This player's received assignments (Inbox) — never another player's.</summary>
     public IReadOnlyList<ScribeBlock> MyReceivedAssignments => myReceivedAssignments;
 
-    /// <summary>Whether this player currently has at least one received assignment they haven't opened
-    /// the Inbox to see yet (the <c>Seen</c> flag) — the shared trigger condition for
-    /// both the ambient particle indicator and the Inbox nav-button shimmer. Re-evaluated on
-    /// every read rather than cached, since <see cref="myReceivedAssignments"/> only changes on a resync
-    /// push (infrequent relative to how often this is polled).</summary>
+    /// <summary>True when a received assignment has not been seen yet (<c>Seen</c>); drives the particle indicator and Inbox nav shimmer. Evaluated per read.</summary>
     public bool HasUnseenAssignment => myReceivedAssignments.Any(b => b.Assignment is { Seen: false });
 
-    /// <summary>Whether this player has at least one unseen assignment that ALSO hasn't already been
-    /// delivered as a physical Task Notice item into their inventory — the narrower trigger for the world-space ambient block particle only. Unlike
-    /// <see cref="HasUnseenAssignment"/> (which drives the Inbox nav-button shimmer),
-    /// this excludes a notice-delivered assignment once <see cref="ScribeAssignment.ReceivedDate"/> is
-    /// stamped — the player already has an in-hand signal for it and doesn't need the block particle too.
-    /// Delegates to <see cref="ScribeAssignment.NeedsAmbientParticle"/> so the actual predicate is
-    /// unit-tested in Core.</summary>
+    /// <summary>True when an unseen assignment has also not been delivered as a Task Notice item (see <see cref="ScribeAssignment.NeedsAmbientParticle"/>); the narrower trigger for the world-space block particle.</summary>
     public bool HasUnseenUndeliveredAssignment =>
         myReceivedAssignments.Any(b => b.Assignment is { } a && a.NeedsAmbientParticle);
 
-    /// <summary>Raised on the client whenever a fresh assignment sync push arrives, so an open
-    /// Assignment Desk/Inbox dialog can repaint its rows.</summary>
+    /// <summary>Raised on the client when an assignment sync push arrives.</summary>
     public event Action? MyAssignmentsChanged;
 
-    /// <summary>Rebindable hotkey code that toggles the pinned-task HUD's collapse state.
-    /// Registered client-side; its handler flips the HUD's client-local collapse preference.</summary>
+    /// <summary>Rebindable hotkey code toggling the pinned-task HUD's collapse state.</summary>
     public const string HudHotkeyCode = "scribepinhud";
 
-    /// <summary>The client-side pinned-task HUD element (null on a pure server). Constructed in
-    /// <see cref="StartClientSide"/>; it self-opens/closes off <see cref="MyPinsChanged"/> and owns its
-    /// own event/tick lifetime, disposed in <see cref="Dispose"/>.</summary>
+    /// <summary>Client-side pinned-task HUD (null on a pure server); self-opens/closes off <see cref="MyPinsChanged"/>, disposed in <see cref="Dispose"/>.</summary>
     private HudScribePins? pinHud;
 
-    /// <summary>The center-screen quest-accept-prompt modal —
-    /// the <see cref="Scribe.Core.ScribeQuestAcceptPolicy.PromptPopup"/> presentation style, an
-    /// alternative to <see cref="pinHud"/>'s banner. Constructed once in <see cref="StartClientSide"/>
-    /// (null on a pure server); it self-manages its own open/close, mirroring <see cref="pinHud"/>.
-    /// Disposed in <see cref="Dispose"/>.</summary>
+    /// <summary>Center-screen quest-accept prompt modal (<see cref="Scribe.Core.ScribeQuestAcceptPolicy.PromptPopup"/>), an alternative to <see cref="pinHud"/>'s banner; self-managing. Null on a pure server.</summary>
     private GuiDialogScribeQuestPrompt? questPromptModal;
 
-    /// <summary>The single standalone Scribe settings window.
-    /// It is the ONE settings surface, opened via <see cref="OpenSettings"/> from BOTH the HUD gear and
-    /// the Lectern gear. Lazily constructed on first
-    /// open and reused across opens (so it keeps its scroll/focus state); disposed in
-    /// <see cref="Dispose"/>. Null until first opened, and on a pure server.</summary>
+    /// <summary>The single Scribe settings window (<see cref="OpenSettings"/>), built lazily and reused to keep scroll/focus state. Null until first opened and on a pure server.</summary>
     private ScribeSettingsDialog? settingsDialog;
 
-    /// <summary>Client-side player preferences (completion policy, HUD rows/collapse), persisted as
-    /// client-local JSON (<see cref="HudConfigFileName"/>) and loaded in <see cref="StartClientSide"/>;
-    /// never server-synced. The Core POCO doubles as the config's serialized shape. Non-null on the
-    /// client after <see cref="StartClientSide"/>.</summary>
+    /// <summary>Client-local player preferences loaded from <see cref="HudConfigFileName"/>; never server-synced. Non-null after <see cref="StartClientSide"/>.</summary>
     private ScribePlayerSettings? mySettings;
 
-    /// <summary>DEV-ONLY live gearworks-layout tuning (<see cref="ScribeGearTuning"/>), persisted to
-    /// <see cref="GearTuningConfigFileName"/> and loaded in <see cref="StartClientSide"/>. Lazily defaulted
-    /// so it is never null (mirrors <see cref="mySettings"/>).</summary>
+    /// <summary>DEV-ONLY gearworks-layout tuning, persisted to <see cref="GearTuningConfigFileName"/>.</summary>
     private ScribeGearTuning? gearTuning;
 
-    /// <summary>Author-facing visual-tuning knobs (<see cref="ScribeVisualTuning"/>) for the ambient light
-    /// sampler and unseen-assignment particle effect, persisted to
-    /// <see cref="VisualTuningConfigFileName"/> and loaded in <see cref="StartClientSide"/>. Lazily
-    /// defaulted so it is never null (mirrors <see cref="mySettings"/>/<see cref="gearTuning"/>).</summary>
+    /// <summary>Visual-tuning knobs for the ambient light sampler and assignment particles, persisted to <see cref="VisualTuningConfigFileName"/>.</summary>
     private ScribeVisualTuning? visualTuning;
 
-    /// <summary>The single shared <see cref="ScribeAssignmentParticleEmitter"/> instance (built once from
-    /// <see cref="visualTuning"/> in <see cref="StartClientSide"/>), passed to every Inbox-capable block
-    /// entity's ambient-particle tick and the Task Notice proximity ping. Null until
-    /// <see cref="StartClientSide"/> runs, and on a pure server.</summary>
+    /// <summary>Shared particle emitter built from <see cref="visualTuning"/>; used by Inbox-capable block entities and the Task Notice proximity ping. Null on a pure server.</summary>
     private ScribeAssignmentParticleEmitter? particleEmitter;
 
-    /// <summary>The single DEV gearworks-tuning window (<c>.geartune</c>), lazily built + reused; disposed
-    /// in <see cref="Dispose"/>. Null until first opened, and on a pure server.</summary>
+    /// <summary>DEV gearworks-tuning window (<c>.geartune</c>), built lazily and reused.</summary>
     private ScribeGearTuningDialog? gearTuningDialog;
 
-    /// <summary>DEV-ONLY live block-box tuning (<see cref="ScribeBoxTuning"/>), persisted to
-    /// <see cref="BoxTuningConfigFileName"/> and loaded in <see cref="StartClientSide"/>. Lazily defaulted
-    /// so it is never null (mirrors <see cref="gearTuning"/>).</summary>
+    /// <summary>DEV-ONLY block-box tuning, persisted to <see cref="BoxTuningConfigFileName"/>.</summary>
     private ScribeBoxTuning? boxTuning;
 
-    /// <summary>The single DEV box-tuning window (<c>.boxtune</c>), lazily built + reused; disposed in
-    /// <see cref="Dispose"/>. Null until first opened, and on a pure server.</summary>
+    /// <summary>DEV box-tuning window (<c>.boxtune</c>), built lazily and reused.</summary>
     private ScribeBoxTuningDialog? boxTuningDialog;
 
-    /// <summary>The currently playing Clockmaker Notebook alarm sound, if any. Created when the timer
-    /// transitions to Fired; kept alive until it self-reports <see cref="ScribeAlarmSound.IsDone"/> (the
-    /// object manages its own fade lifecycle). Disposed and nulled in <see cref="Dispose"/>.</summary>
+    /// <summary>The playing Clockmaker alarm sound, created on the timer's Fired transition and kept until <see cref="ScribeAlarmSound.IsDone"/>.</summary>
     private ScribeAlarmSound? _activeAlarm;
 
-    /// <summary>Client-side cache of self-loaded dialog backdrop bitmaps, keyed by asset-location string
-    /// (see <see cref="GetBackdropBitmap"/>). Holds a <c>null</c> value for an asset that could not be
-    /// loaded so the failing load is attempted — and warned about — exactly once, not per open or per
-    /// frame. One immutable bitmap is shared across every dialog open; a dialog NEVER disposes one. All
-    /// entries are disposed in <see cref="Dispose"/>. Null on a pure server.</summary>
+    /// <summary>Cache of dialog backdrop bitmaps by asset-location string (see <see cref="GetBackdropBitmap"/>). A null value marks a failed load so it is attempted once. Bitmaps are shared across dialogs, which never dispose them; all are disposed in <see cref="Dispose"/>.</summary>
     private Dictionary<string, SKBitmap?>? backdropCache;
 
-    /// <summary>Client-side cache of the parsed cuneiform glyph bundle (see <see cref="GetCuneiformBundle"/>).
-    /// A sentinel <c>false</c> in <see cref="cuneiformBundleLoaded"/> distinguishes "not yet loaded" from
-    /// "loaded but unavailable" (a null parse), so a missing/unparseable asset warns exactly once rather
-    /// than re-fetching every frame. Not a native/disposable resource (pure managed model), so it needs no
-    /// cleanup in <see cref="Dispose"/>. Null/false on a pure server.</summary>
+    /// <summary>Parsed cuneiform glyph bundle cache (see <see cref="GetCuneiformBundle"/>); <see cref="cuneiformBundleLoaded"/> distinguishes "not yet loaded" from "unavailable" so a bad asset warns once. Managed only, no disposal.</summary>
     private Scribe.Core.Cuneiform.GlyphBundle? cuneiformBundle;
     private bool cuneiformBundleLoaded;
 
     /// <summary>
-    /// Runtime registry that maps each active <see cref="Guid"/> DocId to the
-    /// <see cref="IScribeDocumentHost"/> currently hosting it. Lecterns register on
-    /// <c>Initialize</c> and unregister on <c>OnBlockRemoved</c>; NotebookHosts register when
-    /// the notebook dialog opens and unregister when it closes. Server-only (hosts register on
-    /// both sides via the client and server <see cref="BlockEntityScribeLectern"/> paths, but the
-    /// server registry is the authoritative one used for incoming packets).
+    /// Maps each active DocId to its <see cref="IScribeDocumentHost"/>. Lecterns register on Initialize and
+    /// unregister on OnBlockRemoved; NotebookHosts on dialog open/close. The server registry is authoritative
+    /// for incoming packets.
     /// </summary>
     private readonly Dictionary<Guid, IScribeDocumentHost> _hostRegistry = new();
 
-    /// <summary>Registers a host under its document's <c>DocId</c>. Called by
-    /// <see cref="BlockEntityScribeLectern.Initialize"/> and <see cref="NotebookHost"/> on dialog open.</summary>
+    /// <summary>Registers a host under its document's <c>DocId</c>.</summary>
     public void RegisterHost(IScribeDocumentHost host) => _hostRegistry[host.Document.DocId] = host;
 
-    /// <summary>Unregisters a host by DocId. Called by
-    /// <see cref="BlockEntityScribeLectern.OnBlockRemoved"/> and <see cref="NotebookHost"/> on dialog close.</summary>
+    /// <summary>Unregisters a host by DocId.</summary>
     public void UnregisterHost(Guid docId) => _hostRegistry.Remove(docId);
 
-    /// <summary>True when a DIFFERENT live placed block is already registered under <paramref name="docId"/>.
-    /// This is the creative-clone signature: a middle-click pick carries the source block's serialized DocId
-    /// onto the copy, so when the copy is placed the source is still alive and registered under that id — a
-    /// collision, since the DocId keys this registry (and the pin store). A break→re-place is NOT a collision:
-    /// <see cref="BlockEntityScribeWritingStation.OnBlockRemoved"/> unregistered the source first, so the id is
-    /// free. <see cref="BlockEntityScribeWritingStation.OnBlockPlaced"/> uses this to decide whether to mint a
-    /// fresh identity for the copy.</summary>
+    /// <summary>True when a DIFFERENT live placed block is registered under <paramref name="docId"/> — the creative-clone signature (a middle-click pick copies the DocId while the source is still alive). A break then re-place is not a collision, since removal unregistered the id.</summary>
     public bool IsDocIdRegisteredToOtherBlock(Guid docId, BlockPos self) =>
         _hostRegistry.TryGetValue(docId, out var host)
         && host is BlockEntityScribeWritingStation be
         && be.Pos != self;
 
-    /// <summary>Client → server: notify that the player just opened the notebook with this DocId, so
-    /// the server can record their one-time PickedUp history entry (see
-    /// <see cref="OnServerReceivedNotebookOpened"/>). Carries the opened item's slot identity so the
-    /// server records the entry on the exact opened book, not the active-hand item.
-    /// No-op off the client. Called by every Scribe item's open path.</summary>
+    /// <summary>Client → server: the player opened the notebook with this DocId, so the server records the one-time PickedUp history entry (see <see cref="OnServerReceivedNotebookOpened"/>). Carries slot identity so the entry lands on the opened book, not the active-hand item. No-op off the client.</summary>
     public void NotifyServerNotebookOpened(Guid docId, ItemSlot slot)
     {
         capi?.Network.GetChannel(NetworkChannelName).SendPacket(new ScribeNotebookOpenedMessage
@@ -312,50 +191,31 @@ public sealed partial class ScribeModSystem : ModSystem
         });
     }
 
-    /// <summary>Raised on the client whenever a fresh pin set push arrives, so an open lectern dialog
-    /// (and the HUD) can repaint its per-player pin indicators.</summary>
+    /// <summary>Raised on the client when a pin set push arrives.</summary>
     public event Action? MyPinsChanged;
 
-    /// <summary>Client-side cache of THIS player's active timer state, populated by the server push.
-    /// Null means no timer data has arrived yet (treat as Idle).</summary>
+    /// <summary>Client cache of THIS player's timer state; null means none received yet (treat as Idle).</summary>
     public TimerStore? MyTimer { get; private set; }
 
-    /// <summary>Raised on the client whenever the server pushes a new timer state, so the HUD and any
-    /// open Clockmaker's Notebook dialog can update their timer display.</summary>
+    /// <summary>Raised on the client when the server pushes timer state.</summary>
     public event Action? MyTimerChanged;
 
-    /// <summary>Fired once per real second on the client from a single shared tick listener. The HUD
-    /// timer row and the Notebook Timer tab's countdown both repaint off THIS event (not their own
-    /// 250ms interpolation ticks) so their whole-second display advances in the exact same dispatch —
-    /// otherwise two independent 250ms listeners detect the second-flip up to 250ms apart, which reads
-    /// as visible drift when both are on screen. Each subscriber still interpolates its own remaining
-    /// seconds at 250ms for accuracy; this only synchronizes the repaint.</summary>
+    /// <summary>Fires once per real second from one shared tick listener. The HUD timer row and Timer tab repaint off it so their whole-second displays flip in the same dispatch; independent 250ms listeners would visibly drift.</summary>
     public event Action? TimerDisplayTick;
 
-    /// <summary>Raised on the client whenever the standalone settings window opens or closes. The settings window is a separate dialog, not a lectern view, so an
-    /// open lectern subscribes to this and rebuilds to recolor its Settings nav button live — regardless
-    /// of which gear (lectern or HUD) toggled the window. Fired from the dialog's own open/close lifecycle
-    /// so every close route (gear re-toggle, X button, Escape) notifies.</summary>
+    /// <summary>Raised when the standalone settings window opens or closes (from its own lifecycle, so every close route notifies); open lecterns rebuild to recolor their Settings nav button.</summary>
     public event Action? SettingsVisibilityChanged;
 
-    /// <summary>True while the standalone settings window is currently open.
-    /// The lectern reads this at build time to decide whether its Settings nav button shows its active
-    /// color. Safe on a pure server (the dialog is null there → false).</summary>
+    /// <summary>True while the settings window is open; false on a pure server.</summary>
     public bool IsSettingsOpen => settingsDialog?.IsOpened() == true;
 
-    /// <summary>Invoked by <see cref="ScribeSettingsDialog"/> from its open/close lifecycle to raise
-    /// <see cref="SettingsVisibilityChanged"/>. Centralized here so the dialog doesn't expose the event
-    /// itself.</summary>
+    /// <summary>Raises <see cref="SettingsVisibilityChanged"/> on behalf of <see cref="ScribeSettingsDialog"/>.</summary>
     public void NotifySettingsVisibilityChanged() => SettingsVisibilityChanged?.Invoke();
 
-    /// <summary>DEV: raised whenever a gearworks-tuning knob changes in the <c>.geartune</c> window, so an
-    /// open Clockmaker's Notebook Timer tab rebuilds its gearworks live off the new values.</summary>
+    /// <summary>DEV: raised when a gearworks knob changes so an open Timer tab rebuilds.</summary>
     public event Action? GearTuningChanged;
 
-    /// <summary>DEV: raised whenever a box-tuning knob changes in the <c>.boxtune</c> window. The world
-    /// hitbox already reads <see cref="BoxTuning"/> live on every collision/selection call (design.md
-    /// Decision 1), so this event's only job is letting an OPEN dialog re-seed its own displayed fields
-    /// onto the clamped/persisted value.</summary>
+    /// <summary>DEV: raised when a box-tuning knob changes; the world hitbox reads <see cref="BoxTuning"/> live, so this only lets an open dialog re-seed its fields to the clamped value.</summary>
     public event Action? BoxTuningChanged;
 
     public override void Start(ICoreAPI api)
@@ -366,13 +226,11 @@ public sealed partial class ScribeModSystem : ModSystem
         api.RegisterBlockEntityClass("ScribeLectern", typeof(BlockEntityScribeLectern));
         api.RegisterBlockClass("BlockScriptorium", typeof(BlockScriptorium));
         api.RegisterBlockEntityClass("Scriptorium", typeof(BlockEntityScriptorium));
-        // The Assignment Desk and standalone Inbox blocks.
         api.RegisterBlockClass("BlockAssignmentDesk", typeof(BlockAssignmentDesk));
         api.RegisterBlockEntityClass("AssignmentDesk", typeof(BlockEntityAssignmentDesk));
         api.RegisterBlockClass("BlockInbox", typeof(BlockInbox));
         api.RegisterBlockEntityClass("Inbox", typeof(BlockEntityInbox));
-        // The Chalkboard: a wall-mounted cosmetic variant of the Lectern. The string names match the
-        // committed chalkboard.json (class "BlockChalkboard" / entityclass "Chalkboard").
+        // Chalkboard: wall-mounted cosmetic Lectern variant; names match chalkboard.json.
         api.RegisterBlockClass("BlockChalkboard", typeof(BlockScribeChalkboard));
         api.RegisterBlockEntityClass("Chalkboard", typeof(BlockEntityScribeChalkboard));
         api.RegisterItemClass("ItemScribeNotebook", typeof(ItemScribeNotebook));
@@ -380,10 +238,7 @@ public sealed partial class ScribeModSystem : ModSystem
         api.RegisterItemClass("ItemScribeTablet", typeof(ItemScribeTablet));
         api.RegisterItemClass("ItemScribeTaskNotice", typeof(ItemScribeTaskNotice));
 
-        // All message types must be registered in this same order on both sides. The original four
-        // read/edit/lock messages come first (order frozen); the identity-addressed pin layer is
-        // APPENDED after them, and the Pin Tab's edit/delete/reorder messages strictly after those —
-        // never inserted mid-list — so the wire packet ids of the shipped messages are unchanged.
+        // Message types must be registered in the same order on both sides. Append only, never insert mid-list, so shipped wire packet ids stay unchanged.
         api.Network.RegisterChannel(NetworkChannelName)
             .RegisterMessageType<ScribeEditDocumentMessage>()
             .RegisterMessageType<ScribeReleaseLockMessage>()
@@ -426,8 +281,7 @@ public sealed partial class ScribeModSystem : ModSystem
             .RegisterMessageType<ScribeKnownPlayersSyncMessage>();
     }
 
-    /// <summary>Server-side accessor for the pin store, so the block entity can register/orphan its
-    /// document and refresh snapshots. Null on the client.</summary>
+    /// <summary>Server-side pin store accessor. Null on the client.</summary>
     public ScribePinStore? PinStore => pinStore;
 
     /// <summary>Server-side accessor for the assignment store. Null on the client.</summary>
@@ -435,28 +289,19 @@ public sealed partial class ScribeModSystem : ModSystem
 
     public override void StartClientSide(ICoreClientAPI api)
     {
-        // HarfBuzz native-load isolation (Linux) now lives in the standalone ScribeHarfBuzzLoadFix
-        // ModSystem — see that file for why it must NOT be a ScribeModSystem partial: a low
-        // ExecuteOrder here would preempt `gui`'s own StartClientSide (which extracts/registers its
-        // bundled native libraries), breaking font shaping on EVERY platform, not just Linux.
+        // HarfBuzz native-load isolation lives in the standalone ScribeHarfBuzzLoadFix ModSystem, not a partial here: a low ExecuteOrder would preempt gui's StartClientSide and break font shaping on every platform.
         base.StartClientSide(api);
         capi = api;
 
-        // Load this player's client-local HUD/pin preferences (per-player, cross-world, never synced).
-        // A missing/corrupt file loads as defaults; Normalize() clamps any hand-edited out-of-range value.
+        // Client-local preferences; a missing/corrupt file loads as defaults and Normalized() clamps hand edits.
         mySettings = (api.LoadModConfig<ScribePlayerSettings>(HudConfigFileName) ?? new ScribePlayerSettings()).Normalized();
 
-        // DEV: live gearworks-layout tuning (a never-touched file loads as the current baked-in defaults).
         gearTuning = (api.LoadModConfig<ScribeGearTuning>(GearTuningConfigFileName) ?? new ScribeGearTuning()).Normalized();
         RegisterGearTuneCommand(api);
 
-        // DEV: live block-box tuning for the Inbox/Inbox-Wall/Scriptorium/Assignment Desk collision +
-        // selection boxes (a never-touched file loads as today's shipped blocktype-JSON defaults).
         boxTuning = (api.LoadModConfig<ScribeBoxTuning>(BoxTuningConfigFileName) ?? new ScribeBoxTuning()).Normalized();
         RegisterBoxTuneCommand(api);
 
-        // Author-facing visual tuning for the ambient light sampler + particle emitter (a never-touched
-        // file loads as today's hardcoded defaults). See ScribeVisualTuning's remarks.
         visualTuning = api.LoadModConfig<ScribeVisualTuning>(VisualTuningConfigFileName) ?? new ScribeVisualTuning();
         particleEmitter = new ScribeAssignmentParticleEmitter(visualTuning);
         RegisterScribeLightCommand(api);
@@ -466,8 +311,7 @@ public sealed partial class ScribeModSystem : ModSystem
         RegisterCustomIcons(api);
         RegisterCustomFonts(api);
 
-        // Client-side Handbook postfix: injects the "Add to Scribe" links onto each item's Handbook page.
-        // Client-only — the Handbook is a client GUI — and unpatched in Dispose.
+        // Handbook postfix adding "Add to Scribe" links; client-only, unpatched in Dispose.
         StartHandbookPatch();
 
         api.Network.GetChannel(NetworkChannelName)
@@ -483,28 +327,19 @@ public sealed partial class ScribeModSystem : ModSystem
             .SetMessageHandler<ScribeQuestDecisionSetMessage>(OnClientReceivedQuestDecisionSet)
             .SetMessageHandler<ScribeKnownPlayersSyncMessage>(OnClientReceivedKnownPlayersSync);
 
-        // The pinned-task HUD self-shows once the player's pin set arrives (it subscribes to
-        // MyPinsChanged in its ctor), so it can be constructed here regardless of current pin count —
-        // it stays closed until there is ≥1 pin. It owns its own subscription + tick; we dispose it.
+        // The HUD subscribes to MyPinsChanged in its ctor and stays closed until there is at least one pin.
         pinHud = new HudScribePins(api, this);
 
-        // The center-modal quest-accept-prompt presentation style,
-        // constructed unconditionally like pinHud — it self-manages its own open/close off the pending
-        // prompt set + Quest Accept Policy + the vanilla-dialog guard, so it must exist even while nothing
-        // is currently pending.
+        // Self-manages open/close; must exist even while nothing is pending.
         questPromptModal = new GuiDialogScribeQuestPrompt(api, this);
 
-        // Quest soft auto-detect (Layer 2): a no-op tick listener
-        // when vsquest isn't installed (ScribeQuestWatcher checks IsAvailable itself each tick).
+        // Quest soft auto-detect; a no-op when vsquest is absent.
         StartQuestWatcher(api);
 
-        // Single shared 1Hz display tick: drives BOTH the HUD timer row and the Notebook Timer tab
-        // countdown so they repaint on the same dispatch (see TimerDisplayTick). One listener, so there
-        // is one authoritative second-boundary rather than two out-of-phase 250ms listeners.
+        // One shared 1Hz tick so the HUD timer row and Timer tab repaint in the same dispatch (see TimerDisplayTick).
         timerDisplayTickId = api.World.RegisterGameTickListener(_ => TimerDisplayTick?.Invoke(), 1000);
 
-        // Rebindable collapse/expand hotkey. GUIOrOtherControls so it fires even while a
-        // dialog is open; default P, no modifiers. The HUD flips its client-local collapse preference.
+        // GUIOrOtherControls so it fires with a dialog open; default P.
         api.Input.RegisterHotKey(HudHotkeyCode, Lang.Get("scribe:hotkey-scribepinhud"), GlKeys.P,
             HotkeyType.GUIOrOtherControls);
         api.Input.SetHotKeyHandler(HudHotkeyCode, _ =>
@@ -514,9 +349,7 @@ public sealed partial class ScribeModSystem : ModSystem
         });
     }
 
-    /// <summary>Dispose the client-side HUD (its own <see cref="MyPinsChanged"/> subscription + tick), the
-    /// shared settings window, and every cached backdrop bitmap (the one place a backdrop bitmap is ever
-    /// disposed — never a dialog). The server side holds no unmanaged/disposable state of its own here.</summary>
+    /// <summary>Disposes the client-side HUD, dialogs, and every cached backdrop bitmap (the only place those are disposed).</summary>
     public override void Dispose()
     {
         DisposeHandbookPatch();
@@ -600,13 +433,11 @@ public sealed partial class ScribeModSystem : ModSystem
         // Last-known-position capture for the Hybrid range check's offline-target case (Core 1.5).
         api.Event.PlayerDisconnect += OnScribePlayerDisconnect;
 
-        // History chronicle hooks. OnHistoryScanTick (10s) refreshes the carried-document snapshot
-        // and flushes queued Death entries.
+        // History hooks; OnHistoryScanTick (10s) refreshes the carried-document snapshot and flushes queued Death entries.
         api.Event.OnEntityDeath += OnEntityDeath;
         api.World.RegisterGameTickListener(OnHistoryScanTick, 10000);
 
-        // Task Notice proximity discovery heartbeat,
-        // mirroring OnHistoryScanTick's own idiom/interval.
+        // Task Notice proximity heartbeat.
         api.World.RegisterGameTickListener(OnTaskNoticeProximityTick, 5000);
 
         // Timer countdown: 1 s tick for all running/fired player timers.
@@ -618,11 +449,7 @@ public sealed partial class ScribeModSystem : ModSystem
         RegisterSeedCommand(api);
     }
 
-    /// <summary>
-    /// Server-side diagnostic log for the pin/complete round-trip, prefixed <c>[scribe]</c> at
-    /// Notification level so the whole complete-vs-unpin flow can be read back from the server
-    /// log without a debug build. Diagnostic scaffolding that can be dropped to VerboseDebug or removed.
-    /// </summary>
+    /// <summary>Server-side <c>[scribe]</c> diagnostic log for the pin/complete round-trip; droppable.</summary>
     private void Trace(string format, params object?[] args)
     {
         sapi?.Logger.Notification("[scribe] " + format, args);

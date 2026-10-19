@@ -8,11 +8,10 @@ using Vintagestory.API.Datastructures;
 namespace Integration.Tests;
 
 /// <summary>
-/// The Read View filter pill + subtask-group
-/// collapse set persist per Scribe item/block instance. RollbackWorld (not a fixture) is enough
-/// here — mirroring <see cref="ServerAuthoritativeEditScenarios"/> — because each scenario proves
-/// the wire-format round trip itself (tree attributes for the block host, ItemStack attributes for
-/// the item host) rather than a real save/quit/reload, which needs a checked-in fixture.
+/// The Read View filter pill + subtask-group collapse set persist per Scribe item/block instance.
+/// RollbackWorld is enough (as in <see cref="ServerAuthoritativeEditScenarios"/>) because each scenario proves the
+/// wire-format round trip itself (tree attributes for the block host, ItemStack attributes for the item host),
+/// not a real save/quit/reload.
 /// </summary>
 public class ReadViewStatePersistenceScenarios : AtlasScenarioBase
 {
@@ -37,9 +36,8 @@ public class ReadViewStatePersistenceScenarios : AtlasScenarioBase
         Assert.Equal((byte)ReadViewFilterCategory.Pinned, host.ReadViewFilterCategory);
         Assert.Equal(new[] { groupId }, host.CollapsedGroupIds);
 
-        // Simulate a save/reload on the SAME instance: serialize the tree exactly like a world save
-        // does, then re-hydrate it back through FromTreeAttributes — the exact call VS makes on
-        // chunk load — proving the wire format (SetInt/GetInt + the Guid-set byte blob) round trips.
+        // Simulate a save/reload on the SAME instance: serialize the tree, then re-hydrate via
+        // FromTreeAttributes (as chunk load does) to prove the wire format (SetInt/GetInt + Guid-set blob) round trips.
         var tree = new TreeAttribute();
         lectern.ToTreeAttributes(tree);
         lectern.FromTreeAttributes(tree, World.Api.World);
@@ -72,10 +70,9 @@ public class ReadViewStatePersistenceScenarios : AtlasScenarioBase
         slot.Itemstack = new ItemStack(World.Api.World.GetItem(new AssetLocation("scribe", "scribenotebook"))!, 1);
         slot.MarkDirty();
 
-        // Seed a real, persisted document (and its DocId) on the stack the way a first save would —
-        // the server-side inventory scan (TryResolveDocHost) can only match a DocId that already
-        // exists on the stack's attributes. Constructing a NotebookHost alone does not persist
-        // anything, so this needs an explicit Flush.
+        // Seed a persisted document (and DocId) on the stack as a first save would: the server-side scan
+        // (TryResolveDocHost) only matches a DocId already on the stack's attributes, and constructing a
+        // NotebookHost alone does not persist, so this needs an explicit Flush.
         var seedHost = new NotebookHost(slot);
         seedHost.Flush();
         var docId = seedHost.Document.DocId;
@@ -83,8 +80,7 @@ public class ReadViewStatePersistenceScenarios : AtlasScenarioBase
         var groupId = Guid.NewGuid();
         Mod.SetReadViewStateForPlayer(player.Player, docId, (byte)ReadViewFilterCategory.Completed, new[] { groupId });
 
-        // Reopen: constructing a FRESH host over the same slot re-reads the persisted ItemStack
-        // attributes, exactly like a real reopen after a save/reload would.
+        // Reopen: a FRESH host over the same slot re-reads the persisted ItemStack attributes.
         var reopened = new NotebookHost(slot);
         Assert.Equal((byte)ReadViewFilterCategory.Completed, reopened.ReadViewFilterCategory);
         Assert.Equal(new[] { groupId }, reopened.CollapsedGroupIds);

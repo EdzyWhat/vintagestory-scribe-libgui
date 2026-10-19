@@ -1,8 +1,8 @@
 namespace Scribe.Core;
 
 /// <summary>
-/// The kind of a <see cref="ScribeBlock"/>. Persisted as a byte, so values are explicit
-/// and MUST remain stable across versions (append new kinds; never renumber).
+/// The kind of a <see cref="ScribeBlock"/>. Persisted as a byte: values are explicit and MUST stay stable
+/// (append new kinds; never renumber).
 /// </summary>
 public enum ScribeBlockKind : byte
 {
@@ -12,79 +12,56 @@ public enum ScribeBlockKind : byte
     /// <summary>A freeform text section with no checkbox.</summary>
     Text = 1,
 
-    /// <summary>A "gather N of item X" task with a live have/need counter driven by carried
-    /// inventory. Uses <see cref="ScribeBlock.TargetItemCode"/>, <see cref="ScribeBlock.TargetQuantity"/>,
-    /// and <see cref="ScribeBlock.CurrentQuantity"/>. Still a checkbox task (has a Done flag).</summary>
+    /// <summary>A "gather N of item X" task with a live have/need counter driven by carried inventory
+    /// (<see cref="ScribeBlock.TargetItemCode"/>, <see cref="ScribeBlock.TargetQuantity"/>,
+    /// <see cref="ScribeBlock.CurrentQuantity"/>). Has a Done flag.</summary>
     Tracker = 2,
 
-    /// <summary>A reference task pointing at an item's Handbook page via
-    /// <see cref="ScribeBlock.LinkTarget"/>. Behaves as a hyperlink from every surface and still
-    /// has an independent Done flag (opening the page never toggles completion).</summary>
+    /// <summary>A reference task pointing at an item's Handbook page via <see cref="ScribeBlock.LinkTarget"/>.
+    /// Acts as a hyperlink from every surface; opening the page never toggles its independent Done flag.</summary>
     Link = 3,
 
-    /// <summary>A "craft N of item X" task: a recipe-bound composite generator. Like a
-    /// <see cref="Tracker"/>, it counts the carried output via <see cref="ScribeBlock.TargetItemCode"/>,
-    /// <see cref="ScribeBlock.TargetQuantity"/>, and <see cref="ScribeBlock.CurrentQuantity"/>; in
-    /// addition it remembers which grid recipe variant it generates from
-    /// (<see cref="ScribeBlock.RecipeSignature"/>) and auto-generates/maintains one ingredient Tracker
-    /// subtask (at <see cref="ScribeBlock.Depth"/> 1) per recipe ingredient. Still a checkbox task
-    /// (has a Done flag).</summary>
+    /// <summary>A "craft N of item X" task: a recipe-bound composite generator. Counts the carried output
+    /// like a <see cref="Tracker"/>, remembers its grid recipe variant
+    /// (<see cref="ScribeBlock.RecipeSignature"/>), and maintains one ingredient Tracker subtask (depth 1)
+    /// per recipe ingredient. Has a Done flag.</summary>
     Craft = 4,
 
-    /// <summary>A depth-1 subtask representing one Progression Framework quest objective, generated
-    /// under its parent Quest Link (a <see cref="Link"/> whose <see cref="ScribeBlock.LinkTarget"/> is a
-    /// quest target) and reconciled in place as the backend reports progress
-    /// (<c>add-progression-framework-quest-objective-subtasks</c>). Field reuse, distinct from every
-    /// other kind: <see cref="ScribeBlock.LinkTarget"/> holds the objective's own stable code (the
-    /// reconcile MATCH KEY — never a clickable target, unlike a Link's); <see cref="ScribeBlock.LinkLabel"/>
-    /// holds a captured display label, used only when the objective has no resolvable item;
-    /// <see cref="ScribeBlock.TargetItemCode"/> is set only when the objective resolves to exactly one
-    /// concrete item (a delivery-type objective with no alternates), giving it a real item icon like a
-    /// Tracker. Carries <see cref="ScribeBlock.TargetQuantity"/> (the objective's required count) and
-    /// <see cref="ScribeBlock.CurrentQuantity"/> (the backend's own reported progress) like a Tracker, but
-    /// is explicitly excluded from <see cref="IsCarriedCountTracked"/> — its count is driven exclusively by
-    /// the backend's own state, never by what the viewer happens to be carrying. Also excluded from
-    /// <see cref="IsCompletable"/> — it has no Done flag semantics and renders with no checkbox.</summary>
+    /// <summary>A depth-1 subtask for one Progression Framework quest objective, generated under its parent
+    /// Quest Link and reconciled in place as the backend reports progress. Field reuse:
+    /// <see cref="ScribeBlock.LinkTarget"/> is the objective's stable code (the reconcile match key, never a
+    /// clickable target); <see cref="ScribeBlock.LinkLabel"/> is a captured display label used only when no
+    /// item resolves; <see cref="ScribeBlock.TargetItemCode"/> is set only when the objective resolves to
+    /// exactly one concrete item. Quantities are backend-reported, so it is excluded from
+    /// <see cref="ScribeBlock.IsCarriedCountTracked"/> and <see cref="ScribeBlock.IsCompletable"/> (no
+    /// checkbox).</summary>
     QuestObjective = 5,
 }
 
 /// <summary>
-/// One element of a <see cref="ScribeDocument"/>. A document is an ordered sequence of
-/// these, so tasks and free-text sections can be interspersed and reordered freely.
+/// One element of a <see cref="ScribeDocument"/>: an ordered sequence of these lets tasks and free-text
+/// sections be interspersed and reordered. <see cref="Done"/> is meaningful for every kind except Text.
+/// <see cref="Depth"/> is the indentation level (0 = top-level, 1 = subtask) and is carried through every codec.
 ///
-/// A block is one of five kinds (see <see cref="ScribeBlockKind"/>): a Task (checkbox + text),
-/// a Text section (text only), a Tracker (a "gather N of item X" task), a Link (a reference to
-/// an item's Handbook page), or a Craft (a recipe-bound "craft N of item X" task). <see cref="Done"/>
-/// is meaningful for Task, Tracker, Link, and Craft (all completable); it is unused for Text.
-/// <see cref="Depth"/> is the row's indentation level, clamped to one level: 0 = top-level row,
-/// 1 = subtask (an indented child, e.g. a Craft task's generated ingredient rows). It is carried
-/// through persistence in every codec.
+/// Tracker/Link item references are PLAIN STRINGS (<see cref="TargetItemCode"/> / <see cref="LinkTarget"/>),
+/// never <c>AssetLocation</c>/<c>ItemStack</c>, keeping this type free of the Vintage Story API; the Mod
+/// layer parses them. <see cref="TargetQuantity"/> and <see cref="CurrentQuantity"/> clamp themselves in
+/// their setters.
 ///
-/// The Tracker/Link item references are stored as PLAIN STRINGS (<see cref="TargetItemCode"/> /
-/// <see cref="LinkTarget"/>), never parsed <c>AssetLocation</c>/<c>ItemStack</c> — that keeps this
-/// type free of any Vintage Story API reference; the Mod layer parses them when it needs the game.
-/// <see cref="TargetQuantity"/> and <see cref="CurrentQuantity"/> clamp themselves (target ≥ 1;
-/// current into [0, target]) so the invariant holds regardless of caller — see their setters.
-///
-/// <see cref="TaskId"/> is a stable per-block identifier assigned at creation and preserved
-/// across every mutation and through serialization. Nothing in the document references a block
-/// by list position durably (the index shifts on move/insert/delete); external references (the
-/// per-player pin store) name a block by its owning document's <see cref="ScribeDocument.DocId"/>
-/// plus this id. Pinning is not stored on the block; it lives in a per-player store.
+/// <see cref="TaskId"/> is a stable per-block id preserved across every mutation and serialization.
+/// External references (the per-player pin store) name a block by its document's
+/// <see cref="ScribeDocument.DocId"/> plus this id, never by list position. Pinning is not stored on the block.
 /// </summary>
 public sealed class ScribeBlock
 {
     public ScribeBlockKind Kind { get; set; }
     public string Text { get; set; }
 
-    /// <summary>Completed flag. Only meaningful when <see cref="Kind"/> is Task.</summary>
+    /// <summary>Completed flag. Meaningless for <see cref="ScribeBlockKind.Text"/>.</summary>
     public bool Done { get; set; }
 
-    /// <summary>Row indentation level, clamped to one level on set: 0 = top-level row, 1 = subtask
-    /// (an indented child rendered beneath the row above it). Any value outside <c>[0, 1]</c> is
-    /// clamped — the system supports exactly one level of nesting (no depth-2). Kind-agnostic: any
-    /// block kind may be a subtask (task-subtasks capability). A Craft task's generated ingredient
-    /// rows live at depth 1.</summary>
+    /// <summary>Row indentation level, clamped to <c>[0, 1]</c> on set (exactly one level of nesting).
+    /// Kind-agnostic; a Craft task's generated ingredient rows live at depth 1.</summary>
     public int Depth
     {
         get => _depth;
@@ -92,10 +69,9 @@ public sealed class ScribeBlock
     }
     private int _depth;
 
-    /// <summary>Stable identifier for this block. Assigned once at construction (a fresh
-    /// <see cref="Guid"/> when not supplied) and never changed by any mutation, so an external
-    /// reference to this block survives reorder/insert/delete of its siblings. Serialized as 16
-    /// raw bytes by <see cref="ScribeDocumentCodec"/>.</summary>
+    /// <summary>Stable identifier, assigned once at construction (a fresh <see cref="Guid"/> when not
+    /// supplied) and never changed, so external references survive sibling reorder/insert/delete. Serialized
+    /// as 16 raw bytes by <see cref="ScribeDocumentCodec"/>.</summary>
     public Guid TaskId { get; }
 
     /// <summary>The optional player assignment carried by this block.</summary>
@@ -110,15 +86,12 @@ public sealed class ScribeBlock
         set => Assignment = value is null ? null : new ScribeAssignment(value, "");
     }
 
-    /// <summary>For a <see cref="ScribeBlockKind.Tracker"/>: the item to count, as a plain code
-    /// string (e.g. <c>"game:ingot-copper"</c>). Null for other kinds. Stored as a string, never a
-    /// parsed AssetLocation, to keep Core API-free (see the class remarks).</summary>
+    /// <summary>For a <see cref="ScribeBlockKind.Tracker"/>: the item to count, as a plain code string
+    /// (e.g. <c>"game:ingot-copper"</c>). Null for other kinds.</summary>
     public string? TargetItemCode { get; set; }
 
-    /// <summary>For a Tracker: how many of <see cref="TargetItemCode"/> to gather. Clamped to ≥ 1
-    /// on set (a target of 0 or negative is meaningless). Defaults to 1; meaningless for other
-    /// kinds (kept at 1). Does NOT re-clamp <see cref="CurrentQuantity"/>: the current count is the
-    /// live raw carried amount and may legitimately exceed the target (see that property).</summary>
+    /// <summary>For a Tracker: how many of <see cref="TargetItemCode"/> to gather. Clamped to ≥ 1 on set.
+    /// Does NOT re-clamp <see cref="CurrentQuantity"/>.</summary>
     public int TargetQuantity
     {
         get => _targetQuantity;
@@ -126,11 +99,9 @@ public sealed class ScribeBlock
     }
     private int _targetQuantity = 1;
 
-    /// <summary>For a Tracker: how many of <see cref="TargetItemCode"/> are currently carried (the live
-    /// have-count). Clamped only to ≥ 0 on set — it is NOT capped at <see cref="TargetQuantity"/>, so a
-    /// player carrying more than the target reads the true overflow (e.g. <c>100 / 8</c>), not a clamped
-    /// <c>8 / 8</c>. "Satisfied" is therefore <c>CurrentQuantity &gt;= TargetQuantity</c>
-    /// everywhere it's tested. Defaults to 0.</summary>
+    /// <summary>For a Tracker: how many of <see cref="TargetItemCode"/> are currently carried. Clamped only
+    /// to ≥ 0, NOT capped at <see cref="TargetQuantity"/>, so overflow reads truthfully (<c>100 / 8</c>).
+    /// "Satisfied" is <c>CurrentQuantity &gt;= TargetQuantity</c> everywhere.</summary>
     public int CurrentQuantity
     {
         get => _currentQuantity;
@@ -138,45 +109,34 @@ public sealed class ScribeBlock
     }
     private int _currentQuantity;
 
-    /// <summary>For a <see cref="ScribeBlockKind.Link"/>: the Handbook target this task references,
-    /// as a plain code string. Null for other kinds. Stored as a string, never a parsed
-    /// AssetLocation, to keep Core API-free (see the class remarks).
+    /// <summary>For a <see cref="ScribeBlockKind.Link"/>: the Handbook target, as a plain code string. Null
+    /// for other kinds.
     ///
-    /// <para>Two flavors, distinguished by <see cref="ScribeLinkTarget"/>: an <b>item</b> Link stores a
-    /// bare collectible code (e.g. <c>"game:ingot-copper"</c>) and derives its icon+name live from the
-    /// resolved item; a <b>guide-page</b> Link stores a <c>"page:"</c>-prefixed Handbook page code (e.g.
-    /// <c>"page:craftinginfo-knapping"</c>) — it has no item, so its display name lives in
-    /// <see cref="LinkLabel"/> and its icon is a generic book (add-tracker-link-tasks 7.6).</para></summary>
+    /// <para>Two flavors, distinguished by <see cref="ScribeLinkTarget"/>: an <b>item</b> Link stores a bare
+    /// collectible code (e.g. <c>"game:ingot-copper"</c>) and derives icon+name from the resolved item; a
+    /// <b>guide-page</b> Link stores a <c>"page:"</c>-prefixed Handbook page code, has no item, takes its
+    /// name from <see cref="LinkLabel"/>, and shows a generic book icon.</para></summary>
     public string? LinkTarget { get; set; }
 
-    /// <summary>For a guide-page or quest <see cref="ScribeBlockKind.Link"/> (a <c>"page:"</c>- or
-    /// <c>"quest:"</c>-prefixed <see cref="LinkTarget"/>): the referenced page/quest's display title,
-    /// captured at creation time (neither has an <c>ItemStack</c> to resolve a name from later). Null for
-    /// an item Link (whose name resolves live from the item) and for non-Link kinds
-    /// (add-tracker-link-tasks 7.6; quest links added by add-assignment-and-quest-support 10.1).</summary>
+    /// <summary>For a guide-page or quest Link (a <c>"page:"</c>- or <c>"quest:"</c>-prefixed
+    /// <see cref="LinkTarget"/>): the referenced page/quest's display title, captured at creation (neither
+    /// has an <c>ItemStack</c> to resolve a name from). Null for item Links and non-Link kinds.</summary>
     public string? LinkLabel { get; set; }
 
-    /// <summary>For a quest <see cref="ScribeBlockKind.Link"/> (a <c>"quest:"</c>-prefixed
-    /// <see cref="LinkTarget"/>): the quest's captured description, resolved from the installed quest mod's
-    /// catalog at creation time and never re-derived (add-assignment-and-quest-support 10.1/Decision 10 —
-    /// orphan-safe: a since-uninstalled quest mod still renders this text). Null for every other kind,
-    /// including guide-page and item Links.</summary>
+    /// <summary>For a quest Link (a <c>"quest:"</c>-prefixed <see cref="LinkTarget"/>): the quest's
+    /// description, captured at creation from the installed quest mod's catalog and never re-derived, so a
+    /// since-uninstalled quest mod still renders it. Null for every other kind.</summary>
     public string? LinkDescription { get; set; }
 
-    /// <summary>For a <see cref="ScribeBlockKind.Craft"/>: a stable string identifying which grid recipe
-    /// variant this task generates its ingredient subtasks from (the working composition is
-    /// <c>outputCode|pattern|WxH</c>). The Mod layer re-resolves the live recipe from this signature to
-    /// (re)generate/reconcile the ingredient rows, so documents stay small and survive recipe-data
-    /// updates. Empty string for non-Craft kinds (and for a Craft whose recipe could not be resolved,
-    /// which then degrades to a plain output tracker). Stored as a plain string to keep Core API-free.</summary>
+    /// <summary>For a <see cref="ScribeBlockKind.Craft"/>: a stable string naming the grid recipe variant its
+    /// ingredient subtasks come from (composition <c>outputCode|pattern|WxH</c>). The Mod layer re-resolves
+    /// the live recipe from it, so documents stay small and survive recipe-data updates. Empty for non-Craft
+    /// kinds and for a Craft whose recipe could not be resolved (which degrades to a plain output tracker).</summary>
     public string RecipeSignature { get; set; } = "";
 
-    /// <summary>Opaque, caller-composed free-text detail attached by an external mod via
-    /// <c>TryCreateExternalTask</c> (add-external-mod-task-api). Kind-agnostic — any block kind may
-    /// carry it, since it is always placed on whichever block ends up at Depth 0 regardless of kind.
-    /// Content and format are never interpreted or parsed by Core or the Mod layer; it is shown to the
-    /// viewing player verbatim as hover text. Null when no external caller attached anything (the
-    /// overwhelming majority of blocks, including everything created inside Scribe itself).</summary>
+    /// <summary>Opaque free-text detail attached by an external mod via <c>TryCreateExternalTask</c>.
+    /// Kind-agnostic; never interpreted by Core or the Mod layer and shown verbatim as hover text. Null when
+    /// nothing was attached.</summary>
     public string? ExtraInfo { get; set; }
 
     public ScribeBlock(ScribeBlockKind kind, string text, bool done = false, int depth = 0, string? assignedToUid = null, Guid? taskId = null,
@@ -191,7 +151,7 @@ public sealed class ScribeBlock
         TaskId = taskId ?? Guid.NewGuid();
         TargetItemCode = targetItemCode;
         TargetQuantity = targetQuantity;
-        CurrentQuantity = currentQuantity; // ≥0 only; may exceed the target (raw carried count, 7.14)
+        CurrentQuantity = currentQuantity; // ≥0 only; may exceed the target (raw carried count)
         LinkTarget = linkTarget;
         LinkLabel = linkLabel;
         RecipeSignature = recipeSignature ?? "";
@@ -201,15 +161,11 @@ public sealed class ScribeBlock
 
     public bool IsTask => Kind == ScribeBlockKind.Task;
 
-    /// <summary>True for any block that carries a meaningful <see cref="Done"/> flag — Task, Tracker,
-    /// Link, and Craft (everything except a free-text section and a <see cref="ScribeBlockKind.QuestObjective"/>).
-    /// This is the single predicate every completion, pin, sink, and delete-from-reader path gates on, so a
-    /// Tracker or Link completes and pins exactly like a plain Task. A QuestObjective is excluded — its
-    /// progress is backend-driven, not player-toggled, so it renders with no checkbox
-    /// (add-progression-framework-quest-objective-subtasks). Its standalone row delete still works: the
-    /// editor's delete gesture (<c>ScribeCompletion.ApplyDelete</c>) addresses a row by index/TaskId directly
-    /// and does not gate on this predicate. Text-EDITING paths still gate on <see cref="IsTask"/> instead
-    /// (a Tracker/Link has no player-editable text — its label comes from the referenced item).</summary>
+    /// <summary>True for any block with a meaningful <see cref="Done"/> flag: everything except Text and
+    /// <see cref="ScribeBlockKind.QuestObjective"/>. The single predicate every completion, pin, sink, and
+    /// delete-from-reader path gates on. A QuestObjective is backend-driven and renders with no checkbox, but
+    /// its row delete still works (it does not gate on this). Text-editing paths gate on <see cref="IsTask"/>
+    /// instead, since a Tracker/Link has no player-editable text.</summary>
     public bool IsCompletable => Kind is not ScribeBlockKind.Text and not ScribeBlockKind.QuestObjective;
 
     /// <summary>True for a <see cref="ScribeBlockKind.QuestObjective"/> block.</summary>
@@ -225,9 +181,7 @@ public sealed class ScribeBlock
     public bool IsCraft => Kind == ScribeBlockKind.Craft;
 
     /// <summary>True for any block whose <see cref="CurrentQuantity"/> is driven by the viewer's carried
-    /// inventory — a <see cref="ScribeBlockKind.Tracker"/> (gather-count) or a
-    /// <see cref="ScribeBlockKind.Craft"/> (output-count). This is the broader predicate the
-    /// carried-inventory scan gates on, so a Craft parent updates alongside its ingredient Tracker
-    /// children. (<see cref="IsTracker"/> remains the narrow "is exactly a Tracker" check.)</summary>
+    /// inventory: a Tracker or a Craft. The carried-inventory scan gates on this so a Craft parent updates
+    /// with its ingredient Trackers; <see cref="IsTracker"/> is the narrow check.</summary>
     public bool IsCarriedCountTracked => Kind is ScribeBlockKind.Tracker or ScribeBlockKind.Craft;
 }

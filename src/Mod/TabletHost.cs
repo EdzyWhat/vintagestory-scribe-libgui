@@ -5,40 +5,28 @@ using Vintagestory.API.Config;
 namespace Scribe;
 
 /// <summary>
-/// <see cref="IScribeDocumentHost"/> adapter for the player-held clay/wax tablet item — a thin variant
-/// of <see cref="NotebookHost"/>. It reuses the notebook host's server write-through, history, and
-/// first-pickup machinery verbatim (the tablet persists a document + docId on its ItemStack exactly
-/// like the notebook, through the same <see cref="ScribeDocumentAttributes"/> and the frozen
-/// <c>ScribeNotebookSaveMessage</c> packet — no new persistence code, no new packet). It differs only
-/// in the fallback title and the tier cap:
-/// <list type="bullet">
-/// <item><see cref="DefaultDocumentTitle"/> is <c>"Tablet"</c> instead of <c>"Notebook"</c>.</item>
-/// <item><see cref="Policy"/> reports <see cref="ScribeDocumentPolicy.Tablet"/> (at most 10 task blocks,
-/// 1 pin); the dialog consults it at the editor's add/pin mutation boundary. The Lectern/Notebook hosts
-/// keep the default uncapped policy, so this caps the tablet tier without touching them.</item>
-/// </list>
+/// <see cref="IScribeDocumentHost"/> adapter for the player-held clay/wax tablet, a thin variant of
+/// <see cref="NotebookHost"/> that reuses its write-through, history, and persistence (same
+/// <see cref="ScribeDocumentAttributes"/> and <c>ScribeNotebookSaveMessage</c> packet). It differs only in
+/// the fallback title (<see cref="DefaultDocumentTitle"/>) and the tier cap (<see cref="Policy"/>:
+/// <see cref="ScribeDocumentPolicy.Tablet"/>, at most 10 task blocks and 1 pin, consulted at the editor's
+/// add/pin boundary).
 ///
-/// <para>Layout aspect is inherited unchanged (<c>1160/1024</c>, same as the notebook), and the default
-/// backdrop is the notebook page unless the caller passes a tablet backdrop.</para>
+/// <para>Layout aspect is inherited (<c>1160/1024</c>), as is the notebook-page default backdrop.</para>
 /// </summary>
 public sealed class TabletHost : NotebookHost
 {
-    /// <summary>The player's held tablet slot, kept so <see cref="Policy"/> can read the live stack's
-    /// hard/fired state. The base <see cref="NotebookHost"/> keeps its own private copy for its
-    /// write-through; this is a second reference to the same slot (no new state, just visibility).</summary>
+    /// <summary>The held tablet slot, kept so <see cref="Policy"/> can read the live stack's state (the base
+    /// class's copy is private).</summary>
     private readonly ItemSlot _slot;
 
-    /// <summary>The tablet's BASE material (<c>clay-red</c>/<c>clay-blue</c>/<c>clay-fire</c>/<c>wax</c>),
-    /// threaded from the open path so <see cref="GetLayout"/> can pick per-material interior proportions.
-    /// The clay materials share one layout; <c>wax</c> nestles tighter to fit its own GUI art panel, whose
-    /// beige writing area is inset further from the frame than the clay backdrops' (see the wax numbers in
-    /// <see cref="GetLayout"/>). Null falls back to the clay layout.</summary>
+    /// <summary>The tablet's base material (<c>clay-red</c>/<c>clay-blue</c>/<c>clay-fire</c>/<c>wax</c>),
+    /// used by <see cref="GetLayout"/> to pick interior proportions. Null falls back to the clay layout.</summary>
     private readonly string? _material;
 
-    /// <param name="slot">The player's held tablet slot. Passed straight to the base
-    /// <see cref="NotebookHost"/> ctor, which reads/initializes the document + history on the stack.</param>
-    /// <param name="backdrop">The backdrop; defaults to the notebook page. The tablet dialog passes the tablet's own.</param>
-    /// <param name="material">The tablet's base material, used only to pick the interior layout proportions.</param>
+    /// <param name="slot">The player's held tablet slot, passed to the base ctor.</param>
+    /// <param name="backdrop">The backdrop; defaults to the notebook page.</param>
+    /// <param name="material">The tablet's base material, used only to pick the layout proportions.</param>
     public TabletHost(ItemSlot slot, ScribeBackdropSpec? backdrop = null, string? material = null) : base(slot, backdrop)
     {
         _slot = slot;
@@ -47,39 +35,24 @@ public sealed class TabletHost : NotebookHost
 
     public override string DefaultDocumentTitle => Lang.Get("scribe:doctitle-tablet");
 
-    /// <summary>The document policy enforced at the editor's add/pin mutation boundary. A WET tablet reports
-    /// the scratch-tier cap (10 task blocks, 1 pin); a HARD or FIRED tablet reports
-    /// <see cref="ScribeDocumentPolicy.UneditableTablet"/> so <c>CanAdd</c>/<c>CanPin</c> deny outright.
-    /// This is the policy half of the same read-only switch the dialog keys off
-    /// <see cref="ItemScribeTablet.IsEditable"/> — belt-and-suspenders with the dialog dropping every edit
-    /// affordance, so a mutation can't slip through even if some path reached the boundary.</summary>
+    /// <summary>The policy enforced at the editor's add/pin boundary: a WET tablet gets the scratch-tier cap;
+    /// a HARD or FIRED one gets <see cref="ScribeDocumentPolicy.UneditableTablet"/>, denying outright. This
+    /// backs up the dialog's own <see cref="ItemScribeTablet.IsEditable"/> check so no mutation slips through.</summary>
     public override ScribeDocumentPolicy Policy =>
         ItemScribeTablet.IsEditable(_slot.Itemstack)
             ? ScribeDocumentPolicy.Tablet
             : ScribeDocumentPolicy.UneditableTablet;
 
-    /// <summary>Re-proportion the tablet dialog per material so the content nestles inside that material's
-    /// own GUI art panel. Aspect is unchanged (both reuse the notebook art's <c>1160/1024</c>); only the
-    /// interior proportions differ. Overrides <see cref="NotebookHost.GetLayout"/> so the notebook's own
-    /// layout is untouched.
+    /// <summary>Re-proportions the dialog per material so content nestles inside that material's GUI art
+    /// panel; aspect is unchanged.
     ///
-    /// <para><b>Clay</b> fills more of the wide clay backdrop: a shorter title band (<c>0.11</c> vs the
-    /// <c>0.13</c> default), a taller scrolling inner section (<c>0.83</c>), and narrow <c>0.06</c> side
-    /// margins so the writing column grows to <c>0.88·W</c>.</para>
-    ///
-    /// <para><b>Wax</b> nestles tighter, because the bespoke wax art frames a smaller beige writing panel than
-    /// the clay backdrops do. The gutters are deliberately NOT equal on both axes: the dialog art is taller
-    /// than wide (<c>1160/1024</c>), so an equal fractional inset would read as a visually wider gap
-    /// vertically than horizontally. Wax uses <c>SideColFrac = 0.08</c> (content column ≈<c>0.84·W</c>) for the
-    /// horizontal gutter, and a taller title band (<c>0.15</c>) over a shorter inner section (<c>0.775</c>) so
-    /// the vertical content is proportionally inset a little more than the sides — the two read as an even
-    /// buffer by eye even though the fractions differ.</para></summary>
+    /// <para>Clay fills more of the wide backdrop (shorter title band, taller inner section, narrow side
+    /// margins). Wax insets further because its art frames a smaller beige panel; its gutters are
+    /// deliberately unequal per axis (the art is taller than wide), so the buffer reads as even by eye.</para></summary>
     public override ScribeLayout GetLayout(float pixelArtSize)
     {
-        // TitleBtnsWFrac is the tablet title-band WIDTH knob: the fraction of window
-        // width used by the title+buttons row, which sets where a long title wraps to a second line. Higher =
-        // wider row = wraps later. Both materials override the shared 0.80f default to wrap later:
-        // clay 0.86f, wax 0.82f (wax's art frames a narrower panel, so it wraps a touch sooner).
+        // TitleBtnsWFrac is the fraction of window width used by the title+buttons row; higher wraps a
+        // long title later. Wax wraps sooner because its panel is narrower.
         var props = _material == "wax"
             ? ScribeLayoutProportions.Default with
               {

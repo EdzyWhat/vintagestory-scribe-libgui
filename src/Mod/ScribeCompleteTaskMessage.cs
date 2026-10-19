@@ -4,21 +4,14 @@ using Scribe.Core;
 namespace Scribe;
 
 /// <summary>
-/// Client -&gt; server: mark a task complete (toggle its done state), addressed by stable identity
-/// rather than a block position + list index. The same server op drives the lectern read-view
-/// checkbox and the pinned-task HUD/tab checkbox, neither of which needs a block position (a synced
-/// pin carries only <c>(DocId, TaskId)</c>).
+/// Client -&gt; server: toggle a task's done state, addressed by stable identity <c>(DocId, TaskId)</c> rather
+/// than a block position, so one op serves the lectern read-view checkbox and the pinned-task HUD/tab checkbox.
 ///
-/// Lock-free: any viewer may tick a task off even while another
-/// player holds the editor lock. The per-player pin store is authoritative for a pinned task's
-/// done-state: the server toggles the acting player's pin done, writes through to the source
-/// document's task when it resolves (reconciling only the acting player), then applies the completion
-/// policy the client carried in <see cref="Policy"/> (Sink keeps the pin; Unpin removes it; Delete
-/// removes the task + pin). An unresolvable/destroyed source still completes via the store alone.
-///
-/// The completion policy is a client-local preference (not server-side state), so the client
-/// sends its current policy here and the server normalizes it (unknown → Sink) before applying —
-/// see <see cref="ScribePlayerSettings.NormalizePolicy"/>.
+/// Lock-free: any viewer may tick a task even while another player holds the editor lock. The server toggles the
+/// acting player's pin, writes through to the source document's task when it resolves (an unresolvable source
+/// still completes via the pin store), then applies the completion policy carried in <see cref="Policy"/>
+/// (Sink keeps the pin; Unpin removes it; Delete removes task + pin). The policy is a client-local preference,
+/// so the server normalizes it (unknown to Sink) via <see cref="ScribePlayerSettings.NormalizePolicy"/>.
 /// </summary>
 [ProtoContract]
 public sealed class ScribeCompleteTaskMessage
@@ -31,16 +24,13 @@ public sealed class ScribeCompleteTaskMessage
     [ProtoMember(2)]
     public byte[]? TaskId { get; set; }
 
-    /// <summary>The acting player's current completion policy, sent as its raw byte so protobuf-net
-    /// round-trips it robustly. Defaults to 0 (<see cref="ScribeCompletionPolicy.Sink"/>), so an
-    /// absent/old value is the safe non-destructive default; the server normalizes any unrecognized
-    /// value back to Sink.</summary>
+    /// <summary>The acting player's completion policy as its raw byte. Default 0 is
+    /// <see cref="ScribeCompletionPolicy.Sink"/>, the non-destructive choice; unrecognized values normalize to Sink.</summary>
     [ProtoMember(3)]
     public byte Policy { get; set; }
 
-    /// <summary>The acting player's Subtask Behavior, sent as its raw byte. Defaults to 0
-    /// (<see cref="ScribeSubtaskBehavior.Bound"/>), so an absent/old client that omits this field
-    /// gets Bound; the server normalizes any unrecognized value back to Bound.</summary>
+    /// <summary>The acting player's Subtask Behavior as its raw byte. Default 0 is
+    /// <see cref="ScribeSubtaskBehavior.Bound"/>; unrecognized values normalize to Bound.</summary>
     [ProtoMember(4)]
     public byte SubtaskBehavior { get; set; }
 }

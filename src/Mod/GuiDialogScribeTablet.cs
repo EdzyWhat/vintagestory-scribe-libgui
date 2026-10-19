@@ -14,48 +14,35 @@ using Vintagestory.API.MathTools;  // BlockPos
 namespace Scribe;
 
 /// <summary>
-/// The bespoke dialog for the clay/wax tablet item — the scratch tier's always-edit writing surface.
-/// A thin subclass of <see cref="ScribeDialogBase"/> that reuses the
-/// inherited title editing, drag-grip, close, autosave, and network-send chrome; it differs from the
-/// Notebook in only a few places:
+/// The dialog for the clay/wax tablet item — the scratch tier's always-edit writing surface.
+/// A thin subclass of <see cref="ScribeDialogBase"/>; differs from the Notebook in that it has:
 /// <list type="bullet">
-/// <item><b>No tabs.</b> <see cref="BuildRightColNav"/> returns an EMPTY right column — none of the
-/// Read/Edit/Pinned/Settings nav buttons render. The column still occupies <c>SideColW</c>, so the center
-/// content keeps its symmetric side margins (the shared three-column skeleton is untouched).</item>
-/// <item><b>Always edit.</b> The dialog enters editor mode in its constructor (before the first
-/// <c>Build()</c>, which <c>TryOpen</c> runs), so <see cref="ScribeDialogBase.BuildCentralRegion"/> can
-/// render the inherited editable task list with no view switching.</item>
-/// <item><b>Live cuneiform input.</b> Under the single <see cref="ScribeTaskFont.UseCuneiform"/> branch,
-/// the tablet's editable task rows type directly in the cuneiform pseudo-font with a synthetic
-/// caret — driven by <see cref="DecorateRowStyle"/> flipping on the cuneiform row path.
-/// Disabling the font reverts every surface to the normal editable field.</item>
-/// <item><b>Earthen theme + material backdrop.</b> <see cref="ResolveTheme"/> selects
-/// <see cref="ScribeTheme.Tablet"/>; the host reports the clay/wax backdrop matching the item's material.</item>
+/// <item><b>No tabs.</b> <see cref="BuildRightColNav"/> returns an empty column that still occupies
+/// <c>SideColW</c>, keeping the center content's symmetric margins.</item>
+/// <item><b>Always edit</b> (wet tablets). Editor mode is entered in the constructor, before the first
+/// <c>Build()</c>.</item>
+/// <item><b>Live cuneiform input.</b> Under <see cref="ScribeTaskFont.UseCuneiform"/>, task rows type in
+/// the cuneiform pseudo-font via <see cref="DecorateRowStyle"/>; disabling it reverts to the normal field.</item>
+/// <item><b>Earthen theme + material backdrop</b> (<see cref="ResolveTheme"/>).</item>
 /// </list>
 ///
-/// <para>Like the Notebook it is item-hosted, not block-hosted: editor access is granted immediately with
-/// no server round-trip (no lock to contend over — only one player holds an item), lock-release is a
-/// no-op, saves route through <see cref="ScribeNotebookSaveMessage"/>, and the proximity auto-close is
-/// disabled (an item has no block position). It closes when the held item stops being a Scribe document.</para>
+/// <para>Like the Notebook it is item-hosted: editor access is immediate, lock-release is a no-op, saves
+/// use <see cref="ScribeNotebookSaveMessage"/>, and there is no proximity auto-close. It closes when the
+/// held item stops being a Scribe document.</para>
 /// </summary>
 public class GuiDialogScribeTablet : ScribeDialogBase
 {
     private IInventory? _hotbar;
 
-    /// <summary>The tablet item's <c>material</c> variant (<c>clay-red</c>/<c>clay-blue</c>/<c>clay-fire</c>/
-    /// <c>wax</c>), threaded from the item's open path so <see cref="ResolveTheme"/> can pick this tablet's
-    /// per-clay palette — the same seam backdrop selection reads. Null when the
-    /// dialog is opened without a known material; the theme selector then falls back to the fire palette.</summary>
+    /// <summary>The item's <c>material</c> variant (<c>clay-red</c>/<c>clay-blue</c>/<c>clay-fire</c>/<c>wax</c>),
+    /// used for the per-clay palette and backdrop. Null falls back to the fire palette.</summary>
     private readonly string? _material;
 
-    /// <summary>The tablet's drying state (wet/hard/fired), threaded from the item's open path. A WET tablet
-    /// is the always-edit surface; a HARD or FIRED tablet opens read-only (tablet-firing). Drives
-    /// <see cref="IsEditable"/>, the read-only affordance suppression, and the empty-state message wording.</summary>
+    /// <summary>The drying state (wet/hard/fired). Only a wet tablet is editable; hard and fired open read-only.</summary>
     private readonly TabletState _state;
 
-    /// <summary>Whether this tablet is editable: only a WET tablet. A hard tablet is read-only until
-    /// rehydrated; a fired tablet is permanently read-only. The single resolve
-    /// point every read-only branch below keys off.</summary>
+    /// <summary>Only a wet tablet is editable (hard until rehydrated, fired permanently read-only);
+    /// every read-only branch keys off this.</summary>
     private bool IsEditable => _state == TabletState.Wet;
 
     public GuiDialogScribeTablet(IScribeDocumentHost host, ICoreClientAPI capi, string? material = null,
@@ -65,10 +52,8 @@ public class GuiDialogScribeTablet : ScribeDialogBase
         _material = material;
         _state = state;
 
-        // Wet tablet = always-edit: seed the editor scratch from the current document NOW, before TryOpen
-        // calls Build() (GuiBase.TryOpen inflates the tree before OnGuiOpened runs). Mirrors the Notebook's
-        // immediate grant — there is no lock to wait on for an item-hosted document. A hard/fired tablet
-        // stays in the base's default Read view (scratch null), so it never enters editor mode.
+        // Seed the editor scratch before TryOpen calls Build() (it inflates the tree before OnGuiOpened).
+        // A hard/fired tablet stays in the base's Read view (scratch null).
         if (IsEditable)
         {
             EnterEditorMode(ScribeDocumentCodec.Serialize(host.Document));
@@ -80,20 +65,15 @@ public class GuiDialogScribeTablet : ScribeDialogBase
             _hotbar.SlotModified += OnHotbarSlotModified;
     }
 
-    /// <summary>Disable the engine's frame-by-frame range check. The tablet is a carried item, not bound to
-    /// a block position, so distance must never auto-close it (matches the Notebook).</summary>
+    /// <summary>Disables the engine's range check; a carried item has no block position.</summary>
     protected override double InteractionRange => double.MaxValue;
 
-    /// <summary>Opt out of LibGUI's immersive-mouse-mode "floaty" positioning. The base projects a world
-    /// anchor onto the screen every frame, and with no block to anchor to our dummy <c>BlockPos(0)</c>
-    /// would pin the window to the world origin, so it drifts as the camera turns. Null = plain
-    /// screen-space placement. Same opt-out as the Notebook.</summary>
+    /// <summary>Opts out of LibGUI's "floaty" world-anchored positioning: the dummy <c>BlockPos(0)</c>
+    /// would pin the window to the world origin and drift with the camera. Null = screen-space placement.</summary>
     protected override WorldAnchor? Anchor => null;
 
-    /// <summary>The centered empty-document message. A WET tablet shows the editable "write here" hint; a
-    /// read-only tablet's empty document (e.g. pulled blank from Creative, or fired without writing) shows a
-    /// state-appropriate line instead of an empty task list, so it reads as intentional rather than broken:
-    /// dried → "dunk in water to edit", fired → "fired without writing".</summary>
+    /// <summary>The centered empty-document message: a "write here" hint when wet, otherwise a
+    /// state-specific line (dried: "dunk in water to edit"; fired: "fired without writing").</summary>
     protected override string EmptyHintLangKey => _state switch
     {
         TabletState.Fired => "scribe:tablet-fired-empty",
@@ -101,59 +81,41 @@ public class GuiDialogScribeTablet : ScribeDialogBase
         _                                 => "scribe:scribe-gui-edit-hint-tablet",
     };
 
-    /// <summary>A hard or fired tablet is a permanently-read-only surface: the read view drops its "switch
-    /// to editor" footer button and blocks TEXT editing. It does NOT force the
-    /// checkbox/pin inert — see <see cref="ReadViewCompletionAndPinLive"/>.</summary>
+    /// <summary>A hard or fired tablet's read view drops the "switch to editor" button and blocks text
+    /// editing, but not checkbox/pin (see <see cref="ReadViewCompletionAndPinLive"/>).</summary>
     private protected override bool ReadViewIsReadOnly => !IsEditable;
 
-    /// <summary>The Tablet never shows the Read View filter-pill row or subtask-collapse toggles
-    /// keeping its pared-down read-view intentional rather than an oversight — it renders
-    /// through the exact same <see cref="ScribeReadContent"/> every other surface does, so this single flag
-    /// is the only thing distinguishing it.</summary>
+    /// <summary>The Tablet's read view omits the filter-pill row and subtask-collapse toggles.</summary>
     private protected override bool SupportsFilterPills => false;
 
-    /// <summary>The Tablet renders neither the shared Row 2 subtitle nor Row 3 tab header
-    /// — its title bar's own cuneiform/readable chrome is
-    /// the whole header.</summary>
+    /// <summary>The Tablet has no Row 2 subtitle or Row 3 header; its title bar is the whole header.</summary>
     private protected override bool SupportsTabHeader => false;
 
-    // TitleMaxLines is not overridden: two-line title wrapping is the shared base default,
-    // so BOTH the cuneiform title (BuildTitleDisplay/BuildTitleField)
-    // and the cuneiform-OFF readable RichText fallback wrap to two lines.
-
-    /// <summary>Keep the checkbox and pin interactive on a read-only (hard/fired) tablet:
-    /// completing and unpinning stay reachable, so firing a tablet with a
-    /// pinned task never strands that pin on the HUD. Only text editing is blocked. A wet tablet is fully
-    /// editable, so this only matters when read-only — return true whenever the tablet is not editable.</summary>
+    /// <summary>Keeps checkbox and pin live on a read-only tablet so firing one with a pinned task never
+    /// strands the pin on the HUD; only text editing is blocked.</summary>
     private protected override bool ReadViewCompletionAndPinLive => !IsEditable;
 
-    /// <summary>On a read-only (hard/fired) tablet, tapping a row's text surfaces the material-specific
-    /// locked message via the game's transient-error path — hardened tablets
-    /// can be softened; fired tablets are permanent. Null on a wet tablet (text is edited normally there).</summary>
+    /// <summary>On a read-only tablet, tapping row text shows the locked message. Null when wet.</summary>
     private protected override Action<Guid>? ReadViewTextEditRefused => IsEditable
         ? null
         : _ => capi.TriggerIngameError(this, "scribe-tablet-locked", Lang.Get(ReadOnlyLockedLangKey));
 
-    /// <summary>The material-specific "this tablet is locked" lang key for the current read-only state — fired
-    /// tablets are permanent, hardened tablets can be softened. Shared by the read-view row-text-edit refusal
-    /// and the Handbook read-only append notice so both surfaces the same wording.</summary>
+    /// <summary>The "tablet is locked" lang key for the current read-only state, shared by the row-text
+    /// refusal and the Handbook append notice.</summary>
     private string ReadOnlyLockedLangKey => _state == TabletState.Fired
         ? "scribe:tablet-fired-locked"
         : "scribe:tablet-hard-locked";
 
-    /// <summary>A fired/hardened tablet is permanently read-only, so a Handbook "Add to Scribe" click on an open
-    /// set tablet can never reach the editor — report it rather than dropping silently.</summary>
+    /// <summary>A set tablet can never reach the editor, so a Handbook "Add to Scribe" click is reported
+    /// rather than dropped.</summary>
     protected override bool CanEditFromHandbook => IsEditable;
 
-    /// <summary>Material-specific read-only notice for a Handbook append onto a set tablet, reusing the same
-    /// fired/hardened wording as the row-text-edit refusal.</summary>
+    /// <summary>Read-only notice for a Handbook append onto a set tablet.</summary>
     protected override void NotifyHandbookAppendReadOnly()
         => capi.TriggerIngameError(this, "scribe-tablet-locked", Lang.Get(ReadOnlyLockedLangKey));
 
-    /// <summary>A WET tablet grants editor access immediately without a server round-trip (item-hosted, no
-    /// lock contention), seeding the scratch from the host's current document. A HARD or FIRED tablet is
-    /// read-only: this is a hard no-op, so even if some path tried to enter the editor (there is none — no
-    /// nav column, no read-view "switch to editor" button), a set tablet can never become editable.</summary>
+    /// <summary>A wet tablet grants editor access immediately, seeding the scratch from the host's
+    /// document. A hard or fired tablet is a no-op so it can never become editable.</summary>
     protected override void RequestEditorAccess()
     {
         if (!IsEditable) return;
@@ -167,65 +129,43 @@ public class GuiDialogScribeTablet : ScribeDialogBase
     /// button — tapping it would leave editor mode and null the scratch the central region reads.</summary>
     protected override bool ShowEditorSwitchToRead => false;
 
-    /// <summary>The tablet has no read/edit split — a wet tablet always renders the EDITOR rows — so link
-    /// activation must live directly on those rows. Opt the editor path into the read view's
-    /// click-to-open-Handbook affordance on Link/Tracker/Craft name labels. Every other
-    /// surface leaves this false and activates links in its distinct read view instead.</summary>
+    /// <summary>A wet tablet always renders editor rows, so link activation (click-to-open-Handbook on
+    /// Link/Tracker/Craft labels) must live on them. Other surfaces activate links in their read view.</summary>
     protected override bool EditorRowsOpenLinks => true;
 
-    /// <summary>The tablet uses its own per-clay-type palette rather than the parchment one, keyed to the
-    /// item's <see cref="_material"/> variant — red/blue/fire tablets each
-    /// resolve their own colors, and the resolved theme agrees with the resolved backdrop (both key off the
-    /// same material). Pixel-Art off still falls back to the player's global theme.</summary>
-    /// <summary>The resolved <see cref="TabletReadability"/> bundle for this tablet's material + drying state.
-    /// Resolved once here and decomposed into the existing seams — theme ink,
-    /// row link ink, cuneiform glow, and the per-view stroke-weight scale — so every readability dimension of a
-    /// tablet view comes from one source and can't drift. Recomputed per read (state can change via
-    /// <c>/scribe tablet hard|fired</c>), which is cheap (a switch over baked structs).</summary>
+    /// <summary>The <see cref="TabletReadability"/> bundle for this material + state: the single source for
+    /// theme ink, link ink, cuneiform glow, and stroke-weight scale. Recomputed per read (state can change
+    /// via <c>/scribe tablet hard|fired</c>); cheap.</summary>
     private TabletReadability Readability => TabletReadability.For(_material, _state);
 
+    /// <summary>Per-clay palette keyed to <see cref="_material"/>, agreeing with the backdrop. Pixel-Art
+    /// off falls back to the player's global theme.</summary>
     protected override ThemeData ResolveTheme(bool pixelArt) => ScribeTheme.ForTablet(_material, _state, pixelArt);
 
-    /// <summary>Engrave the title-bar pencil + drag-grip into the clay:
-    /// tint them with this tablet's dark material ink (<c>OnSurface</c>) at partial alpha instead of the
-    /// global gray. The base applies it via <see cref="SKBlendMode.SrcIn"/> (glyph-only), so the partial
-    /// alpha fades only the STROKES — the clay texture bleeds faintly through them, reading as a darkened
-    /// engraved impression — while the transparent icon tile stays clear. (A Multiply blend would not work:
-    /// VsIcon applies its tint as a color FILTER, which fills the whole transparent quad under Multiply,
-    /// producing a pale tile. SrcIn + a dark alpha avoids that.)
-    /// Only on the Pixel-Art (backdrop) path — with Pixel-Art OFF the tablet follows the global theme over
-    /// a flat panel, so we defer to the base gray chrome there.</summary>
+    /// <summary>Tints the title-bar pencil + drag-grip with the tablet's dark ink at partial alpha so they
+    /// read as engraved. The base applies it via <see cref="SKBlendMode.SrcIn"/>, which fades only the
+    /// strokes; a Multiply blend would fill the whole transparent icon quad (VsIcon tints as a color
+    /// filter), producing a pale tile. Pixel-Art off defers to the base gray.</summary>
     private protected override Vector4 TitleChromeGlyphColor(ColorScheme colors)
     {
         if (!modSystem.MySettings.PixelArtDisplay)
         {
             return base.TitleChromeGlyphColor(colors);
         }
-        // 0.8 alpha keeps the strokes firmly dark while letting a hint of clay show through.
         return colors.OnSurface with { W = 0.8f };
     }
 
-    /// <summary>Flip the editable rows to live cuneiform under the single <see cref="ScribeTaskFont.UseCuneiform"/>
-    /// branch. When the player disables cuneiform, the flag resolves false and
-    /// the rows fall back to the normal editable field — one decision, threaded to every tablet surface. The
-    /// glyph bundle is the client-cached parse; null (asset not yet loaded) simply renders no strokes.</summary>
+    /// <summary>Flips editable rows to live cuneiform under <see cref="ScribeTaskFont.UseCuneiform"/>;
+    /// otherwise they use the normal field. A null glyph bundle (asset not loaded) leaves the style unchanged.</summary>
     private protected override ScribeRowStyle DecorateRowStyle(ScribeRowStyle style)
     {
-        // Row grip/arrow glyphs borrow the SAME darker ink the title-bar grip + pencil use, so the drag
-        // handle reads as firmly engraved on the clay instead of the washed-out global mid-gray.
-        // TitleChromeGlyphColor is OnSurface @ 0.8 on the
-        // Pixel-Art backdrop path and the base gray otherwise, so this tracks the backdrop toggle and applies
-        // whether or not cuneiform is on (it's about clay contrast, not the font).
+        // Row grip/arrow glyphs use the title chrome's darker ink for contrast on clay, cuneiform or not.
         var chromeColor = TitleChromeGlyphColor(ScribeTheme.For(modSystem.MySettings.PixelArtDisplay).ColorScheme);
         style = style with { GripGlyphColor = chromeColor };
 
-        // A row's tappable Link/Tracker/Craft name resolves its color as `style.LinkColor ?? colors.Primary`.
-        // On the clay backdrop, `Primary` is a mid-value FILL accent that fails AA as small text on the
-        // same-value clay — so decouple it onto a dedicated per-material
-        // link ink that clears 4.5 : 1. Gated on Pixel-Art Display exactly like the chalkboard's link ink and
-        // this dialog's glow/theme: with Pixel-Art OFF the tablet is a flat themed panel where `Primary` is the
-        // correct, legible link color, so leave `LinkColor` unset there. Applies whether or not cuneiform is on
-        // (the readability problem is the clay ground, not the font).
+        // Link names resolve `style.LinkColor ?? colors.Primary`. On clay, `Primary` fails AA as small
+        // text, so use a per-material link ink (4.5:1). With Pixel-Art OFF the panel is flat and `Primary`
+        // is legible, so LinkColor stays unset.
         if (modSystem.MySettings.PixelArtDisplay)
         {
             style = style with
@@ -244,40 +184,25 @@ public class GuiDialogScribeTablet : ScribeDialogBase
         {
             UseCuneiform = true,
             CuneiformBundle = bundle,
-            // Hand-written wobble on the tablet's cuneiform rows. The
-            // per-row seed (its stable TaskId) is supplied at the field; strength comes from the default
-            // until the client-config knob sources it. 0 would reproduce the crisp geometry.
+            // Hand-written wobble; the per-row seed (TaskId) is supplied at the field. 0 = crisp geometry.
             CuneiformJitter = CuneiformMetrics.DefaultJitterStrength,
-            // Whole-character tilt stacked on top of the per-endpoint wobble:
-            // each glyph leans a few degrees so the rows read as hand-pressed, not mechanically upright.
+            // Whole-glyph tilt on top of the per-endpoint wobble.
             CuneiformRotation = CuneiformMetrics.DefaultRotationDegrees,
-            // Newly-typed text presses in stroke-by-stroke, gated by the player's opt-in setting (defaults
-            // off). Re-deriving the row style per build means toggling it in Scribe Settings repaints an
-            // open tablet.
+            // Stroke-by-stroke reveal of new text, behind a player opt-in (re-derived per build).
             CuneiformProgression = modSystem.MySettings.CuneiformProgression,
-            // Per-material, per-state outer glow to lift the row ink off this tablet's clay backdrop.
-            // Wet uses a dark halo over light-mid clay; hard/fired flip to a
-            // light halo over their darker backdrops. Keyed off the same material+state the backdrop uses.
+            // Outer glow lifting the ink off the backdrop: dark halo when wet, light when hard/fired.
             CuneiformGlow = CuneiformGlowTable.For(_material, _state),
-            // Per-view stroke-weight scale from the same readability bundle:
-            // firms the row ink up as the tablet dries (wet 0.9 → fired 1.1). Rides the same tablet-only seam
-            // as the glow to every cuneiform row/label; non-tablet surfaces never set it (base weight).
+            // Firms the ink up as the tablet dries (wet 0.9 → fired 1.1); non-tablet surfaces keep base weight.
             CuneiformStrokeWeightScale = Readability.StrokeWeightScale,
-            // Cuneiform's line box is FontSize×LineHeightRatio (~27.7px at scale 1), taller than the
-            // Latin checkbox/grip (22px). Size those controls — and ControlSize, which the Tracker/Craft
-            // stepper and grip glyph read — to one cuneiform line so they sit on the same horizon as
-            // the glyph-font. Gated on this cuneiform branch: Notebook/Lectern and the disable-cuneiform
-            // fallback keep the settings-derived 22px. (Pin/delete also use ControlSize; they grow with
-            // the grip so the row's affordance column stays one size.)
+            // Cuneiform's line box (FontSize×LineHeightRatio, ~27.7px) is taller than the 22px Latin
+            // controls, so size the checkbox and ControlSize (stepper, grip, pin, delete) to one line.
             CheckboxSize = style.FontSize * CuneiformMetrics.LineHeightRatio,
             ControlSize = style.FontSize * CuneiformMetrics.LineHeightRatio,
         };
     }
 
-    /// <summary>Resting title: display-only cuneiform, single-line, hard-clipped to the band width, under
-    /// the single cuneiform branch. When cuneiform is disabled the base
-    /// default (a RichText with ellipsis) is used, so the title reverts with every other tablet surface.
-    /// A null glyph bundle (asset not yet loaded) also falls back to the readable default.</summary>
+    /// <summary>Resting title: display-only wrapping cuneiform, clipped to two lines. Falls back to the
+    /// base RichText when cuneiform is disabled or the glyph bundle isn't loaded.</summary>
     private protected override Widget BuildTitleDisplay(string displayTitle, TextStyle titleStyle)
     {
         var bundle = ActiveCuneiformBundle;
@@ -287,12 +212,8 @@ public class GuiDialogScribeTablet : ScribeDialogBase
         }
 
         var colors = ResolveTheme(modSystem.MySettings.PixelArtDisplay).ColorScheme;
-        // Wrap the resting title to at most two lines: swap the single-line
-        // CuneiformText for the display-only WRAPPING cuneiform renderer (mirrors ScribeReadContent's
-        // resting cuneiform usage). The enclosing Clip is sized by the title slot, which BuildTitleBar
-        // grows to two line-heights when TitleMaxLines == 2, so a title longer than two lines clips at the
-        // end of line 2 (cuneiform has no '…' glyph). All look-preserving params (jitter/rotation/glow and
-        // the text-derived seed) match the CuneiformText this replaces, so a one-line title is unchanged.
+        // The Clip is sized by the title slot (two line-heights when TitleMaxLines == 2); overflow clips
+        // at the end of line 2 since cuneiform has no '…' glyph.
         return new Gui.Widgets.Painting.Clip(
             child: new ScribeCuneiformFieldRenderWidget(
                 text: displayTitle,
@@ -304,30 +225,26 @@ public class GuiDialogScribeTablet : ScribeDialogBase
                 caretColor: Vector4.Zero,
                 selectionColor: Vector4.Zero,
                 bundle: bundle,
-                padX: 0f,   // the title band supplies its own inset; keep the glyphs flush (as CuneiformText was)
+                padX: 0f,   // the title band supplies its own inset
                 padY: 0f,
                 boxColor: Vector4.Zero,
                 borderColor: Vector4.Zero,
                 borderThickness: 0f,
                 cornerRadii: Vector4.Zero,
-                singleLine: false,   // WRAP (was single-line, hard-clipped)
+                singleLine: false,
                 caretVisible: false,
                 jitterStrength: CuneiformMetrics.DefaultJitterStrength,
                 jitterSeed: CuneiformMetrics.SeedFromString(displayTitle),
                 rotationDegrees: CuneiformMetrics.DefaultRotationDegrees,
-                // Per-material, per-state glow so the resting title lifts off the clay backdrop like the rows do.
                 glow: CuneiformGlowTable.For(_material, _state),
-                // Same per-view stroke-weight scale as the rows so the resting title firms up with the state.
                 strokeWeightScale: Readability.StrokeWeightScale,
                 glyphDrawScale: CuneiformMetrics.GlyphDrawScale,
                 caretHeightScale: CuneiformMetrics.CaretHeightScale));
     }
 
-    /// <summary>Editing title: a live single-line cuneiform input bound to the SAME title controller/focus
-    /// node the base owns, so <see cref="ScribeDialogBase"/>'s commit/blur/deferred-rebuild machinery is
-    /// untouched. Falls back to the base's stock TextField when cuneiform is
-    /// disabled or the glyph bundle hasn't loaded. The shared key handler (<see cref="OnTitleFieldKeyDown"/>)
-    /// enforces the identical maxlength + Enter/Escape commit as the normal title field.</summary>
+    /// <summary>Editing title: a live cuneiform input bound to the base's title controller/focus node, so
+    /// its commit/blur machinery is unchanged. Falls back to the stock TextField when cuneiform is disabled
+    /// or the bundle isn't loaded. <see cref="OnTitleFieldKeyDown"/> enforces maxlength and Enter/Escape commit.</summary>
     private protected override Widget BuildTitleField(TextStyle titleStyle)
     {
         var bundle = ActiveCuneiformBundle;
@@ -343,73 +260,50 @@ public class GuiDialogScribeTablet : ScribeDialogBase
             bundle: bundle,
             onKeyDown: OnTitleFieldKeyDown,
             jitterStrength: CuneiformMetrics.DefaultJitterStrength,
-            // Match the rows' whole-character tilt so the editing title reads hand-pressed like everything else.
             rotationDegrees: CuneiformMetrics.DefaultRotationDegrees,
-            // A fixed seed: one title band per tablet, so a constant keeps it stable across rebuilds while
-            // typing (a text-derived seed would re-wobble the whole title on every keystroke).
+            // Fixed seed: a text-derived one would re-wobble the whole title on every keystroke.
             jitterSeed: TitleJitterSeed,
-            // Stroke-by-stroke title reveal, gated by the same player setting as the rows (defaults off).
             progression: modSystem.MySettings.CuneiformProgression,
-            // Per-material, per-state glow so the editing title lifts off the clay backdrop like the
-            // rows/resting title. (The editing title only shows on a wet tablet, but we thread state here too
-            // so all three glow call sites stay uniform.)
             glow: CuneiformGlowTable.For(_material, _state),
-            // Same per-view stroke-weight scale as the rows/resting title (uniform across all three glyph sites).
             strokeWeightScale: Readability.StrokeWeightScale,
-            // Wrap the editing title to two lines too, so typing past one line drops to
-            // a second line instead of clipping off the right; Enter still commits via OnTitleFieldKeyDown.
+            // Wraps to a second line instead of clipping; Enter still commits.
             singleLine: false);
     }
 
-    /// <summary>Fixed base seed for the title band's cuneiform jitter — arbitrary constant, distinct from
-    /// the rows' TaskId seeds so the title doesn't share a wobble pattern with any row.</summary>
+    /// <summary>Fixed jitter seed for the title band, distinct from the rows' TaskId seeds.</summary>
     private const int TitleJitterSeed = 0x5C71B7;
 
-    /// <summary>The parsed glyph bundle when the single cuneiform branch is active for the tablet, else null
-    /// (cuneiform disabled OR the asset hasn't loaded). One place that resolves the branch so the title
-    /// display, title input, rows, and labels all agree.</summary>
+    /// <summary>The glyph bundle when cuneiform is active, else null (disabled or not loaded); the single
+    /// resolution point for the title, rows, and labels.</summary>
     private GlyphBundle? ActiveCuneiformBundle =>
         ScribeTaskFont.UseCuneiform(modSystem.MySettings.CuneiformTablets)
             ? modSystem.GetCuneiformBundle()
             : null;
 
-    /// <summary>The tablet has no nav column to reach Scribe Settings through, so its editor footer
-    /// grows a Settings gear right of the ⓘ info button, wired to <see cref="ScribeModSystem.OpenSettings"/>.
-    /// The base returns null, keeping the Lectern/Notebook footer gear-free.</summary>
+    /// <summary>With no nav column, the editor footer gets a Settings gear right of the ⓘ button
+    /// (the base returns null).</summary>
     private protected override Action? EditorSettingsGearAction => modSystem.OpenSettings;
 
-    /// <summary>No nav column on the tablet: an empty right column whose <c>SideColW</c> width (set by the
-    /// enclosing <c>SizedBox</c> in <c>BuildSectionInnerBox</c>) still preserves the symmetric side margin.
-    /// None of the Read/Edit/Pinned/Settings buttons render.</summary>
+    /// <summary>Empty column; the enclosing <c>SizedBox</c> in <c>BuildSectionInnerBox</c> still gives it
+    /// <c>SideColW</c> width.</summary>
     protected override Widget BuildRightColNav() => new SizedBox();
 
-    /// <summary>The tablet's always-edit central region: just the inherited editable task list; there is no
-    /// separate display-only cuneiform title banner (the title bar already shows the title). The editor is REUSED, not forked;
-    /// its rows type in live cuneiform via <see cref="DecorateRowStyle"/>, and the
-    /// title itself renders in cuneiform through the base title bar. Task add/edit/check/pin keep working
-    /// under the tablet's 15-task / 1-pin policy.</summary>
+    /// <summary>The inherited editor (wet) or read view; there is no separate title banner.</summary>
     protected override Widget BuildCentralRegion() =>
         IsEditable ? BuildEditorContent() : BuildReadContent();
 
     private void OnActiveSlotChanged(ActiveSlotChangeEventArgs _)
     {
-        // Close when the player switches the active hand AWAY from THIS tablet — keyed on the document's
-        // stable DocId, not merely "still some Scribe item" (same guard as the Notebook). Switching to a
-        // DIFFERENT Scribe item must still close this dialog; only a hotbar reorder that keeps the same
-        // item active leaves it open. See ActiveHandItemHostsThisDocument.
+        // Keyed on the document's DocId: switching to a different Scribe item must close this dialog.
         if (!ActiveHandItemHostsThisDocument())
             TryClose();
     }
 
     private void OnHotbarSlotModified(int slotId)
     {
-        // In-place content re-sync of the STILL-HELD active slot uses a presence-only check, NOT the strict
-        // DocId identity guard OnActiveSlotChanged runs — same fix as the
-        // Notebook. The first open of a not-yet-crafted tablet triggers a server re-sync WITHOUT the
-        // client-generated document, whose DocId then mismatches and would close the dialog one frame after it
-        // opened. The tablet's legitimate wet→hard/fired transition also rides SlotModified but carries the
-        // document forward (same DocId, same IScribeDocumentItem), so it passes the presence check exactly as
-        // it passed the old strict one — this change is additive for it. See ActiveHandHoldsAnyScribeDocumentItem.
+        // A re-sync of the still-held slot needs a presence-only check, not the DocId guard: a first open
+        // of a not-yet-crafted tablet re-syncs without the client-generated document (DocId mismatch). The
+        // wet→hard/fired transition keeps the same DocId and passes either way.
         if (slotId == capi.World.Player.InventoryManager.ActiveHotbarSlotNumber
             && !ActiveHandHoldsAnyScribeDocumentItem())
             TryClose();
@@ -423,8 +317,7 @@ public class GuiDialogScribeTablet : ScribeDialogBase
         base.OnGuiClosed();
     }
 
-    /// <summary>Tablet saves reuse <see cref="ScribeNotebookSaveMessage"/> (no new packet) so the server
-    /// writes directly into the held ItemStack, exactly like the Notebook.</summary>
+    /// <summary>Saves reuse <see cref="ScribeNotebookSaveMessage"/>, writing into the held ItemStack.</summary>
     protected override void SendFlushPacket(byte[] documentBytes)
     {
         capi.Network.GetChannel(ScribeModSystem.NetworkChannelName).SendPacket(BuildItemSavePacket(documentBytes));

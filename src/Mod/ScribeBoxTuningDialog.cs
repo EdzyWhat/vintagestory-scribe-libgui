@@ -16,17 +16,13 @@ using Vintagestory.API.Client;
 namespace Scribe;
 
 /// <summary>
-/// DEV-ONLY live-tuning window for the 5 Scribe writing-station box targets.
-/// A structural clone of <see cref="ScribeGearTuningDialog"/>: 5 groups (Inbox, Inbox-Wall, Scriptorium,
-/// Assignment Desk, Chalkboard) of 6 labeled <see cref="ScribeNumericField"/>s each, writing straight through
-/// <see cref="ScribeModSystem.UpdateBoxTuning"/> (which persists + raises <c>BoxTuningChanged</c>) — the
-/// world hitbox is computed live off the persisted value on every collision/selection call, so a nudge
-/// here changes an already-placed block's hitbox with no rebuild/relaunch. Opened by the <c>.boxtune</c>
-/// client command.
+/// DEV-ONLY live-tuning window for the 5 writing-station box targets, opened by the <c>.boxtune</c> client
+/// command. A structural clone of <see cref="ScribeGearTuningDialog"/>: 5 groups of 6
+/// <see cref="ScribeNumericField"/>s writing through <see cref="ScribeModSystem.UpdateBoxTuning"/>. The world
+/// hitbox is computed live from the persisted value, so a nudge changes an already-placed block with no rebuild.
 ///
-/// <para>Throwaway aid, not shipped UI: when a target's box is finalized, fold the chosen numbers back
-/// into its blocktype JSON and delete this file, <see cref="ScribeBoxTuning"/>, and the command.
-/// Deliberately NOT localized (raw English labels) for the same reason.</para>
+/// <para>Throwaway aid: delete it, <see cref="ScribeBoxTuning"/> and the command once boxes are finalized.
+/// Deliberately not localized.</para>
 /// </summary>
 public sealed class ScribeBoxTuningDialog : GuiBase
 {
@@ -42,8 +38,7 @@ public sealed class ScribeBoxTuningDialog : GuiBase
 
     public override string DialogCode => "scribeboxtune";
 
-    /// <summary>Match <see cref="ScribeGearTuningDialog.DrawOrder"/>'s 0.2 band so this stays on top of the
-    /// block it tunes live.</summary>
+    /// <summary>Same 0.2 band as <see cref="ScribeGearTuningDialog.DrawOrder"/>, above the block it tunes.</summary>
     public override double DrawOrder => 0.2;
 
     protected override WindowConfig CreateWindowConfig() => new()
@@ -141,8 +136,7 @@ public sealed class ScribeBoxTuningDialog : GuiBase
                     { AutoHide = false }))));
     }
 
-    /// <summary>A labeled float field: caption over a <see cref="ScribeNumericField"/>, step 0.05, clamped
-    /// to <see cref="ScribeBoxTuning.ClampAxis"/> — mirrors <see cref="ScribeGearTuningDialog.Field"/>.</summary>
+    /// <summary>A labeled float field (step 0.05, clamped to <see cref="ScribeBoxTuning.ClampAxis"/>).</summary>
     private Widget Field(string caption, ColorScheme colors, float value, string id, Action<float> onChanged)
     {
         return new Column(

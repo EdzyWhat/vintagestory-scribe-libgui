@@ -4,22 +4,18 @@ using ProtoBuf;
 namespace Scribe;
 
 /// <summary>
-/// Client → server: Accept or Decline a held, sealed Task Notice (`task-notice-item` capability).
-/// Addressed by the notice's own slot identity (like <see cref="ScribeNotebookOpenedMessage"/> and
-/// <see cref="ScribeAssignmentActionMessage"/>'s target-slot fields) rather than any DocId/AssignmentId
-/// — an unaccepted notice has no store record for either of those to name.
+/// Client → server: Accept or Decline a held, sealed Task Notice. Addressed by the notice's own slot
+/// identity, since an unaccepted notice has no DocId/AssignmentId.
 /// </summary>
 [ProtoContract]
 public sealed class ScribeTaskNoticeActionMessage
 {
-    /// <summary>The held Task Notice's own inventory + slot identity — the item this action consumes.</summary>
+    /// <summary>The held Task Notice's inventory + slot identity (the item this action consumes).</summary>
     [ProtoMember(1)]
     public string? SourceInventoryId { get; set; }
 
-    /// <summary>See <see cref="ScribeAssignmentActionMessage.TargetSlotId"/>'s remarks: the
-    /// <see cref="DefaultValue"/> attribute is load-bearing — without it protobuf-net's implicit-default
-    /// wire skip makes a legitimate slot 0 indistinguishable from "unset" and it silently reverts to -1 on
-    /// the receiving end.</summary>
+    /// <summary>The <see cref="DefaultValue"/> attribute is load-bearing: without it protobuf-net skips the
+    /// implicit default on the wire, so a legitimate slot 0 silently reverts to -1 on the receiver.</summary>
     [ProtoMember(2)]
     [DefaultValue(-1)]
     public int SourceSlotId { get; set; } = -1;
@@ -34,8 +30,8 @@ public sealed class ScribeTaskNoticeActionMessage
     [ProtoMember(4)]
     public string? TargetInventoryId { get; set; }
 
-    /// <summary>Ignored for Decline. Defaults to -1 (unresolved); see <see cref="SourceSlotId"/>'s remarks
-    /// on why <see cref="DefaultValue"/> is load-bearing here too.</summary>
+    /// <summary>Ignored for Decline. Defaults to -1 (unresolved); <see cref="DefaultValue"/> is load-bearing
+    /// here too (see <see cref="SourceSlotId"/>).</summary>
     [ProtoMember(5)]
     [DefaultValue(-1)]
     public int TargetSlotId { get; set; } = -1;

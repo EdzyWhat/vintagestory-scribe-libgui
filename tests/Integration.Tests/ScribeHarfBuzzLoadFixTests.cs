@@ -5,13 +5,8 @@ using Xunit;
 namespace Integration.Tests;
 
 /// <summary>
-/// Platform gating and RID outcome classification for
-/// <see cref="ScribeHarfBuzzLoadFix"/>, run as plain xUnit facts (no Atlas world boot) the same
-/// way <see cref="ScribeReadViewFilterTests"/> exercises other pure Mod-layer logic — neither
-/// <see cref="ScribeHarfBuzzLoadFix.ClassifyPlatform"/> nor <see cref="ScribeHarfBuzzLoadFix.GetLinuxRid"/>
-/// touch the Vintage Story API, Harmony, or an actual native library, so both are testable on any
-/// host OS without a real glibc/non-glibc Linux machine. The remaining native dlopen/Harmony-patch
-/// behavior is inherently host- and platform-dependent and is not covered here; it needs manual
+/// Platform gating and RID classification for <see cref="ScribeHarfBuzzLoadFix"/>, run as plain xUnit
+/// facts (no Atlas world boot). Native dlopen/Harmony behavior is host-dependent and needs manual
 /// verification on Linux.
 /// </summary>
 public class ScribeHarfBuzzLoadFixTests
@@ -48,9 +43,8 @@ public class ScribeHarfBuzzLoadFixTests
     [Fact]
     public void GetLinuxRid_falls_back_to_linux_x64_for_an_unrecognized_architecture()
     {
-        // Wasm (and any future value the switch doesn't name) must fall back to the x64 folder name
-        // rather than throw -- the bundled native asset only ships arm/arm64/x86/x64 RID folders, and
-        // a missing-case exception here would crash startup instead of just skipping isolation.
+        // Unnamed values (e.g. Wasm) must fall back to the x64 folder rather than throw: the bundled
+        // native asset ships only arm/arm64/x86/x64 RID folders, and a throw would crash startup.
         Assert.Equal("linux-x64", ScribeHarfBuzzLoadFix.GetLinuxRid(Architecture.Wasm));
     }
 }

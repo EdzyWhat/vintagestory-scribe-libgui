@@ -5,30 +5,19 @@ using Gui.Widgets.Input;        // FocusTraversalPolicy, FocusNode, FocusManager
 
 namespace Scribe;
 
-/// <summary>An allow-list <see cref="FocusTraversalPolicy"/> installed on the Lectern dialog's
-/// <see cref="Gui.GuiBase.FocusManager"/> so Tab / Shift+Tab visit ONLY the dialog's own editable text
-/// fields, in row order — never a row's completion checkbox.
+/// <summary>An allow-list <see cref="FocusTraversalPolicy"/> on the Lectern dialog's
+/// <see cref="Gui.GuiBase.FocusManager"/> so Tab / Shift+Tab visit ONLY the dialog's editable text fields, in
+/// row order, never a row's completion checkbox.
 ///
-/// <para><b>Why this exists:</b> in gui 3.1.0+ <c>CheckboxState</c> derives from
-/// <c>FocusableState</c> and lazily owns a <see cref="FocusNode"/> (so every mounted checkbox is focusable),
-/// and <c>GuiBase.OnKeyDown</c> intercepts Tab globally and walks
-/// <c>FocusManager.TraversalPolicy.GetTraversalOrder(...)</c>. The default
-/// <c>ReadingOrderTraversalPolicy</c> collects every focus node in the tree — including the checkbox
-/// nodes — so Tab would stop on each row's checkbox before its text field, doubling the keystrokes to
-/// move between rows. The <c>Checkbox</c> widget exposes no public seam to mark its internal node
-/// non-traversable, so per-checkbox exclusion isn't possible; an allow-list of the fields we DO want is.</para>
-///
-/// <para>The dialog already owns the complete, row-ordered set of field focus nodes it wants Tab to visit
-/// (<c>editorFocusNodes</c> in the Editor view, the pin rows' nodes in the Pinned view). This policy simply
-/// returns that live list via a delegate the dialog supplies, so it tracks row add/remove/reorder with no
-/// second bookkeeping path. Anything not in the list — checkboxes, and any future focusable control we
-/// don't opt in — is never returned, so Tab can't land on it. This is more robust than a
-/// checkbox-specific deny-list. See <c>VSAPI-NOTES.md</c> (LibGUI section).</para></summary>
+/// <para>In gui 3.1.0+ every mounted <c>Checkbox</c> owns a focus node, and the default
+/// <c>ReadingOrderTraversalPolicy</c> collects them all, doubling the Tab presses between rows. Checkbox has no
+/// public seam to mark its node non-traversable, so the policy returns the dialog's live row-ordered field
+/// list (supplied by delegate, so it tracks add/remove/reorder) and nothing else. See <c>VSAPI-NOTES.md</c>
+/// (LibGUI section).</para></summary>
 internal sealed class ScribeFieldOnlyTraversalPolicy : FocusTraversalPolicy
 {
-    /// <summary>Supplies the current view's ordered, mounted field focus nodes. Called fresh on every Tab
-    /// press (LibGUI re-reads the order each <c>FocusNext</c>/<c>FocusPrevious</c>), so it always reflects
-    /// the live row set and the active view.</summary>
+    /// <summary>Supplies the current view's ordered, mounted field focus nodes. Called fresh on every Tab press,
+    /// so it reflects the live row set and active view.</summary>
     private readonly Func<IReadOnlyList<FocusNode>> getFieldNodes;
 
     public ScribeFieldOnlyTraversalPolicy(Func<IReadOnlyList<FocusNode>> getFieldNodes)

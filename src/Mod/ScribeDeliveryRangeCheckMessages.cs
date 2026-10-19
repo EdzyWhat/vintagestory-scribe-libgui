@@ -3,12 +3,10 @@ using ProtoBuf;
 namespace Scribe;
 
 /// <summary>
-/// Client → server: "is this target in range of my Assignment Desk?" (the Hybrid delivery
-/// mode's range check). Sent whenever the Create Assignments tab's target-player picker
-/// selects a new target. Must be server-authoritative: the client only ever receives entity updates for
-/// players within its own tracking distance, so it cannot itself determine whether a FAR-away target is
-/// in range — only the server always knows every online player's true position (and, offline, their
-/// last-known one via <see cref="Scribe.Core.ScribePlayerLocationStore"/>).
+/// Client → server: "is this target in range of my Assignment Desk?" (Hybrid delivery range check), sent when
+/// the target-player picker changes. Server-authoritative because the client only receives entity updates
+/// within its tracking distance; the server knows every online player's position (offline: last-known via
+/// <see cref="Scribe.Core.ScribePlayerLocationStore"/>).
 /// </summary>
 [ProtoContract]
 public sealed class ScribeDeliveryRangeCheckRequestMessage
@@ -22,9 +20,8 @@ public sealed class ScribeDeliveryRangeCheckRequestMessage
     public string? TargetPlayerUid { get; set; }
 }
 
-/// <summary>Server → client reply to <see cref="ScribeDeliveryRangeCheckRequestMessage"/>. Echoes the
-/// target uid so a reply for a since-superseded target selection (the player picked someone else before
-/// this arrived) is recognizably stale and ignored by the client.</summary>
+/// <summary>Server → client reply to <see cref="ScribeDeliveryRangeCheckRequestMessage"/>. Echoes the target
+/// uid so the client can ignore a reply for a since-superseded selection.</summary>
 [ProtoContract]
 public sealed class ScribeDeliveryRangeCheckReplyMessage
 {

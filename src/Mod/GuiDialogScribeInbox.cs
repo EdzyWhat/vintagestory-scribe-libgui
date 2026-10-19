@@ -10,64 +10,50 @@ using Vintagestory.API.MathTools;
 namespace Scribe;
 
 /// <summary>
-/// The standalone Inbox block's dialog — a thin sealed subclass of <see cref="ScribeDialogBase"/>. All
-/// view state, build methods, lock orchestration, autosave, title editing, and scroll management live
-/// in the base class; this dialog opens directly into the shared Inbox tab and
-/// also exposes its own Inbox Inventory tab (the block's mixed
-/// restricted/open storage). Its right-column nav drops the base's Read/Editor/Pinned buttons entirely
-/// — this block's capabilities are the shared Inbox tab plus its own
-/// Inbox Inventory tab — keeping an Assignment Inbox button, an Inbox Inventory button, and Settings.
+/// The standalone Inbox block's dialog — a thin sealed subclass of <see cref="ScribeDialogBase"/>.
+/// Opens into the shared Inbox tab and adds an Inbox Inventory tab (mixed restricted/open storage).
+/// Its nav drops the base's Read/Editor/Pinned buttons, keeping Inbox, Inbox Inventory, and Settings.
 ///
-/// <para>The Inbox tab has no row/filter content of its own yet, so it renders through
+/// <para>The Inbox tab has no content of its own yet and renders
 /// <see cref="ScribeDialogBase.BuildInboxContent"/>'s empty-state placeholder.</para>
 /// </summary>
 public sealed class GuiDialogScribeInbox : ScribeDialogBase
 {
-    /// <summary>The owning block-entity, kept typed so the Inbox Inventory tab can reach its
-    /// <see cref="BlockEntityInbox.Inventory"/> (the base only stores the untyped
-    /// <see cref="IScribeDocumentHost"/>).</summary>
+    /// <summary>The owning block-entity, kept typed (the base only stores the untyped
+    /// <see cref="IScribeDocumentHost"/>) to reach <see cref="BlockEntityInbox.Inventory"/>.</summary>
     private readonly BlockEntityInbox inbox;
 
-    /// <summary>Bridges the LibGUI slot widgets to the block-entity inventory — same lifecycle contract
-    /// as <see cref="GuiDialogScribeScriptorium.slotController"/>: created lazily on the first Inbox
+    /// <summary>Bridges LibGUI slot widgets to the inventory. Created lazily on the first Inbox
     /// Inventory build, disposed in <see cref="OnGuiClosed"/>, and subscribed to
-    /// <see cref="ScribeDialogBase.RebuildBody"/> so a slot change actually re-renders.</summary>
+    /// <see cref="ScribeDialogBase.RebuildBody"/> so slot changes re-render.</summary>
     private SlotController? slotController;
 
     public GuiDialogScribeInbox(BlockPos pos, IScribeDocumentHost host, ICoreClientAPI capi)
-        // Pass the BE's inventory to the inventory-carrying base ctor (mirrors the Scriptorium/
-        // Assignment Desk) so OpenInventory / CloseInventoryAndSync fire automatically on open/close.
+        // The inventory-carrying base ctor fires OpenInventory / CloseInventoryAndSync on open/close.
         : base(pos, host, capi, ((BlockEntityInbox)host).Inventory)
     {
         inbox = (BlockEntityInbox)host;
         DefaultToInboxView();
-        // Unlike every other Inbox-reaching surface, this dialog never routes through
-        // OnClickSwitchToInbox() (it has no nav button that does) — mark-seen must fire here directly,
-        // or the ambient particle/nav shimmer can persist indefinitely regardless of how long the
-        // player looks at their assignments.
+        // This dialog never routes through OnClickSwitchToInbox(), so mark-seen must fire here directly
+        // or the ambient shimmer persists.
         MarkInboxSeenIfNeeded();
     }
 
-    /// <summary>The Inbox block is a shared placed block: editor access requires a server lock
-    /// round-trip, same as the Lectern/Scriptorium/Chalkboard/Assignment Desk. Retained even though no
-    /// nav button here ever opens the editor view — see the Assignment Desk's identical note.</summary>
+    /// <summary>Shared placed block: editor access requires a server lock round-trip. Retained even
+    /// though no nav button here opens the editor view.</summary>
     protected override bool EditorAccessIsAsync => true;
 
-    /// <summary>This dialog has no Read view to land on (see class remarks) — a plain access grant, the
-    /// ordinary reply every right-click on the block gets, must leave the dialog on Inbox instead of
-    /// being force-switched to a nonexistent Read view. This overrides the base's <c>EnterReadMode()</c>
-    /// default.</summary>
+    /// <summary>There is no Read view, so an access grant stays on Inbox instead of taking the base's
+    /// <c>EnterReadMode()</c> default.</summary>
     public override void EnterGrantedView()
     {
         LeaveEditorIfActive();
-        // Every right-click re-open grants access here and lands back on the (only) Inbox view without
-        // going through OnClickSwitchToInbox() — mark-seen must fire on every grant, not just the first.
+        // Every grant lands on Inbox without OnClickSwitchToInbox(), so mark-seen fires on each one.
         MarkInboxSeenIfNeeded();
         if (IsOpened()) ForceRebuild();
     }
 
-    /// <summary>Inbox / Inbox Inventory / Settings. The Inbox button switches
-    /// to the shared Inbox tab, the Inbox Inventory button to the block's own 8-slot storage tab.</summary>
+    /// <summary>Inbox / Inbox Inventory / Settings.</summary>
     protected override Widget BuildRightColNav()
     {
         var colors = ResolveTheme(modSystem.MySettings.PixelArtDisplay).ColorScheme;
@@ -96,16 +82,10 @@ public sealed class GuiDialogScribeInbox : ScribeDialogBase
             children: new Widget[] { inboxBtn, inboxInventoryBtn, settingsBtn });
     }
 
-    /// <summary>Builds the Inbox Inventory tab: 12 slots — the first two rows (indices 0-3, 4-7)
-    /// Scribe-items-only (any <c>IScribeDocumentItem</c>, including blank and sealed Task Notices,
-    /// matching the Scriptorium's own restriction), the third row (8-11) open — laid out 3 rows of 4 and
-    /// centered both horizontally and vertically in the tab's content region
-    /// Each slot uses the shared
-    /// <see cref="ScribeInventorySlotStyle"/> helper so it matches the Assignment Desk's own slots
-    /// exactly; only the restricted rows pass a watermark icon, using the Scriptorium's generic
-    /// "scribebook" glyph (not "scribeassignment") since the restriction is not Task-Notice-
-    /// specific. A restricted slot holding an undiscovered notice addressed to the local player
-    /// additionally wraps in <see cref="ScribeShimmerWrap"/>.</summary>
+    /// <summary>Builds the Inbox Inventory tab: 12 slots in 3 rows of 4, centered. Slots 0-7 accept
+    /// only <c>IScribeDocumentItem</c>s and carry a generic "scribebook" watermark (the restriction is not
+    /// Task-Notice-specific); slots 8-11 are open. A restricted slot holding an undiscovered notice for the
+    /// local player wraps in <see cref="ScribeShimmerWrap"/>.</summary>
     protected override Widget BuildInboxInventoryContent()
     {
         var controller = EnsureSlotController();
@@ -127,7 +107,6 @@ public sealed class GuiDialogScribeInbox : ScribeDialogBase
             .Select(i => ScribeInventorySlotStyle.Build(inv[i], controller, colors, CurrentShade, null))
             .ToArray();
 
-        // 8-unit top padding so the durable divider below sits flush against it.
         Widget slotGrid = new Center(child: new Padding(EdgeInsets.Only(top: 8f), child: new Column(
             spacing: SlotRowSpacing,
             mainAxisSize: MainAxisSize.Min,
@@ -139,9 +118,7 @@ public sealed class GuiDialogScribeInbox : ScribeDialogBase
                 new Row(spacing: SlotSpacing, mainAxisSize: MainAxisSize.Min, children: openSlots),
             })));
 
-        // Shared Row 2 subtitle + durable divider. The slot grid is this tab's general CONTENT, not
-        // Row 3 controls, so the divider sits directly under the subtitle (as on the Editor/History
-        // tabs, which have no Row 3). The header is wrapped in the same inset every other tab uses.
+        // The slot grid is content, not Row 3 controls, so the divider sits directly under the subtitle.
         Widget header = ScribeTabHeader.Build(colors, RowStyle,
             "scribe:scribe-tab-inbox-inventory", "scribe:scribe-tab-subtitle-inbox-inventory",
             modSystem.VisualTuning.ShowSubtitleRow);
@@ -155,12 +132,9 @@ public sealed class GuiDialogScribeInbox : ScribeDialogBase
                 children: new Widget[] { header, new Expanded(child: slotGrid) }));
     }
 
-    /// <summary>True when the local player has an undiscovered notice sitting in ANY of this Inbox's
-    /// restricted slots — the Inbox Inventory nav tab's shimmer trigger (signal-tasknotice-inbox-
-    /// presence), distinct from the coarser <see cref="ScribeDialogBase.ShowInboxShimmer"/> the four
-    /// cross-surface nav buttons use. Shares <see cref="BlockEntityInbox.HoldsUndiscoveredNoticeFor"/>
-    /// with the per-slot shimmer above and the block's own particle tick, so all three agree on exactly
-    /// what "undiscovered" means.</summary>
+    /// <summary>True when the local player has an undiscovered notice in any restricted slot — the
+    /// Inbox Inventory nav shimmer trigger, finer than <see cref="ScribeDialogBase.ShowInboxShimmer"/>.
+    /// Shares <see cref="BlockEntityInbox.HoldsUndiscoveredNoticeFor"/> with the per-slot shimmer.</summary>
     private bool ShowInboxInventoryShimmer()
     {
         string? uid = capi.World.Player?.PlayerUID;
@@ -170,17 +144,13 @@ public sealed class GuiDialogScribeInbox : ScribeDialogBase
             .Any(i => BlockEntityInbox.HoldsUndiscoveredNoticeFor(inv[i], uid));
     }
 
-    /// <summary>Gap between the two slot rows, matching <see cref="SlotSpacing"/> (the gap between slots
-    /// within a row) so the 2×4 grid reads evenly spaced in both directions.</summary>
+    /// <summary>Gap between slot rows; equals <see cref="SlotSpacing"/> so the grid is evenly spaced.</summary>
     private const float SlotRowSpacing = 4f;
 
-    /// <summary>Gap between adjacent slots in a row, matching <c>SlotGrid</c>'s default spacing (the
-    /// same value the Scriptorium's own hand-built slot row uses).</summary>
+    /// <summary>Gap between adjacent slots in a row (<c>SlotGrid</c>'s default).</summary>
     private const float SlotSpacing = 4f;
 
-    /// <summary>Lazily create the slot controller and start watching the Inbox's inventory — same
-    /// idempotent-create + rebuild-on-change contract as
-    /// <see cref="GuiDialogScribeScriptorium.EnsureSlotController"/>.</summary>
+    /// <summary>Idempotently creates the slot controller and watches the inventory, rebuilding on change.</summary>
     private SlotController EnsureSlotController()
     {
         if (slotController == null)
@@ -192,8 +162,7 @@ public sealed class GuiDialogScribeInbox : ScribeDialogBase
         return slotController;
     }
 
-    /// <summary>Tear down the slot controller when the dialog closes so its <c>SlotModified</c>
-    /// subscription doesn't outlive the dialog. Mirrors <see cref="GuiDialogScribeScriptorium.OnGuiClosed"/>.</summary>
+    /// <summary>Disposes the slot controller so its <c>SlotModified</c> subscription doesn't outlive the dialog.</summary>
     public override void OnGuiClosed()
     {
         base.OnGuiClosed();

@@ -7,15 +7,12 @@ using SkiaSharp;                  // SKBitmap, SKImage, SKRect, SKColors, SKSamp
 namespace Scribe;
 
 /// <summary>
-/// Paints a fixed-size, full-color raster bitmap with LINEAR sampling — the opposite tradeoff from
-/// <see cref="ScribePixelArtBackdrop"/>'s nearest-neighbour: for pre-colored art authored close to its
-/// display size (e.g. the assigned-task stamp) that should read as a smooth image rather than hard pixel
-/// blocks. A true leaf widget with no child (mirrors LibGUI's own <c>VsIcon</c>/<c>RenderVsIcon</c>): it
-/// lays itself out to size×size and draws the bitmap untinted, at its native colors.
+/// Paints a fixed-size, full-color raster bitmap untinted with LINEAR sampling (the opposite of
+/// <see cref="ScribePixelArtBackdrop"/>'s nearest-neighbour), for pre-colored art authored near its display
+/// size. A leaf widget that lays itself out to size×size.
 ///
-/// <para><b>Paint-colour hygiene.</b> Same discipline as <see cref="ScribePixelArtBackdrop"/>: force the
-/// shared paint opaque white with no filters before drawing, then restore every touched field, since the
-/// shared paint outlives this subtree.</para>
+/// <para>Like <see cref="ScribePixelArtBackdrop"/>, it forces the shared paint opaque white with no filters
+/// and restores every touched field afterwards.</para>
 /// </summary>
 internal sealed class ScribeRasterIcon : RenderObjectWidget
 {
@@ -39,7 +36,7 @@ internal sealed class ScribeRasterIcon : RenderObjectWidget
 
         private SKBitmap bitmap = null!;
         private float size;
-        private SKImage? image; // FromBitmap wrapper, built lazily and rebuilt only if the source bitmap changes
+        private SKImage? image; // built lazily; rebuilt only if the source bitmap changes
 
         public override bool IsHitTestTarget => false;
 

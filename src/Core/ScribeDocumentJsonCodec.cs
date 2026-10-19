@@ -5,12 +5,8 @@ namespace Scribe.Core;
 
 /// <summary>
 /// A human-readable, versioned <c>ScribeDocument ⇄ JSON</c> codec — the LOSSLESS clipboard export/import
-/// lane for the Scriptorium's Import/Export section (add-scriptorium-import-export). Parallel to the binary
-/// <see cref="ScribeDocumentCodec"/> (world persistence / network sync); this one exists purely so a player
-/// can copy a document out to text, edit it anywhere, and paste it back.
-///
-/// <para>Uses <c>System.Text.Json</c>, which is part of the .NET base class library on net10.0 — NOT a
-/// NuGet/mod package, so it satisfies the "no new dependencies" guardrail and keeps Core VS-API-free.</para>
+/// lane for the Scriptorium. Parallel to the binary <see cref="ScribeDocumentCodec"/> (persistence/sync).
+/// Uses <c>System.Text.Json</c> (BCL, no new dependency).
 ///
 /// Shape (indented, camelCase keys):
 /// <code>
@@ -24,29 +20,20 @@ namespace Scribe.Core;
 ///   ] }
 /// </code>
 ///
-/// <para>What is written: <c>kind</c> (a stable string token, see <see cref="ScribeBlockKindToken"/>),
-/// <c>text</c>, <c>done</c>, <c>depth</c>, and the Tracker/Link references. What is OMITTED and why:
-/// <c>TaskId</c>/<c>DocId</c> (import mints fresh identity — see the Mod import handler), <c>assignment</c>
-/// (assignment is place-bound, not shareable), and <c>currentQuantity</c> (live/derived from carried
-/// inventory, recomputed after import). Null references are omitted for legibility.</para>
+/// <para>OMITTED: <c>TaskId</c>/<c>DocId</c> (import mints fresh identity), <c>assignment</c> (place-bound,
+/// not shareable), and <c>currentQuantity</c> (derived from carried inventory). Null references are omitted.</para>
 ///
-/// <para>Versioning mirrors the binary codec's forward/backward window: <c>"v"</c> is a single counter and a
-/// new field is a version bump, never a breaking reshuffle. <see cref="Version"/>=1 is the initial format;
-/// any document with <c>v &gt;= <see cref="MinVersion"/></c> is accepted (a newer producer's extra fields are
-/// ignored by the DTO). A payload lacking a <c>v</c> is treated as "not a Scribe export" and rejected, so a
-/// foreign JSON object can't import as an empty document. See docs/CODEC-MIGRATION.md.</para>
-///
-/// <para>Field history: v2 added the optional <c>extraInfo</c> key (an external mod's opaque hover-detail
-/// string, via <c>ScribeModSystem.TryCreateExternalTask</c>, add-external-mod-task-api). Omitted when null;
-/// a v1 payload simply has no such key and deserializes with it null.</para>
+/// <para>Versioning: <c>"v"</c> is a single counter and a new field is a version bump. Any document with
+/// <c>v &gt;= <see cref="MinVersion"/></c> is accepted (a newer producer's extra fields are ignored). A
+/// payload lacking <c>v</c> is rejected, so a foreign JSON object can't import as an empty document.
+/// v2 added the optional <c>extraInfo</c> key. See docs/CODEC-MIGRATION.md.</para>
 /// </summary>
 public static class ScribeDocumentJsonCodec
 {
-    /// <summary>Current JSON format version. Bump (never reshuffle) when adding a field. See the class doc.</summary>
+    /// <summary>Current JSON format version; bump when adding a field.</summary>
     public const int Version = 2;
 
-    /// <summary>Oldest JSON version still accepted. A payload with <c>v</c> below this — or with no <c>v</c>
-    /// at all (parsed as 0) — is rejected as not a Scribe export.</summary>
+    /// <summary>Oldest JSON version still accepted; a lower or missing <c>v</c> is rejected.</summary>
     public const int MinVersion = 1;
 
     private static readonly JsonSerializerOptions WriteOptions = new()
@@ -79,14 +66,11 @@ public static class ScribeDocumentJsonCodec
                 Done = block.Done,
                 Depth = block.Depth,
                 TargetItemCode = block.TargetItemCode,
-                // A Tracker, a Craft, and a QuestObjective all carry a meaningful target quantity; omit it
-                // elsewhere to keep the JSON legible.
                 TargetQuantity = block.Kind is ScribeBlockKind.Tracker or ScribeBlockKind.Craft or ScribeBlockKind.QuestObjective
                     ? block.TargetQuantity : null,
                 LinkTarget = block.LinkTarget,
                 LinkLabel = block.LinkLabel,
                 LinkDescription = block.LinkDescription,
-                // Only a Craft carries a recipe binding; omit the empty string elsewhere.
                 RecipeSignature = string.IsNullOrEmpty(block.RecipeSignature) ? null : block.RecipeSignature,
                 ExtraInfo = block.ExtraInfo,
             });
@@ -95,12 +79,10 @@ public static class ScribeDocumentJsonCodec
     }
 
     /// <summary>
-    /// Deserializes a Scribe JSON export. Fails safely (returns false, <paramref name="document"/> null) on
-    /// null/blank input, malformed JSON, or a payload that is not a Scribe export (no/too-old <c>v</c>).
-    /// Defensive by construction: unknown kind tokens degrade to <see cref="ScribeBlockKind.Task"/>, missing
-    /// fields default, over-long text is CLIPPED to the shared caps (not rejected), and the block cap is
-    /// enforced. Every block gets a FRESH <see cref="ScribeBlock.TaskId"/> (the ctor default), so an import
-    /// can never carry a pin. Never throws to the caller.
+    /// Deserializes a Scribe JSON export. Returns false (document null) on blank or malformed input or a
+    /// payload that is not a Scribe export. Unknown kind tokens degrade to <see cref="ScribeBlockKind.Task"/>,
+    /// over-long text is CLIPPED to the shared caps, the block cap is enforced, and every block gets a FRESH
+    /// <see cref="ScribeBlock.TaskId"/> so an import never carries a pin. Never throws.
     /// </summary>
     public static bool TryDeserialize(string? json, out ScribeDocument? document)
     {
@@ -118,8 +100,7 @@ public static class ScribeDocumentJsonCodec
         }
 
         if (dto is null) return false;
-        // A real Scribe export always stamps "v". A foreign JSON object lacks it (parses to 0) — reject so it
-        // can't slip through as an empty document (which an Overwrite import would use to wipe the target).
+        // A foreign JSON object lacks "v" (parses to 0); reject it so it can't import as an empty document an Overwrite would use to wipe the target.
         if (dto.V < MinVersion) return false;
 
         var blocks = new List<ScribeBlock>(dto.Blocks?.Count ?? 0);
@@ -161,8 +142,7 @@ public static class ScribeDocumentJsonCodec
         return true;
     }
 
-    /// <summary>Clips over-long text to the same per-kind caps the binary codec enforces (a Task to the soft
-    /// task cap, everything else to the note cap), so one runaway field can never blow the document bound.</summary>
+    /// <summary>Clips over-long text to the same per-kind caps the binary codec enforces.</summary>
     private static string ClipText(string text, ScribeBlockKind kind)
     {
         int cap = kind == ScribeBlockKind.Task

@@ -9,16 +9,10 @@ using Vintagestory.API.Server;
 namespace Scribe;
 
 /// <summary>
-/// The standalone Inbox block's placed-block entity. A thin
-/// subclass of <see cref="BlockEntityScribeWritingStation"/>: it shares all document, persistence,
-/// editor-lock, and guestbook logic with the Lectern/Scriptorium/Assignment Desk and supplies only its
-/// own identity/config.
-///
-/// <para>Reuses the Lectern's GUI page art as a placeholder backdrop, and its physical block
-/// model/textures are cloned from the Scriptorium's shape (see <c>inbox.json</c>).</para>
-///
-/// <para><see cref="PageAspect"/> is a fixed <c>W × 1.2W</c> ratio, same as
-/// <see cref="BlockEntityAssignmentDesk"/>.</para>
+/// The standalone Inbox block's placed-block entity. A thin subclass of
+/// <see cref="BlockEntityScribeWritingStation"/> supplying only its identity/config. Reuses the
+/// Lectern's page art as a placeholder backdrop; <see cref="PageAspect"/> is a fixed <c>W × 1.2W</c>,
+/// same as <see cref="BlockEntityAssignmentDesk"/>.
 /// </summary>
 public sealed class BlockEntityInbox : BlockEntityScribeWritingStation
 {
@@ -34,19 +28,12 @@ public sealed class BlockEntityInbox : BlockEntityScribeWritingStation
         new GuiDialogScribeInbox(Pos, this, capi);
 
     /// <summary>
-    /// Wall-mounted facing, mirroring <see cref="BlockEntityScribeChalkboard.WallMountAngleRad"/>: without
-    /// this override the base's <c>WallMountAngleRad</c> stays null for every variant, so
-    /// <c>MeshAngleRad</c> is never set for a wall placement and the mesh always renders at its
-    /// as-authored angle regardless of which wall it's on. Null for the ground ("-up") variant, which
-    /// keeps the base's free player-facing angle from <see cref="BlockScribeWritingStation.TryPlaceBlock"/>.
-    ///
-    /// <para>Unlike the Chalkboard's <c>side</c> variant (named for the wall's OWN direction, via
-    /// <c>HorizontalAttachable</c>), <see cref="BlockInbox.TryPlaceBlock"/> names the "orientation" variant
-    /// after the CLICKED face (<c>blockSel.Face.Code</c>) — the face pointing AWAY from the wall, into the
-    /// room where the Inbox is placed. So an inbox variant of "south" means the wall is to the NORTH: the
-    /// inverse of the Chalkboard's variant meaning. The angles below are the Chalkboard's own
-    /// north/east/south/west→degree mapping with north/south and east/west swapped to account for that
-    /// inversion.</para>
+    /// Wall-mounted facing, mirroring <see cref="BlockEntityScribeChalkboard.WallMountAngleRad"/>. Null for
+    /// the ground ("up") variant, which keeps the base's player-facing angle.
+    /// <para>Unlike the Chalkboard's <c>side</c> variant (the wall's own direction), the "orientation"
+    /// variant is named after the CLICKED face (<see cref="BlockInbox.TryPlaceBlock"/>), pointing AWAY from
+    /// the wall. So "south" means the wall is to the NORTH: the angles are the Chalkboard's mapping with
+    /// north/south and east/west swapped.</para>
     /// </summary>
     protected override float? WallMountAngleRad
     {
@@ -67,9 +54,8 @@ public sealed class BlockEntityInbox : BlockEntityScribeWritingStation
         }
     }
 
-    /// <summary>Resolves which of the 2 Inbox box-tuning targets this placed instance reads from,
-    /// via the exact same ground-vs-wall variant check as
-    /// <see cref="WallMountAngleRad"/> above.</summary>
+    /// <summary>Resolves which of the 2 Inbox box-tuning targets this instance reads from, using the same
+    /// ground-vs-wall variant check as <see cref="WallMountAngleRad"/>.</summary>
     protected override ScribeBoxTuningTarget? TuningTarget
     {
         get
@@ -80,29 +66,21 @@ public sealed class BlockEntityInbox : BlockEntityScribeWritingStation
     }
 
     // ── Mixed restricted/open inventory ──────────────────────────────────────
-    //
-    // The Inbox's own inventory: the first RestrictedSlotCount slots accept only Scribe items
-    // (ItemSlotScribeDocument), the rest accept anything. Same lazy-init/persistence/packet-routing
-    // shape as BlockEntityScriptorium's inventory, with a mixed slot factory.
+    // The first RestrictedSlotCount slots accept only Scribe items (ItemSlotScribeDocument), the rest
+    // accept anything. Lazy-init/persistence/packet-routing mirror BlockEntityScriptorium's inventory.
 
-    /// <summary>12 slots: the first 8 (indices 0-7) are Scribe-items-only, the last 4 (8-11) are open —
-    /// see <see cref="EnsureInventory"/>'s slot factory. Public (like
-    /// <see cref="BlockEntityAssignmentDesk"/>'s slot-index constants) so both
-    /// <see cref="GuiDialogScribeInbox"/> and the Atlas integration tests can reference the split
-    /// without re-declaring it.</summary>
+    /// <summary>12 slots: indices 0-7 are Scribe-items-only, 8-11 are open (see <see cref="EnsureInventory"/>).
+    /// Public so <see cref="GuiDialogScribeInbox"/> and the Atlas tests can reference the split.</summary>
     public const int SlotCount = 12;
 
-    /// <summary>Restricted slots (any Scribe item — see <see cref="ItemSlotScribeDocument"/>) occupy
-    /// indices below this bound; open slots occupy the rest.</summary>
+    /// <summary>Slots below this index accept only Scribe items (<see cref="ItemSlotScribeDocument"/>); the rest are open.</summary>
     public const int RestrictedSlotCount = 8;
 
-    /// <summary>Tree sub-key under which the inventory persists, kept separate from the document/lock
-    /// keys. A block whose tree lacks this sub-tree loads with empty slots.</summary>
+    /// <summary>Tree sub-key for the inventory; a tree lacking it loads with empty slots.</summary>
     private const string InventoryTreeKey = "inboxInventory";
 
-    /// <summary>Created lazily via <see cref="EnsureInventory"/> so it exists before whichever of
-    /// <see cref="FromTreeAttributes"/> / <see cref="Initialize"/> the VS block-entity lifecycle runs
-    /// first (chunk-load runs FromTree first; a fresh place runs Initialize first).</summary>
+    /// <summary>Created lazily via <see cref="EnsureInventory"/> because chunk-load runs FromTreeAttributes
+    /// first while a fresh place runs Initialize first.</summary>
     private InventoryGeneric? inventory;
 
     /// <summary>The Inbox's mixed restricted/open inventory (the Inbox Inventory tab watches this).</summary>
@@ -128,48 +106,39 @@ public sealed class BlockEntityInbox : BlockEntityScribeWritingStation
         EnsureInventory();
         base.Initialize(api);
 
-        // Bind the inventory to the block-entity packet channel (the network-readiness gate). Without
-        // LateInitialize + Pos, LibGUI's SlotController silently drops every slot click, logging
-        // "[gui] Skipped slot activation … not network-ready". Mirrors BlockEntityScriptorium.Initialize.
+        // Bind the inventory to the block-entity packet channel. Without LateInitialize + Pos, LibGUI's
+        // SlotController silently drops every slot click ("Skipped slot activation … not network-ready").
         inventory!.LateInitialize("scribeinbox-" + Pos, api);
         inventory.Pos = Pos;
 
-        // Inbox-instance presence signal — additional to the base class's own OnAssignmentParticleTick (already registered by
-        // base.Initialize above, for the coarse "any unseen assignment" field every writing station gets).
+        // Inbox-instance presence signal, in addition to the base class's coarse OnAssignmentParticleTick.
         if (api is ICoreClientAPI)
         {
             RegisterGameTickListener(OnInboxNoticeParticleTick, InboxNoticeParticleTickIntervalMs);
         }
     }
 
-    /// <summary>Matches the base class's own <c>AssignmentParticleTickIntervalMs</c> for visual
-    /// consistency between the two ambient fields a writing station (here, specifically an Inbox) can
-    /// show at once.</summary>
+    /// <summary>Matches the base class's <c>AssignmentParticleTickIntervalMs</c> so the two ambient fields look consistent.</summary>
     private const int InboxNoticeParticleTickIntervalMs = 1500;
 
     /// <summary>True when <paramref name="slot"/> holds a sealed Task Notice addressed to
-    /// <paramref name="targetUid"/> — the presence-signal trigger shared by this block's own particle
-    /// tick and <see cref="GuiDialogScribeInbox"/>'s tab/slot shimmer.
-    /// No separate "discovered"/seen flag is used: <see cref="ScribeAssignment.Seen"/> is not a
-    /// fit here — it flips true the moment the player opens ANY Inbox view
-    /// (<c>ScribeDialogBase.MarkInboxSeenIfNeeded</c>), well before the physical notice itself is
-    /// actually resolved. Accept/Decline consumes the notice item, so the moment it's gone this predicate
-    /// is naturally false again — no explicit "off" transition to write.</summary>
+    /// <paramref name="targetUid"/> — the trigger shared by this block's particle tick and
+    /// <see cref="GuiDialogScribeInbox"/>'s tab/slot shimmer. <see cref="ScribeAssignment.Seen"/> is not used:
+    /// it flips true when the player opens ANY Inbox view, before the notice is resolved. Accept/Decline
+    /// consumes the notice item, so this turns false on its own.</summary>
     internal static bool HoldsUndiscoveredNoticeFor(ItemSlot slot, string targetUid) =>
         slot.Itemstack?.Collectible is ItemScribeTaskNotice
         && ItemScribeTaskNotice.IsSealed(slot.Itemstack)
         && ScribeDocumentAttributes.TryReadFrom(slot.Itemstack, out var doc) && doc is not null
         && doc.Blocks.Any(b => b.Assignment?.TargetPlayerUid == targetUid);
 
-    /// <summary>Tracks the previous tick's active state so a fresh entry requests a seed burst, mirroring
-    /// <see cref="BlockEntityScribeWritingStation"/>'s own field of the same shape.</summary>
+    /// <summary>Previous tick's active state, so a fresh entry requests a seed burst.</summary>
     private bool inboxNoticeParticlesWereActive;
 
-    /// <summary>Client-side periodic check: if one of THIS Inbox's own restricted slots holds a sealed
-    /// notice addressed to the local player, and the player is within
-    /// <see cref="ScribeAssignmentParticleEmitter.DetectionRadius"/>, spawn this tick's mote batch —
-    /// exactly the base class's own <c>OnAssignmentParticleTick</c> pattern, but keyed off this specific
-    /// block's inventory contents rather than the player-wide <c>HasUnseenAssignment</c> flag.</summary>
+    /// <summary>Client-side periodic check: spawns a mote batch when one of THIS Inbox's restricted slots
+    /// holds a sealed notice addressed to the local player within
+    /// <see cref="ScribeAssignmentParticleEmitter.DetectionRadius"/>. Like the base class's tick, but keyed
+    /// off this block's inventory rather than the player-wide unseen flag.</summary>
     private void OnInboxNoticeParticleTick(float dt)
     {
         if (Api is not ICoreClientAPI capi) return;
@@ -216,10 +185,9 @@ public sealed class BlockEntityInbox : BlockEntityScribeWritingStation
         }
     }
 
-    /// <summary>Standard vanilla container packet flow (mirrors <c>BlockEntityScriptorium</c>): slot
-    /// operations (packet id &lt; 1000) go to the inventory's network util; 1000/1001 open/close the
-    /// inventory for the acting player. Rides the built-in block-entity packet channel, NOT the mod's
-    /// "scribe" channel (which carries document edits — a separate concern).</summary>
+    /// <summary>Standard vanilla container packet flow (mirrors <c>BlockEntityScriptorium</c>): packet id
+    /// &lt; 1000 goes to the inventory's network util; 1000/1001 open/close it for the player. Rides the
+    /// block-entity packet channel, NOT the mod's "scribe" channel.</summary>
     public override void OnReceivedClientPacket(IPlayer player, int packetid, byte[] data)
     {
         if (packetid < 1000)
@@ -239,10 +207,8 @@ public sealed class BlockEntityInbox : BlockEntityScribeWritingStation
         }
     }
 
-    /// <summary>Drop any stored items when the block is broken, so a stored Task Notice or other item is
-    /// never destroyed by breaking the block (mirrors <c>BlockEntityScriptorium.OnBlockBroken</c>).
-    /// Server-only; this BE is still alive here (VS calls it from <c>SpawnDropsAndRemoveBlock</c> before
-    /// removal). THIS block's own document is carried onto the block-item separately by
+    /// <summary>Drops stored items when the block is broken so a stored Task Notice is never destroyed.
+    /// Server-only; this BE is still alive here. The block's own document is carried onto the item by
     /// <see cref="BlockScribeWritingStation.GetDrops"/>.</summary>
     public override void OnBlockBroken(IPlayer? byPlayer = null)
     {

@@ -3,18 +3,11 @@ using ProtoBuf;
 namespace Scribe;
 
 /// <summary>
-/// Client -&gt; server: change a pinned task's text, addressed by the task's stable identity
-/// <c>(DocId, TaskId)</c> — never a block position — so the Pin Tab can edit a task's text without
-/// knowing its position or block coordinates. <see cref="DocId"/>/<see cref="TaskId"/> are the raw
-/// 16-byte forms of the document's and task's <c>Guid</c>s (protobuf-net's own <c>Guid</c> handling is
-/// version-fragile, so raw byte arrays are used instead), mirroring
-/// <see cref="ScribeCompleteTaskMessage"/> / <see cref="ScribeSetPinMessage"/>.
-///
-/// Best-effort write-through, lock-free (mirrors <see cref="BlockEntityScribeLectern.SetTaskTextFromReader"/>):
-/// when the owning document resolves, the new text is written into the authoritative document without
-/// acquiring the editor lock; regardless of whether the source resolves, the acting player's pin text
-/// snapshot is refreshed and re-synced. Blank/whitespace-only text is rejected by the document model, so
-/// a pin edit can never blank a task out.
+/// Client -&gt; server: change a pinned task's text, addressed by stable <c>(DocId, TaskId)</c> rather than block position. Both are
+/// raw 16-byte Guid forms (protobuf-net's own Guid handling is version-fragile), like <see cref="ScribeCompleteTaskMessage"/> /
+/// <see cref="ScribeSetPinMessage"/>.
+/// Best-effort and lock-free (like <see cref="BlockEntityScribeLectern.SetTaskTextFromReader"/>): if the document resolves, the text
+/// is written into it; either way the player's pin text snapshot is refreshed and re-synced. Blank text is rejected by the document model.
 /// </summary>
 [ProtoContract]
 public sealed class ScribeEditPinnedTaskMessage

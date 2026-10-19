@@ -11,14 +11,13 @@ public sealed partial class ScribeModSystem
 {
     // ── Demo-content seeding (dev/creative tool) ────────────────────────────────────────────────────
 
-    /// <summary>Fictional visitor names for seeded Lectern guestbooks. Kept ≤16 chars each so they read
-    /// as plausible player names in screenshots.</summary>
+    /// <summary>Fictional visitor names for seeded Lectern guestbooks (≤16 chars, like real player names).</summary>
     private static readonly string[] SeedVisitorNames =
     {
         "Alrik", "Brenna", "Cael", "Dagny", "Emeric", "Fenna", "Gorm", "Hilde",
     };
 
-    /// <summary>Sample tasks for a seeded document — a believable mix of done/undone chores and goals.</summary>
+    /// <summary>Sample tasks for a seeded document (mixed done/undone).</summary>
     private static readonly (string Text, bool Done)[] SeedTasks =
     {
         ("Smelt copper for the new forge",        true),
@@ -42,13 +41,9 @@ public sealed partial class ScribeModSystem
         "Storm season is close. Keep temporal gears and cured meat stocked.",
     };
 
-    /// <summary>Registers the server-side dev command <c>/scribe seed &lt;what&gt; [target]</c>, which
-    /// populates a target Notebook or looked-at Lectern with believable demo content (tasks, notes,
-    /// History on notebooks, Guestbook on lecterns) for screenshot/video capture. All three stores are
-    /// server-authoritative, so this must be a server command. Double-gated: the <c>controlserver</c>
-    /// privilege plus an in-handler creative-mode check. History seeds only the Notebook and Guestbook
-    /// only the Lectern (they are hosted asymmetrically); inapplicable combinations are skipped and
-    /// reported, never errored.</summary>
+    /// <summary>Registers the server-side dev commands under <c>/scribe</c> (seed, tablet, external). Server-side because the
+    /// stores are server-authoritative; double-gated by the <c>controlserver</c> privilege plus a creative-mode check.
+    /// <c>seed</c> applies History only to Notebooks and Guestbook only to Lecterns; inapplicable combinations are reported, not errored.</summary>
     private void RegisterSeedCommand(ICoreServerAPI api)
     {
         var parsers = api.ChatCommands.Parsers;
@@ -81,14 +76,9 @@ public sealed partial class ScribeModSystem
             .EndSubCommand();
     }
 
-    /// <summary>Handler for <c>/scribe external &lt;title&gt;|&lt;bodyText&gt;|&lt;extraInfo&gt;</c> — a
-    /// dev-only harness that calls the real <see cref="TryCreateExternalTask"/> public API directly, so the
-    /// author (and, over a shared screen/Discord call, other mod authors) can see exactly what each
-    /// parameter produces without writing a throwaway calling mod. The three fields are pipe-separated on
-    /// one line since chat commands have no quoted-multi-word-argument parser; a blank segment (or a
-    /// missing trailing one) becomes <c>null</c>, matching what a real caller passing <c>null</c>/omitting
-    /// an argument would produce. Same double-gate as the other dev subcommands
-    /// (<c>controlserver</c> privilege on the root + creative-mode check here).</summary>
+    /// <summary>Handler for <c>/scribe external &lt;title&gt;|&lt;bodyText&gt;|&lt;extraInfo&gt;</c>: a dev harness that calls the real
+    /// <see cref="TryCreateExternalTask"/> API. Fields are pipe-separated (chat has no quoted-argument parser); a blank or
+    /// missing segment becomes <c>null</c>, as a real caller omitting it would.</summary>
     private TextCommandResult OnExternalTaskCommand(TextCommandCallingArgs args)
     {
         if (sapi is null) return TextCommandResult.Error("Server not ready.");
@@ -124,24 +114,15 @@ public sealed partial class ScribeModSystem
         return s.Length == 0 ? null : s;
     }
 
-    /// <summary>Chat input has no way to type a real newline byte, so <c>/scribe external</c> asks the
-    /// caller to type the literal two-character escape <c>\n</c> where they want a line break — converted
-    /// here to a real <c>'\n'</c> before it ever reaches <see cref="TryCreateExternalTask"/>. Only this dev
-    /// harness needs the conversion: a real calling mod hands over a genuine multi-line C# string, which
-    /// already survives the mapper/codecs/render pipeline untouched.</summary>
+    /// <summary>Chat can't type a real newline, so the literal two-character <c>\n</c> is converted to <c>'\n'</c> here. Only this
+    /// dev harness needs it; a real calling mod passes a genuine multi-line string.</summary>
     private static string? UnescapeTypedNewlines(string? s) => s?.Replace("\\n", "\n");
 
     private static string FormatArgEcho(string? value) => value is null ? "null" : $"\"{value}\"";
 
-    /// <summary>Handler for <c>/scribe tablet &lt;wet|hard|fired&gt;</c> set the
-    /// calling player's HELD Scribe Tablet to the requested life-cycle state by swapping its <c>material</c>
-    /// variant to the corresponding sibling and carrying the document/history across
-    /// (<see cref="ItemScribeTablet.BuildStateVariant"/>). Server-authoritative — the held item lives in the
-    /// server-side inventory, so the swap + <see cref="ItemSlot.MarkDirty"/> run here, exactly like the
-    /// natural <c>Soften</c>/<c>DoSmelt</c> paths. Double-gated identically to <c>/scribe seed</c>
-    /// (<c>controlserver</c> privilege on the root + this in-handler creative check). Reaching a
-    /// <c>wet</c>/<c>hard</c> state from a FIRED tablet bypasses the normally-permanent fired rule; that is an
-    /// intentional testing override and is reported as such.</summary>
+    /// <summary>Handler for <c>/scribe tablet &lt;wet|hard|fired&gt;</c>: swaps the caller's HELD tablet to the requested state
+    /// (<see cref="ItemScribeTablet.BuildStateVariant"/>), carrying the document/history across. Runs server-side where the held
+    /// item lives. Going wet/hard from FIRED bypasses the normally-permanent fired rule, a deliberate testing override that is reported.</summary>
     private TextCommandResult OnTabletCommand(TextCommandCallingArgs args)
     {
         if (sapi is null) return TextCommandResult.Error("Server not ready.");
@@ -162,14 +143,12 @@ public sealed partial class ScribeModSystem
             _       => TabletState.Wet,
         };
 
-        // Capture whether the source was fired BEFORE the swap, so we can flag the deliberate override of the
-        // permanent-fired rule (fired → wet/hard) in the result message.
+        // Read before the swap so a fired → wet/hard override can be flagged in the result.
         bool wasFired = ItemScribeTablet.ReadFired(slot.Itemstack);
 
         var swapped = ItemScribeTablet.BuildStateVariant(slot.Itemstack, target, sapi.World);
         if (swapped is null)
-            // The only way BuildStateVariant returns null for a real tablet is a missing sibling variant —
-            // i.e. a wax tablet asked to harden/fire (wax has no -hard/-fired sibling).
+            // Null for a real tablet means no sibling variant (wax has no -hard/-fired).
             return TextCommandResult.Error(Lang.Get("scribe:cmd-tablet-wax-cannot", stateArg));
 
         slot.Itemstack = swapped;
@@ -181,8 +160,7 @@ public sealed partial class ScribeModSystem
             : Lang.Get("scribe:cmd-tablet-set", stateArg));
     }
 
-    /// <summary>Resolve the calling player's currently held Scribe Tablet: the active hotbar slot first, then
-    /// the offhand, so a dev toggle acts on whatever hand holds a tablet. Null when neither hand holds one.</summary>
+    /// <summary>The calling player's held Scribe Tablet: active hotbar slot first, then offhand; null if neither.</summary>
     private static ItemSlot? FindHeldTablet(IServerPlayer player)
     {
         var active = player.InventoryManager?.ActiveHotbarSlot;
@@ -242,8 +220,7 @@ public sealed partial class ScribeModSystem
             : SeedNotebook(notebook!, what);
     }
 
-    /// <summary>Auto-target helper: the <see cref="BlockEntityScribeLectern"/> the player is currently
-    /// looking at, or null. Mirrors the block-selection lookup in <see cref="BlockScribeLectern"/>.</summary>
+    /// <summary>The <see cref="BlockEntityScribeLectern"/> the player is looking at, or null.</summary>
     private BlockEntityScribeLectern? ResolveLookedAtLectern(IServerPlayer player)
     {
         var pos = player.CurrentBlockSelection?.Position;
@@ -257,8 +234,7 @@ public sealed partial class ScribeModSystem
             return TextCommandResult.Error("A Notebook has no Guestbook — that is a Lectern feature.");
 
         bool seedTasks = what is "tasks" or "all";
-        // "all" intentionally excludes notes (only the explicit "notes" target seeds them) — a seeded
-        // demo document should show tasks, not note sections.
+        // "all" excludes notes: a seeded demo document should show tasks, not note sections.
         bool seedNotes = what is "notes";
         bool seedHistory = what is "history" or "all";
 
@@ -278,7 +254,7 @@ public sealed partial class ScribeModSystem
     private TextCommandResult SeedLectern(BlockEntityScribeLectern lectern, string what)
     {
         bool seedTasks = what is "tasks" or "all";
-        // "all" intentionally excludes notes (only the explicit "notes" target seeds them) — see SeedNotebook.
+        // "all" excludes notes (see SeedNotebook).
         bool seedNotes = what is "notes";
         bool seedGuestbook = what is "guestbook" or "all";
         bool wantHistory = what == "history";
@@ -287,7 +263,7 @@ public sealed partial class ScribeModSystem
 
         if (seedTasks) SeedDocumentTasks(lectern.Document);
         if (seedNotes) SeedDocumentNotes(lectern.Document);
-        // Persist the document edits (guestbook seeds itself + marks dirty separately).
+        // Guestbook seeds itself and marks dirty separately.
         if (seedTasks || seedNotes) lectern.MarkDirty(redrawOnClient: true);
         if (seedGuestbook) SeedGuestbookOn(lectern);
 
@@ -306,7 +282,7 @@ public sealed partial class ScribeModSystem
             doc.AddTask(text);
             if (done)
             {
-                // The task was appended last; flip its done flag via its index.
+                // Flip the just-appended task by index.
                 doc.ToggleTask(doc.Blocks.Count - 1);
             }
         }
@@ -318,8 +294,7 @@ public sealed partial class ScribeModSystem
             doc.AddTextSection(note);
     }
 
-    /// <summary>Seeds a spread of History entries dated across recent in-game days so the History tab
-    /// reads like a lived-in chronicle rather than a single-day dump.</summary>
+    /// <summary>Seeds History entries dated across recent in-game days so the tab reads like a chronicle.</summary>
     private void SeedHistory(Scribe.Core.HistoryStore history)
     {
         if (sapi is null) return;
@@ -341,10 +316,7 @@ public sealed partial class ScribeModSystem
             RefCode = "medium",
             InGameTimestamp = timestamp(11),
         });
-        // Live combat/storm rows store facts (ActorName empty) so the History tab formats them in the
-        // viewer's locale — same convention as the live OnEntityDeath path. Two PvP entries (bow death,
-        // sword kill) showcase both weapon tiers, and two mob deaths (Nightmare Drifter, brown bear)
-        // showcase the flavored creature pool with correct variant names.
+        // Live combat/storm rows store facts (ActorName empty) so the tab formats them in the viewer's locale, like the live OnEntityDeath path.
         history.TryAddEntry(new Scribe.Core.HistoryEntry
         {
             Kind = Scribe.Core.HistoryEventKind.Death,
@@ -402,8 +374,7 @@ public sealed partial class ScribeModSystem
         });
     }
 
-    /// <summary>Seeds fictional guestbook visitors (some with short notes) on a lectern, dated across
-    /// recent in-game days via the server-only <see cref="BlockEntityScribeLectern.SeedGuestbook"/> seam.</summary>
+    /// <summary>Seeds fictional guestbook visitors via the server-only <see cref="BlockEntityScribeLectern.SeedGuestbook"/> seam.</summary>
     private void SeedGuestbookOn(BlockEntityScribeLectern lectern)
     {
         if (sapi is null) return;

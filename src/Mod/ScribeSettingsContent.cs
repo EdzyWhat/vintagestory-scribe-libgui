@@ -18,19 +18,14 @@ using Vintagestory.API.Config;   // Lang
 namespace Scribe;
 
 /// <summary>
-/// The host-agnostic Scribe settings form. One LibGUI widget that renders every
-/// per-player preference, grouped into Mod Behavior, Window Appearance, and HUD Appearance, and writes each change
-/// through instantly with no OK/Cancel. It makes NO assumption about window size — it is
-/// wrapped in a <see cref="SingleChildScrollView"/> + <see cref="Scrollbar"/> so it fits a small host
-/// (a future Desk) as well as the roomy Lectern — so the same widget is swapped into the Lectern's
-/// central region AND hosted by the standalone HUD-gear settings dialog.
+/// The host-agnostic Scribe settings form: every per-player preference, grouped into Mod Behavior, Window
+/// Appearance, and HUD Appearance, written through instantly (no OK/Cancel). It assumes no window size
+/// (scroll view + scrollbar), so it is hosted in the Lectern's central region and the standalone HUD-gear dialog.
 ///
-/// <para>Stateless: it reads a <see cref="ScribePlayerSettings"/> snapshot and forwards each edit
-/// through <see cref="OnMutate"/> (the host's <c>ScribeModSystem.UpdateMySettings</c>), which
-/// normalizes/persists and fires the change event the host rebuilds on — so the form re-renders from
-/// the clamped value on its next build (live preview + clamp feedback). The scroll controller is owned
-/// by the HOST (like the lectern's shared controller) so a live write-through rebuild doesn't reset the
-/// scroll position.</para>
+/// <para>Stateless: it reads a <see cref="ScribePlayerSettings"/> snapshot and forwards each edit through
+/// <c>onMutate</c> (the host's <c>ScribeModSystem.UpdateMySettings</c>), which normalizes/persists and fires
+/// the change event the host rebuilds on, so the form re-renders from the clamped value. The scroll
+/// controller is owned by the HOST so a rebuild doesn't reset the scroll position.</para>
 /// </summary>
 internal sealed class ScribeSettingsContent : StatelessWidget
 {
@@ -61,12 +56,9 @@ internal sealed class ScribeSettingsContent : StatelessWidget
     {
         var colors = Theme.Of(context).ColorScheme;
 
-        // Settings chrome stays at 100% of BaseSettingsFontSize in the LibGUI default face. Window Text
-        // Size live-previews on Read/Edit, not on this form.
+        // Settings chrome stays at 100% of BaseSettingsFontSize; Window Text Size does not affect this form.
         const float scale = 1f;
 
-        // Three sections: Mod Behavior (task policy + mute + timer), Window Appearance (incl. cuneiform),
-        // HUD Appearance (incl. collapse + storm). Same widget in the Lectern region and the HUD-gear dialog.
         var body = new Column(
             spacing: 14 * scale,
             crossAxisAlignment: CrossAxisAlignment.Stretch,
@@ -83,8 +75,7 @@ internal sealed class ScribeSettingsContent : StatelessWidget
                 BuildHudAppearanceSection(colors, scale),
             });
 
-        // Wrapped in a scroll view + bar so the form fits a shorter host without clipping.
-        // LibGUI default face at unscaled settings size — not the Task Text Font.
+        // LibGUI default face at unscaled settings size, not the Task Text Font.
         return ScribeTextDefaults.WrapSettingsChrome(
             new Padding(
                 EdgeInsets.All(10),
@@ -181,9 +172,7 @@ internal sealed class ScribeSettingsContent : StatelessWidget
                             clamp: ScribePlayerSettings.ClampTimerAlarmVolume))),
         };
 
-        // Quest Accept/Completion Policy: only shown when vsquest
-        // is installed (ScribeSettingsDialog passes showQuestSettings via ScribeQuestCatalog.IsAvailable)
-        // — invisible clutter otherwise, since both settings are inert with no vsquest to detect.
+        // Quest policies are shown only when vsquest is installed (inert otherwise).
         if (showQuestSettings)
         {
             children.Add(PairedControls(colors, scale,
@@ -211,8 +200,7 @@ internal sealed class ScribeSettingsContent : StatelessWidget
                         },
                         onChanged: v => onMutate(s => s.QuestCompletionPolicy = v)))));
 
-            // Whether accepting a quest also pins the resulting
-            // linked task. Same visibility gate as the two policy rows above.
+            // Whether accepting a quest also pins the resulting linked task.
             children.Add(HuggingCheckbox(
                 "settings-autopinonquestaccept", colors, scale,
                 value: settings.AutoPinOnQuestAccept,
@@ -236,12 +224,8 @@ internal sealed class ScribeSettingsContent : StatelessWidget
             mainAxisSize: MainAxisSize.Min,
             children: new Widget[]
             {
-                // Font selector: picks the family for task/note ROW text; the
-                // empty-string default keeps the built-in body font. Governs task text only — the
-                // in-Lectern buttons keep a fixed face. Writes through UpdateMySettings, which
-                // NormalizeTaskFontFamily-clamps and repaints the open Lectern live. First in this section.
-                // Font selector paired with the theme-picker button on one row (a full-width button reads as
-                // oversized on its own row) — no thematic link, just two controls that fit together at this width.
+                // Task/note ROW text font only (the empty-string default keeps the built-in body font).
+                // Paired with the theme-picker button because a full-width button reads as oversized.
                 PairedControls(colors, scale,
                     LabeledControl(
                         "settings-taskfont", colors, scale,
@@ -258,11 +242,8 @@ internal sealed class ScribeSettingsContent : StatelessWidget
                             variant: ButtonVariant.Primary,
                             onTap: _ => onOpenThemePicker()))),
 
-                // Pixel Art Size + Window text scale share one row as two columns. Pixel Art Size (W)
-                // is the single driving width of the Lectern's proportional layout,
-                // stepping by 10 and snapping to the 10px grid on blur; the window text scale is a percent
-                // snapping to a 5% notch on blur. Both clamp via their Core statics and re-lay-out the open
-                // Lectern live.
+                // Pixel Art Size is the Lectern's single driving width (10px grid, snapped on blur); the
+                // window text scale is a percent snapping to a 5% notch on blur.
                 PairedControls(colors, scale,
                     LabeledControl(
                         "settings-pixelartsize", colors, scale,
@@ -273,9 +254,7 @@ internal sealed class ScribeSettingsContent : StatelessWidget
                         "settings-windowfontscale", colors, scale,
                         FontScaleField("windowfontscale", settings.WindowFontScale, v => onMutate(s => s.WindowFontScale = v)))),
 
-                // The pixel-art master toggle and Cuneiform tablets share one row at
-                // the bottom of the section, with Cuneiform press-in (which only applies while Cuneiform
-                // tablets is on) alone below them.
+                // Cuneiform press-in only applies while Cuneiform tablets is on, so it sits alone below.
                 PairedControls(colors, scale,
                     HuggingCheckbox(
                         "settings-pixelartdisplay", colors, scale,
@@ -293,9 +272,9 @@ internal sealed class ScribeSettingsContent : StatelessWidget
             });
     }
 
-    /// <summary>Font-selector options: the empty-string "Default" (built-in body font) followed by each
-    /// bundled/registered family from <see cref="ScribePlayerSettings.KnownTaskFonts"/>, labeled by its own
-    /// family name. Kept in sync with the registration in <c>ScribeModSystem.RegisterCustomFonts</c>.</summary>
+    /// <summary>Font-selector options: the empty-string "Default" plus each family from
+    /// <see cref="ScribePlayerSettings.KnownTaskFonts"/>. Must stay in sync with
+    /// <c>ScribeModSystem.RegisterCustomFonts</c>.</summary>
     private static List<DropdownItem<string>> TaskFontItems()
     {
         var items = new List<DropdownItem<string>>
@@ -346,11 +325,7 @@ internal sealed class ScribeSettingsContent : StatelessWidget
                         items: AnchorItems(),
                         onChanged: v => onMutate(s => s.HudAnchor = v))),
 
-                // Numeric fields (not sliders — sliders hijack scroll). Each clamps ON BLUR inside
-                // the field, using the Core Clamp* static; the ValueKey
-                // still remounts the field to the committed value after a write.
-                //
-                // Max HUD rows + HUD row width share one row as two columns.
+                // Numeric fields, not sliders (sliders hijack scroll); each clamps ON BLUR via a Core Clamp* static.
                 PairedControls(colors, scale,
                     LabeledControl(
                         "settings-hudmaxrows", colors, scale,
@@ -363,9 +338,6 @@ internal sealed class ScribeSettingsContent : StatelessWidget
                             onChanged: v => onMutate(s => s.HudRowWidth = v),
                             clamp: ScribePlayerSettings.ClampHudRowWidth))),
 
-                // HUD position (X/Y offsets) + HUD Text Size share one row as two columns.
-                // The offset sub-row keeps its two inline fields; the font scale sits
-                // in the second column.
                 PairedControls(colors, scale,
                     LabeledControl(
                         "settings-hudoffset", colors, scale,
@@ -400,21 +372,14 @@ internal sealed class ScribeSettingsContent : StatelessWidget
         new() { Value = ScribeHudAnchor.BottomRight, Label = Lang.Get("scribe:settings-anchor-bottomright") },
     };
 
-    /// <summary>Core numeric-field builder shared by all three field types. Wraps a
-    /// <see cref="ScribeNumericField"/> in a <see cref="ValueKey"/>-keyed <see cref="SizedBox"/> (the field
-    /// is uncontrolled — it seeds from <c>initialValue</c> only in <c>InitState</c> — so changing the
-    /// wrapper's key when the persisted/clamped value differs remounts it, settling onto the clamped result
-    /// after a write). Focus survives that remount because the field uses the host-owned
-    /// <see cref="ScribeNumericFocusRegistry"/> node for <paramref name="id"/> and re-requests focus on
-    /// mount whenever that id is armed — which the field arms (via <c>onStepped</c>) just before a step
-    /// writes through, so repeated +/- or arrow presses keep focus.
-    /// (Typing a value whose running prefix is below the min briefly clamps mid-type; +/- and arrows are
-    /// the primary path.)</summary>
+    /// <summary>Numeric-field builder shared by all field types. The field is uncontrolled (seeds from
+    /// <c>initialValue</c> in <c>InitState</c> only), so the <see cref="ValueKey"/>-keyed wrapper remounts it
+    /// onto the persisted/clamped value after a write. Focus survives the remount via the host-owned
+    /// <see cref="ScribeNumericFocusRegistry"/> node for <paramref name="id"/>, armed (via <c>onStepped</c>)
+    /// just before a step writes through.</summary>
     private Widget NumericField(string id, int keyValue, float initialValue, float step, Action<float> onChanged,
         Func<float, float>? clamp = null) =>
-        // A key-only SizedBox (no width/height → null constraints, so the child sizes itself). The ValueKey
-        // remounts the uncontrolled field when the persisted/clamped value changes (settling it after a blur
-        // commit).
+        // Key-only SizedBox (no width/height, so the child sizes itself).
         new SizedBox(
             key: new ValueKey<int>(keyValue),
             child: new ScribeNumericField(
@@ -427,17 +392,14 @@ internal sealed class ScribeSettingsContent : StatelessWidget
                 onStepped: () => focus.ArmAutoFocus(id),
                 clamp: clamp));
 
-    /// <summary>An integer numeric field stepping by <paramref name="step"/> that writes its rounded value
-    /// through on change. Clamping happens on blur inside the field (the clamp is the Core <c>Clamp*</c>
-    /// static composed to operate on the rounded int).</summary>
+    /// <summary>An integer numeric field that writes its rounded value through on change and clamps on blur.</summary>
     private Widget IntField(string id, int value, float step, Action<int> onChanged,
         Func<int, int>? clamp = null) =>
         NumericField(id, keyValue: value, initialValue: value, step: step,
             onChanged: v => onChanged((int)MathF.Round(v)),
             clamp: clamp is null ? null : v => clamp((int)MathF.Round(v)));
 
-    /// <summary>A labeled ±300px offset field: a small caption over an <see cref="IntField"/> (step 5). Clamps
-    /// to the Core offset range on blur.</summary>
+    /// <summary>A small caption over an <see cref="IntField"/> (step 5), clamped to the Core offset range.</summary>
     private Widget OffsetField(string id, string caption, int value, Action<int> onChanged, ColorScheme colors, float scale)
     {
         return new Column(
@@ -452,18 +414,14 @@ internal sealed class ScribeSettingsContent : StatelessWidget
             });
     }
 
-    /// <summary>A font-scale field entered as a PERCENT: the stored multiplier
-    /// (0.80–1.20) is shown as 80–120 and stepped by 5. Clamps + snaps happen in Core's <c>Normalized()</c>;
-    /// keyed by the current percent so the field settles onto the snapped result on the write-through
-    /// rebuild.</summary>
+    /// <summary>A font-scale field entered as a PERCENT: the stored multiplier (0.80–1.20) is shown as 80–120,
+    /// stepped by 5, and keyed by the current percent so it settles onto the snapped result.</summary>
     private Widget FontScaleField(string id, float scaleValue, Action<float> onChanged)
     {
         int pct = (int)MathF.Round(scaleValue * 100f);
         return NumericField(id, keyValue: pct, initialValue: pct, step: 5,
             onChanged: v => onChanged(MathF.Round(v) / 100f),
-            // The field works in PERCENT (80–120); clamp in percent space by round-tripping through the Core
-            // multiplier clamp (which also snaps to the 5% notch), so a blurred out-of-range percent settles
-            // onto a valid notch percent.
+            // Clamp in percent space by round-tripping through the Core multiplier clamp (which also snaps to the 5% notch).
             clamp: v => MathF.Round(ScribePlayerSettings.ClampFontScale(v / 100f) * 100f));
     }
 
@@ -483,12 +441,9 @@ internal sealed class ScribeSettingsContent : StatelessWidget
     // ---------------- Layout helpers ----------------
 
     private Widget SectionTitle(string text, ColorScheme colors, float scale) =>
-        // Only ~8% larger than the settings body size.
         new Text(text, Pegged(ScribeRowConstants.BaseSettingsFontSize * scale * 1.08f, colors.OnSurface, FontWeight.Bold));
 
-    /// <summary>Lay two labeled controls side by side as equal-width columns in one row.
-    /// Each child is <see cref="Expanded"/> so they split the
-    /// available width evenly, mirroring the offsets row.</summary>
+    /// <summary>Two controls side by side as equal-width columns.</summary>
     private static Widget PairedControls(ColorScheme colors, float scale, Widget left, Widget right) =>
         new Row(
             spacing: 12 * scale,
@@ -496,10 +451,8 @@ internal sealed class ScribeSettingsContent : StatelessWidget
             crossAxisAlignment: CrossAxisAlignment.Start,
             children: new Widget[] { new Expanded(child: left), new Expanded(child: right) });
 
-    /// <summary>A checkbox that hugs its label at the START of the row instead of stretching across the
-    /// full form width. The label keeps its hover helptext.
-    /// Unlike <see cref="LabeledControl"/> (label-above-control, stretched
-    /// for full-width inputs), a toggle reads best inline with its label.</summary>
+    /// <summary>A checkbox that hugs its label at the START of the row (unlike <see cref="LabeledControl"/>,
+    /// which stretches). The label carries hover helptext.</summary>
     private Widget HuggingCheckbox(string keyBase, ColorScheme colors, float scale, bool value, Action<bool> onChanged)
     {
         Widget label = new Text(
@@ -530,16 +483,14 @@ internal sealed class ScribeSettingsContent : StatelessWidget
             });
     }
 
-    /// <summary>Wraps a control with its localized label (a <see cref="Tooltip"/>-carrying caption above
-    /// the control), so the field is labeled and its helptext is available on hover. The
-    /// label + control stack keeps a consistent left-aligned column layout for every field.</summary>
+    /// <summary>Wraps a control with its localized <see cref="Tooltip"/>-carrying caption above it.</summary>
     private Widget LabeledControl(string keyBase, ColorScheme colors, float scale, Widget control)
     {
         var label = new Text(
             Lang.Get("scribe:" + keyBase),
             Pegged(ScribeRowConstants.BaseSettingsFontSize * scale, colors.OnSurface));
 
-        // Helptext surfaced on hover over the label. useGlobalOverlay so the tooltip isn't clipped by a scroll viewport / small host.
+        // useGlobalOverlay so the tooltip isn't clipped by the scroll viewport.
         Widget labelWithHelp = new Tooltip(
             child: label,
             content: new Padding(

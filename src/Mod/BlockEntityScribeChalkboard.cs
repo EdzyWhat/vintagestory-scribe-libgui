@@ -5,37 +5,29 @@ using Vintagestory.API.Client;
 namespace Scribe;
 
 /// <summary>
-/// The Chalkboard's placed-block entity. A thin subclass of <see cref="BlockEntityScribeWritingStation"/>:
-/// all document, persistence, editor-lock, guestbook, and placement logic lives in the base (shared with
-/// the Lectern and Scriptorium). The Chalkboard supplies only its own page art, layout aspect, fallback
-/// title, mesh-cache key, and dialog — the cosmetic deltas from the Lectern.
+/// The Chalkboard's placed-block entity. A thin subclass of <see cref="BlockEntityScribeWritingStation"/>
+/// supplying only its page art, layout aspect, fallback title, mesh-cache key, and dialog.
 /// </summary>
 public sealed class BlockEntityScribeChalkboard : BlockEntityScribeWritingStation
 {
     protected override ScribeBackdropSpec PageBackdrop => ScribeBackdrops.ChalkboardPage;
 
-    /// <summary>The Chalkboard GUI background is 128×145 (aspect 145/128); the dialog is sized to it so
-    /// LibGUI's stretch-to-fill renders it distortion-free.</summary>
+    /// <summary>The Chalkboard GUI background is 128×145 (aspect 145/128); sizing the dialog to it keeps
+    /// LibGUI's stretch-to-fill distortion-free.</summary>
     protected override float PageAspect => 145f / 128f;
 
     protected override string DefaultDocumentTitleKey => "scribe:doctitle-chalkboard";
 
-    /// <summary>Selection-only box-tuning target: <see cref="
-    /// ScribeBoxTuning.HasCollisionBox"/> excludes <see cref="ScribeBoxTuningTarget.Chalkboard"/>, so
-    /// this only makes <c>RotatedSelectionBox</c> live-tunable — the board's collision stays fixed at
-    /// <c>null</c> (walk-through) regardless of the tuned selection slab.</summary>
+    /// <summary>Selection-only tuning target: <see cref="ScribeBoxTuning.HasCollisionBox"/> excludes the
+    /// Chalkboard, so only <c>RotatedSelectionBox</c> is live-tunable; collision stays <c>null</c> (walk-through).</summary>
     protected override ScribeBoxTuningTarget? TuningTarget => ScribeBoxTuningTarget.Chalkboard;
 
     protected override string MeshCacheKeyPrefix => "scribechalkboardmesh";
 
-    /// <summary>Cap the chalkboard at <see cref="ScribeDocumentPolicy.StandardMaxBlocks"/> task blocks,
-    /// enforced through the shared <see cref="ScribeDocumentPolicy.CanAdd"/> path the
-    /// wax tablet already uses. Deliberately NOT the <see cref="ScribeDocumentPolicy.Tablet"/> preset: that
-    /// also caps pins at 1, but the chalkboard is a shared placed block whose pins are per-player, so it
-    /// leaves <c>MaxPins</c> null (uncapped) and caps tasks only — the block cap itself is shared via the
-    /// same constant so raising it moves both surfaces together. Notes/text are not task blocks and so are
-    /// uncapped. The dialog surfaces the refusal via the <c>scribe:chalkboard-full</c> notice (see
-    /// <c>GuiDialogScribeChalkboard.TaskCapReachedLangKey</c>).</summary>
+    /// <summary>Caps the chalkboard at <see cref="ScribeDocumentPolicy.StandardMaxBlocks"/> task blocks via
+    /// <see cref="ScribeDocumentPolicy.CanAdd"/>. Deliberately NOT the <see cref="ScribeDocumentPolicy.Tablet"/>
+    /// preset: that also caps pins at 1, but chalkboard pins are per-player, so <c>MaxPins</c> stays null.
+    /// The dialog surfaces the refusal via <c>scribe:chalkboard-full</c>.</summary>
     protected override ScribeDocumentPolicy HostPolicy => new() { MaxBlocks = ScribeDocumentPolicy.StandardMaxBlocks };
 
     protected override ScribeDialogBase CreateDialog(ICoreClientAPI capi) =>
@@ -43,21 +35,11 @@ public sealed class BlockEntityScribeChalkboard : BlockEntityScribeWritingStatio
 
     /// <summary>
     /// Fixed facing from the <c>side</c> block variant. The board's authored front is SOUTH (+Z) at 0°;
-    /// <c>HorizontalAttachable</c> places the variant named for the ATTACH direction (into the wall), so the
-    /// front faces the OPPOSITE way — outward, toward the player who placed it. Front direction as a function
-    /// of the mesh angle θ is <c>(sinθ, cosθ)</c> in (X, Z): θ=0→+Z(south), 90→+X(east), 180→−Z(north),
-    /// 270→−X(west) — the same convention the base's player-facing placement uses. So each side maps to the
-    /// angle that turns +Z to face away from its wall:
-    /// <list type="bullet">
-    ///   <item>north (wall to the north / −Z) → face south (+Z) → 0°</item>
-    ///   <item>east  (wall to the east / +X) → face west  (−X) → 270°</item>
-    ///   <item>south (wall to the south / +Z) → face north (−Z) → 180°</item>
-    ///   <item>west  (wall to the west / −X) → face east  (+X) → 90°</item>
-    /// </list>
-    /// Note these are 180° from the vanilla painting's <c>rotateYByType</c> because our shape's authored front
-    /// is +Z (south) where vanilla painting art faces −Z (north). Computed from the variant directly (not the
-    /// shape's resolved <c>rotateY</c>) so it is independent of the JSON <c>rotateYByType</c>, which the
-    /// block-entity mesh path does not consult.
+    /// <c>HorizontalAttachable</c> names the variant for the ATTACH direction (into the wall), so the front
+    /// must face the opposite way, away from the wall. Front direction for mesh angle θ is
+    /// <c>(sinθ, cosθ)</c> in (X, Z): 0→+Z(south), 90→+X(east), 180→−Z(north), 270→−X(west).
+    /// Computed from the variant (not the shape's <c>rotateYByType</c>, which the block-entity mesh path
+    /// does not consult). 180° from vanilla paintings, whose art faces −Z.
     /// </summary>
     protected override float? WallMountAngleRad
     {
@@ -75,16 +57,13 @@ public sealed class BlockEntityScribeChalkboard : BlockEntityScribeWritingStatio
         }
     }
 
-    /// <summary>The Chalkboard's container proportions — the single place to refine how the wood-framed slate
-    /// art divides into the title band, side margins, tasks column, and bottom title/button bar. Starts from the
-    /// shared <see cref="ScribeLayoutProportions.Default"/> values; adjust a field
-    /// here (e.g. <c>Default with { SideColFrac = 0.14f }</c> to pull the tasks column in off the wood frame)
-    /// to reshape ONLY the Chalkboard dialog. See <see cref="ScribeLayout"/> for what each fraction drives.</summary>
+    /// <summary>The Chalkboard's layout proportions for its wood-framed slate art; adjust a field here
+    /// (e.g. <c>Default with { SideColFrac = 0.14f }</c>) to reshape ONLY this dialog. See
+    /// <see cref="ScribeLayout"/> for what each fraction drives.</summary>
     protected override ScribeLayoutProportions? LayoutProportions => ScribeLayoutProportions.Default with
     {
-        // TitleBarFrac/InnerHFrac are offset by the same 0.015 as the shared Default, keeping the
-        // Chalkboard's Read/Edit/Pinned tabs consistent with every other surface's Row 2 subtitle.
-        // TitleBarFrac + InnerHFrac sums to 0.90.
+        // TitleBarFrac/InnerHFrac carry the same 0.015 offset as the shared Default (they sum to 0.90),
+        // keeping the Read/Edit/Pinned tabs consistent with every other surface's Row 2 subtitle.
         TitleBarFrac   = 0.135f,  // top drag band height, as a fraction of window height
         InnerHFrac     = 0.765f,  // content region height (title band + tasks), fraction of window height
         SideColFrac    = 0.078f,  // EACH side margin/nav column width, fraction of window width

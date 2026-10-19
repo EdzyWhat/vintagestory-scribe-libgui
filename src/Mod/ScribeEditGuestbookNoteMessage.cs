@@ -2,11 +2,9 @@ using ProtoBuf;
 
 namespace Scribe;
 
-/// <summary>Client → server: update the note on the sender's own guestbook entry for this lectern.
-/// The server authorizes by matching the packet sender's display name to the entry's PlayerName, and
-/// addresses the specific entry by <see cref="InGameDate"/> — a player may have one entry per in-game
-/// day visited, so the date discriminator routes the edit to the intended day rather than the player's
-/// first entry. Addressed by <see cref="DocIdBytes"/>.</summary>
+/// <summary>Client -&gt; server: update the note on the sender's own guestbook entry. The server authorizes by matching the sender's
+/// display name to PlayerName and addresses the entry by <see cref="InGameDate"/> (one entry per in-game day visited).
+/// Addressed by <see cref="DocIdBytes"/>.</summary>
 [ProtoContract]
 public sealed class ScribeEditGuestbookNoteMessage
 {

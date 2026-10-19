@@ -9,24 +9,15 @@ namespace Scribe;
 
 /// <summary>
 /// The Inbox nav-button shimmer: a periodic highlight sweep across a nav button's icon while
-/// <see cref="Active"/> is true, following the Flutter shimmer-loading cookbook pattern —
-/// <see cref="ShaderMask"/> wrapping the icon, painted with a <see cref="LinearGradient"/>-built
-/// <see cref="SKShader"/> (built ONCE, not rebuilt every frame) whose visible position is animated
-/// purely by translating <see cref="ShaderMask.OffsetX"/> — <see cref="RenderShaderMask"/> draws an
-/// oversized rect and clips it to the button's bounds, so sliding the offset sweeps the same shader
-/// pattern fully across and back off both edges without ever regenerating gradient stops.
+/// <see cref="Active"/> is true. A <see cref="ShaderMask"/> wraps the icon with a <see cref="LinearGradient"/>
+/// <see cref="SKShader"/> built once; the sweep animates only <see cref="ShaderMask.OffsetX"/>, since
+/// <see cref="RenderShaderMask"/> draws an oversized rect clipped to the button's bounds.
 ///
-/// <para><see cref="SKBlendMode.SrcATop"/> recolors only pixels the child ALREADY painted (the icon
-/// glyph) toward the highlight, leaving the surrounding transparent box untouched — the same trick the
-/// cookbook's gradient overlay relies on.</para>
+/// <para><see cref="SKBlendMode.SrcATop"/> recolors only pixels the child already painted (the icon glyph).</para>
 ///
-/// <para>Driven by a plain <see cref="AnimationController"/> — the same primitive
-/// <c>ScribeRowSizeAnimation</c>/<c>ScribeAnimatedList</c> use — restarted from
-/// 0 on <see cref="AnimationStatus.Completed"/> to loop. Unlike those, this controller is owned locally
-/// by this widget's own <c>State</c>, not the shared <c>ScribeAnimationRegistry</c>: a row collapse/
-/// reveal's direction and end-state are meaningful and must survive a host <c>ForceRebuild</c> remount
-/// intact, but a shimmer is a purely decorative, perpetually-looping sweep — a remount simply
-/// restarts its phase from 0, which is imperceptible.</para>
+/// <para>Driven by an <see cref="AnimationController"/> restarted from 0 on <see cref="AnimationStatus.Completed"/>.
+/// The controller is owned by this widget's <c>State</c>, not the shared <c>ScribeAnimationRegistry</c>: a
+/// decorative looping sweep loses nothing when a <c>ForceRebuild</c> remount restarts its phase.</para>
 /// </summary>
 internal sealed class ScribeShimmerWrap : StatefulWidget
 {
@@ -46,14 +37,12 @@ internal sealed class ScribeShimmerWrap : StatefulWidget
 
 internal sealed class ScribeShimmerWrapState : State<ScribeShimmerWrap>
 {
-    /// <summary>One full sweep cycle.</summary>
     private static readonly TimeSpan SweepDuration = TimeSpan.FromMilliseconds(1600);
 
-    /// <summary>Gradient axis angle (degrees) — a slight diagonal, matching the typical shimmer look.</summary>
+    /// <summary>Gradient axis angle in degrees.</summary>
     private const float SweepAngleDeg = 20f;
 
-    /// <summary>How far beyond the button's own width the sweep travels each direction (as a multiple
-    /// of the button size), so the highlight band fully clears both edges before looping.</summary>
+    /// <summary>Sweep travel each direction, as a multiple of button size, so the band clears both edges.</summary>
     private const float TravelMargin = 1.2f;
 
     private AnimationController? controller;
@@ -92,8 +81,7 @@ internal sealed class ScribeShimmerWrapState : State<ScribeShimmerWrap>
 
     private void OnValueChanged(double _) => Element.MarkNeedsBuild();
 
-    // Restart from 0 (NOT a bare Forward()) — Forward() with _value already at 1.0 takes the
-    // already-Completed branch and re-fires OnStatusChanged synchronously, recursing forever.
+    // Restart from 0, not a bare Forward(): at value 1.0 that re-fires OnStatusChanged synchronously and recurses forever.
     private void OnStatusChanged(AnimationStatus status)
     {
         if (status == AnimationStatus.Completed) controller?.Forward(0.0);
@@ -113,9 +101,8 @@ internal sealed class ScribeShimmerWrapState : State<ScribeShimmerWrap>
                 .CreateShader(new Vector2(Widget.Size, Widget.Size));
         }
 
-        // t: 0→1 over one sweep. offsetX: +travel → -travel, so the highlight (centered on the shader's
-        // own local midpoint) enters from the right and exits to the left of the button's clip bounds
-        // (RenderShaderMask.Paint translates the canvas by -offsetX before drawing the shader rect).
+        // offsetX runs +travel → -travel, so the highlight enters from the right and exits left
+        // (RenderShaderMask.Paint translates the canvas by -offsetX).
         float t = (float)controller.Value;
         float travel = Widget.Size * TravelMargin;
         float offsetX = travel * (1f - 2f * t);

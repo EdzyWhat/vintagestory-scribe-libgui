@@ -4,22 +4,14 @@ namespace Scribe.Core;
 
 /// <summary>
 /// Server-side queue of <see cref="HistoryEntry"/> records that could not be written immediately
-/// because the document they belong to was evicted from its holder's inventory by something else
-/// during the same event dispatch (today, only the
-/// Death branch of <c>OnEntityDeath</c> enqueues here). Keyed by the target document's own
-/// <c>ScribeDocument.DocId</c>, never by player: a queued entry is written into the exact document
-/// it was queued against the next time that document is observed in a live carried slot, regardless
-/// of who is carrying it by then — never redirected to a different document.
+/// because their document was evicted from its holder's inventory during the same event dispatch
+/// (only the Death branch of <c>OnEntityDeath</c> enqueues here). Keyed by the target document's
+/// <c>ScribeDocument.DocId</c>, never by player: a queued entry is written into that exact document
+/// the next time it is seen in a live carried slot.
 ///
-/// No pruning: an entry for a document that is genuinely never seen again (destroyed, or lost in an
-/// unreachable corpse) persists indefinitely. This is deliberate: a count cap or age-based expiry
-/// would add bookkeeping for a path that is expected to be rare (it only engages when another mod
-/// wins the race), and a small unbounded set of tiny entries is an acceptable cost. Revisit if
-/// save-file growth ever shows otherwise.
-///
-/// Game-agnostic (pure BCL) so it's unit-testable without a game install; the Mod layer's
-/// <c>OnHistoryScanTick</c> calls <see cref="TakeAll"/> and owns this store's savegame persistence,
-/// mirroring <see cref="ScribePlayerLocationStore"/>'s pattern.
+/// No pruning: entries for a document never seen again persist, an accepted cost for a rare path.
+/// The Mod layer's <c>OnHistoryScanTick</c> calls <see cref="TakeAll"/> and owns persistence,
+/// mirroring <see cref="ScribePlayerLocationStore"/>.
 ///
 /// Accepted-version window (progressive reads — see docs/CODEC-MIGRATION.md):
 ///   Current : v2 — per-entry layout matches SHST v4 (schema + live fact fields)
@@ -35,8 +27,7 @@ public sealed class PendingHistoryStore
 {
     private readonly Dictionary<Guid, List<HistoryEntry>> _pending = new();
 
-    /// <summary>Queues <paramref name="entry"/> against <paramref name="docId"/>, appending to any
-    /// entries already queued for that document.</summary>
+    /// <summary>Queues <paramref name="entry"/> against <paramref name="docId"/>.</summary>
     public void Enqueue(Guid docId, HistoryEntry entry)
     {
         if (!_pending.TryGetValue(docId, out var list))
@@ -47,9 +38,8 @@ public sealed class PendingHistoryStore
         list.Add(entry);
     }
 
-    /// <summary>Removes and returns every entry queued against <paramref name="docId"/> (empty if
-    /// none). The caller is expected to write these into the document's own <see cref="HistoryStore"/>
-    /// immediately — nothing else re-reads a taken entry.</summary>
+    /// <summary>Removes and returns every entry queued against <paramref name="docId"/> (empty if none).
+    /// The caller must write them into the document's <see cref="HistoryStore"/> immediately.</summary>
     public List<HistoryEntry> TakeAll(Guid docId)
     {
         if (!_pending.TryGetValue(docId, out var list)) return new List<HistoryEntry>();
@@ -57,7 +47,7 @@ public sealed class PendingHistoryStore
         return list;
     }
 
-    /// <summary>Number of distinct documents with at least one queued entry. Test/diagnostic use.</summary>
+    /// <summary>Number of documents with queued entries (test/diagnostic).</summary>
     public int PendingDocumentCount => _pending.Count;
 
     // ---------------- Persistence ----------------
@@ -66,7 +56,6 @@ public sealed class PendingHistoryStore
     private const byte Version    = 2;
     private const byte MinVersion = 1;
 
-    /// <summary>Serializes every queued entry, for every document, for the savegame blob.</summary>
     public byte[] SerializeStore()
     {
         using var ms = new MemoryStream();
@@ -86,9 +75,8 @@ public sealed class PendingHistoryStore
         return ms.ToArray();
     }
 
-    /// <summary>Replaces the in-memory store from the persisted blob (called on world load). A
-    /// null/malformed blob leaves the store empty rather than throwing — a corrupt save degrades to
-    /// "no queued entries" instead of crashing the load.</summary>
+    /// <summary>Replaces the store from the persisted blob on world load; a null/malformed blob leaves
+    /// it empty rather than throwing.</summary>
     public void LoadFrom(byte[]? bytes)
     {
         _pending.Clear();
@@ -124,7 +112,7 @@ public sealed class PendingHistoryStore
         }
         catch (Exception ex) when (ex is EndOfStreamException or IOException or FormatException)
         {
-            // Malformed — leave the store empty.
+            // Malformed: leave the store empty.
             _pending.Clear();
         }
     }

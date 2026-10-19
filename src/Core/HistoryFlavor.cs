@@ -1,13 +1,11 @@
 namespace Scribe.Core;
 
-/// <summary>Pure remainder mapping from a stored flavor seed onto a viewer-locale pool. Game-agnostic
-/// so Core tests can prove a short pool never receives an out-of-range index without a VS install.</summary>
+/// <summary>Maps a stored flavor seed onto a viewer-locale pool by remainder.</summary>
 public static class HistoryFlavor
 {
-    /// <summary>Maps <paramref name="seed"/> into <c>[0, poolSize)</c> via
-    /// <c>abs(seed) % poolSize</c>. Returns 0 when <paramref name="poolSize"/> is less than 1
-    /// (empty viewer pool — the caller then uses a non-indexed fallback key rather than throwing).
-    /// Uses a <see cref="long"/> abs so <see cref="int.MinValue"/> does not overflow.</summary>
+    /// <summary>Maps <paramref name="seed"/> into <c>[0, poolSize)</c>; returns 0 for an empty pool (the
+    /// caller then uses a non-indexed fallback key). The <see cref="long"/> abs avoids
+    /// <see cref="int.MinValue"/> overflow.</summary>
     public static int Slot(int seed, int poolSize)
     {
         if (poolSize < 1) return 0;

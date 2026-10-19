@@ -3,10 +3,9 @@ using ProtoBuf;
 namespace Scribe;
 
 /// <summary>
-/// Server → single client: "a sealed Task Notice addressed to you was found nearby". Sent only to the one player whose scan just found a
-/// match — this is a player-specific ambient discovery cue, never broadcast. Carries a double-precision
-/// world position (not a <c>BlockPos</c>) since the found stack may be a dropped <c>EntityItem</c>
-/// sitting at a fractional position, not necessarily aligned to a block center.
+/// Server → single client: "a sealed Task Notice addressed to you was found nearby". Never broadcast.
+/// Carries a double-precision world position (not a <c>BlockPos</c>) since the stack may be a dropped
+/// <c>EntityItem</c> at a fractional position.
 /// </summary>
 [ProtoContract]
 public sealed class ScribeTaskNoticeProximityPingMessage

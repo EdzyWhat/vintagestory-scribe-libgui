@@ -36,10 +36,9 @@ public sealed class ScribeEditDocumentMessage
     public bool EditorMode { get; set; }
 
     /// <summary>
-    /// Server → client only: whether the requesting interaction was the quick-add gesture
-    /// (Shift+right-click). When true, the client — after entering the editor view — inserts a
-    /// fresh empty task at the top of the document and focuses its caret. Threaded through the open round-trip because the client dialog does not exist
-    /// yet at block-interaction time. Meaningless on a read-view reply or an edit submission.
+    /// Server -&gt; client only: whether the interaction was the quick-add gesture (Shift+right-click); the client then inserts a fresh
+    /// empty task at the top after entering the editor. Carried through the open round-trip because the dialog doesn't exist yet at
+    /// interaction time. Meaningless on a read-view reply or an edit submission.
     /// </summary>
     [ProtoMember(8)]
     public bool QuickAdd { get; set; }

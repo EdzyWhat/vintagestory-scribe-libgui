@@ -2,8 +2,7 @@ using Scribe.Core;
 
 namespace Scribe.Core.Tests;
 
-// Tests for the HUD display ordering: pin order, with completed (LastKnownDone) tasks sunk to the
-// bottom, each group keeping its relative order. Pure/game-agnostic.
+// Tests for HUD display ordering: pin order with completed tasks sunk to the bottom. Pure.
 public class ScribePinOrderingTests
 {
     private static ScribePinnedRef Pin(string text, bool done) => new()
@@ -278,9 +277,7 @@ public class ScribePinOrderingTests
     [Fact]
     public void Reorder_ParentWithChildren_MovingForwardOntoAnotherParentWithChildren_KeepsBothClustersIntact()
     {
-        // Dragging an EARLIER pinned parent (with its own pinned child) forward past a
-        // LATER pinned parent that ALSO has a pinned child must not wedge the dragged cluster between
-        // the target parent and its child -- both clusters must stay intact and contiguous.
+        // Dragging an earlier pinned parent past a later one that also has a child must keep both clusters contiguous.
         var parentA = Pin("parentA", done: false);
         var childA1 = Pin("childA1", done: false);
         childA1.Depth = 1;
@@ -316,8 +313,7 @@ public class ScribePinOrderingTests
     public void Reorder_CrossDepth_OtherDirection_Rejected()
     {
         var (doc, _, c1, _) = CraftFamily();
-        // The depth-1 pin sits at index 0, NOT immediately after "other" -- so it isn't swept into
-        // "other"'s cluster by adjacency (Cluster() is purely positional, like ScribeDocument.OwnedRun).
+        // The depth-1 pin sits at index 0, not after "other", so adjacency doesn't sweep it into "other"'s cluster (Cluster() is positional).
         var unrelatedChild = PinOn(doc, c1.Text, c1.TaskId, depth: 1);
         var other = Pin("other", done: false);
         var list = new List<ScribePinnedRef> { unrelatedChild, other };

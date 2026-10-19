@@ -5,31 +5,21 @@ using Vintagestory.API.Common;
 namespace Scribe;
 
 /// <summary>
-/// Mod-layer best-effort reconstruction for an imported document. Core's
-/// codecs are VS-API-free, so they produce blocks carrying only the parsed reference STRINGS — they can't tell
-/// whether a <c>tracker</c>/<c>link</c> code names a real item in THIS game. This validator runs on the client
-/// (which has the live registries) before the import is sent: an item-bound block whose reference resolves to a
-/// real collectible stays typed; one whose reference is blank, malformed, or unknown DEGRADES to a plain Task
-/// carrying the row's text (never abort — the loose-scratchpad tenet). The number of degradations is returned so
-/// the caller can report it ("Imported 12 tasks; 2 unknown items imported as plain tasks").
+/// Client-side check of an imported document against the live registries (Core's codecs only carry the parsed
+/// reference strings). An item-bound block whose reference is blank, malformed, or unknown degrades to a plain
+/// Task carrying the row's text; the import never aborts. The degrade count is returned for reporting.
 ///
-/// <para>Guide-page Links (<c>"page:"</c>-prefixed) are left typed without a resolve: enumerating every Handbook
-/// page to prove existence is expensive, and a dangling guide link degrades gracefully anyway — clicking it is a
-/// no-op (<see cref="ScribeItemRef.OpenHandbookPage"/>) rather than an error. Quest Links (<c>"quest:"</c>-prefixed)
-/// are exempted the same way: they carry no item to resolve and render from their own captured
-/// label/description regardless of whether the quest mod is installed.
-/// Only ITEM references are resolved.</para>
+/// <para>Guide-page (<c>"page:"</c>) and quest (<c>"quest:"</c>) Links are left typed without a resolve:
+/// proving a Handbook page exists is expensive, a dangling link is a no-op on click
+/// (<see cref="ScribeItemRef.OpenHandbookPage"/>), and quest links render from their own captured label.</para>
 /// </summary>
 internal static class ScribeImportValidator
 {
-    /// <summary>The outcome of validating a parsed import: the (possibly rewritten) document and how many
-    /// item-bound blocks were degraded to plain tasks.</summary>
+    /// <summary>The (possibly rewritten) document and how many item-bound blocks were degraded.</summary>
     public readonly record struct Result(ScribeDocument Document, int Degraded);
 
-    /// <summary>Validate every item-bound block in <paramref name="doc"/> against the running game, degrading
-    /// any unresolved reference to a plain Task in place. Returns the same document (mutated via
-    /// <see cref="ScribeDocument.ReplaceBlocks"/>) plus the degrade count. A null document validates to an empty
-    /// one with zero degradations.</summary>
+    /// <summary>Degrade unresolved item-bound blocks in <paramref name="doc"/> to plain Tasks in place
+    /// (via <see cref="ScribeDocument.ReplaceBlocks"/>). A null document yields an empty one.</summary>
     public static Result Validate(IWorldAccessor world, ScribeDocument? doc)
     {
         if (doc is null) return new Result(new ScribeDocument(), 0);
@@ -53,9 +43,8 @@ internal static class ScribeImportValidator
         return new Result(doc, degraded);
     }
 
-    /// <summary>True when an item-bound block's reference does not resolve to a real collectible in this game.
-    /// A Tracker's <see cref="ScribeBlock.TargetItemCode"/> and an ITEM Link's <see cref="ScribeBlock.LinkTarget"/>
-    /// are checked; a guide-page Link and every non-item kind (Task/Text) never degrade.</summary>
+    /// <summary>True when a Tracker's <see cref="ScribeBlock.TargetItemCode"/> or an item Link's
+    /// <see cref="ScribeBlock.LinkTarget"/> does not resolve in this game. Other kinds never degrade.</summary>
     private static bool ShouldDegrade(IWorldAccessor world, ScribeBlock block)
     {
         if (block.Kind == ScribeBlockKind.Tracker)
@@ -71,9 +60,8 @@ internal static class ScribeImportValidator
         return false; // Task / Text carry no game reference
     }
 
-    /// <summary>Rewrite an unresolved item-bound block as a plain Task, preserving its done state and depth and
-    /// carrying its best available label as the task text: the row's own text if any, otherwise the raw
-    /// reference code (so a hand-authored tracker row with a blank Text still reads as something).</summary>
+    /// <summary>Rewrite as a plain Task keeping done state and depth; text falls back to the raw reference
+    /// code when the row's text is blank.</summary>
     private static ScribeBlock Degrade(ScribeBlock block)
     {
         string text = !string.IsNullOrEmpty(block.Text)

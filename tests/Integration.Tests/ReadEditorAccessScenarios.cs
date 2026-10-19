@@ -6,14 +6,11 @@ using Scribe.Core;
 namespace Integration.Tests;
 
 /// <summary>
-/// Read access is always granted and never touches the
-/// editor lock; the mid-session toggle (<see cref="BlockEntityScribeLectern.OnRequestAccess"/>)
-/// makes the same grant/refuse decision as the initial right-click
-/// (<see cref="BlockEntityScribeLectern.OnRightClick"/>), since both funnel into the same
-/// shared <c>RequestAccess</c> helper. Lock state is only observable indirectly through
-/// <see cref="BlockEntityScribeLectern.ApplyEdit"/>'s return value (whether a given player is
-/// currently the lock holder), matching the pattern already used by
-/// <see cref="SingleEditorLockScenarios"/>.
+/// Read access is always granted and never touches the editor lock; the mid-session toggle
+/// (<see cref="BlockEntityScribeLectern.OnRequestAccess"/>) makes the same grant/refuse decision as the initial
+/// right-click (<see cref="BlockEntityScribeLectern.OnRightClick"/>), since both use the shared <c>RequestAccess</c>
+/// helper. Lock state is observable only via <see cref="BlockEntityScribeLectern.ApplyEdit"/>'s return value, as
+/// in <see cref="SingleEditorLockScenarios"/>.
 /// </summary>
 public class ReadEditorAccessScenarios : AtlasScenarioBase
 {
@@ -31,8 +28,7 @@ public class ReadEditorAccessScenarios : AtlasScenarioBase
 
         lectern!.OnRightClick(holder.Player, wantEditor: true, quickAdd: false); // holder acquires the lock
 
-        // A plain (non-editor) request from the bystander must not throw and must not disturb
-        // the existing lock -- read access never checks or touches lockHolderUid.
+        // A plain request from the bystander must not throw or disturb the lock.
         lectern.OnRequestAccess(reader.Player, wantEditor: false, quickAdd: false);
 
         var holderEdit = new ScribeDocument();
@@ -55,8 +51,7 @@ public class ReadEditorAccessScenarios : AtlasScenarioBase
         var lectern = World.BlockEntityAt<BlockEntityScribeLectern>(pos);
         Assert.NotNull(lectern);
 
-        // The in-GUI toggle entry point, not the initial right-click -- OnRequestAccess must
-        // make the identical grant decision since both share the RequestAccess helper.
+        // The in-GUI toggle entry point must make the same grant decision as the right-click.
         lectern!.OnRequestAccess(player.Player, wantEditor: true, quickAdd: false);
 
         var doc = new ScribeDocument();
@@ -102,9 +97,8 @@ public class ReadEditorAccessScenarios : AtlasScenarioBase
 
         lectern!.OnRightClick(holder.Player, wantEditor: true, quickAdd: false);
 
-        // Simulates the holder clicking "Done Editing" in the GUI: only ReleaseLock (sent
-        // separately, on dialog close/mode-exit) frees the lock -- a plain read request must
-        // not have that side effect on its own.
+        // Simulates "Done Editing": only ReleaseLock (sent on dialog close/mode-exit) frees the lock, not a
+        // plain read request.
         lectern.OnRequestAccess(holder.Player, wantEditor: false, quickAdd: false);
 
         lectern.OnRequestAccess(second.Player, wantEditor: true, quickAdd: false); // must still be refused

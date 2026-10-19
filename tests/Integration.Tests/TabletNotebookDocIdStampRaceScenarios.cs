@@ -8,17 +8,12 @@ using Vintagestory.API.Datastructures;
 namespace Integration.Tests;
 
 /// <summary>
-/// Regression coverage for a race where a task in the clay tablet is lost when the interface is
-/// closed and re-opened while the pinned task remains. Two independent server-side
-/// paths stamp a fresh, uncoordinated <c>DocId</c> onto a documentless stack: (1)
-/// <see cref="NotebookHost"/>'s constructor writing a placeholder document as a side effect of being
-/// constructed, and (2) <c>RecordPickedUpIfNew</c>'s one-time PickedUp-history bookkeeping flushing
-/// the document as a side effect of recording history it never touched. Both are reachable from
-/// <c>OnHistoryScanTick</c> — a background sweep firing every ~10s for every online player,
-/// independent of anything the player is doing — racing the player's OWN client, which mints its own
-/// DocId when it opens the same fresh item. Whichever side stamps first "wins"; the loser's client
-/// then has every save silently refused by <see cref="ScribeModSystem.OnServerReceivedNotebookSave"/>'s
-/// DocId-mismatch guard, with no error surfaced back to the player.
+/// Regression coverage for a race that lost a clay-tablet task when the interface was closed and
+/// re-opened while the task stayed pinned. Two server paths stamp an uncoordinated <c>DocId</c> onto a
+/// documentless stack: <see cref="NotebookHost"/>'s constructor, and <c>RecordPickedUpIfNew</c>'s history
+/// flush. Both run from the periodic <c>OnHistoryScanTick</c> sweep, racing the client's own minted DocId;
+/// the loser's saves are then silently refused by <see cref="ScribeModSystem.OnServerReceivedNotebookSave"/>'s
+/// DocId-mismatch guard.
 /// </summary>
 public class TabletNotebookDocIdStampRaceScenarios : AtlasScenarioBase
 {
@@ -71,8 +66,7 @@ public class TabletNotebookDocIdStampRaceScenarios : AtlasScenarioBase
 
         Mod.OnHistoryScanTick(0f);
 
-        // The sweep still visited and recorded on this stack (proving it isn't skipped just because
-        // it has no document; the sweep itself is not guarded)...
+        // The sweep still visits and records on this documentless stack (it isn't guarded)...
         var history = HistoryStore.Deserialize(slot.Itemstack!.Attributes.GetBytes("scribeHistory"));
         Assert.Contains(history.Entries, e => e.Kind == HistoryEventKind.PickedUp && e.ActorName == player.Player.PlayerName);
         // ...but recording that entry did not stamp a document as a side effect.
@@ -98,11 +92,9 @@ public class TabletNotebookDocIdStampRaceScenarios : AtlasScenarioBase
     {
         var (player, slot) = await SeedDocumentlessItem("RaceFixed1", "scribenotebook");
 
-        // The exact confirmed sequence from the reporter's log: the player opens a brand-new,
-        // documentless notebook (constructing a NotebookHost -- this writes nothing),
-        // the ambient sweep fires in the same window and records this player's PickedUp entry (this
-        // writes only history, not a document either), and only THEN does the
-        // player's own client flush its first edit under a DocId it minted itself when it opened.
+        // Confirmed sequence from the reporter's log: the player opens a brand-new documentless notebook
+        // (NotebookHost writes nothing), the ambient sweep records PickedUp (history only), and only THEN
+        // the player's client flushes its first edit under a DocId it minted when it opened.
         var clientDoc = new ScribeDocument();
         clientDoc.AddTask("Find copper");
         var clientDocId = clientDoc.DocId;

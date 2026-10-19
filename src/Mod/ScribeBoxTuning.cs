@@ -4,23 +4,18 @@ using Vintagestory.API.MathTools;
 namespace Scribe;
 
 /// <summary>
-/// DEV-ONLY live-tuning knobs for the 5 Scribe writing-station box targets (5 targets):
-/// the Inbox block's ground placement, its wall-mounted placement, the Scriptorium, the Assignment
-/// Desk, and the Chalkboard. A tiny client-local JSON bag (persisted to
-/// <c>ScribeModSystem.BoxTuningConfigFileName</c>) mirroring <see cref="ScribeGearTuning"/>'s style, so
-/// the author can nudge a block's collision/selection box live from the <c>.boxtune</c> window instead
-/// of edit JSON → rebuild → relaunch. Defaults below are values baked back from a <c>.boxtune</c>
-/// session (Inbox and Inbox-Wall differ; see each block's comment for how far the blocktype JSON itself
-/// mirrors these). The Chalkboard's fields are selection-only — see
-/// <see cref="HasCollisionBox"/>.
+/// DEV-ONLY live-tuning knobs for the 5 writing-station box targets (Inbox ground, Inbox wall, Scriptorium,
+/// Assignment Desk, Chalkboard). A client-local JSON bag persisted to
+/// <c>ScribeModSystem.BoxTuningConfigFileName</c>, mirroring <see cref="ScribeGearTuning"/>, edited live from
+/// the <c>.boxtune</c> window. Defaults are values baked back from a <c>.boxtune</c> session. The Chalkboard's
+/// fields are selection-only (see <see cref="HasCollisionBox"/>).
 ///
-/// <para>Not part of the real data model — this is a throwaway tuning aid, so it lives in the Mod layer
-/// (not Core) and has no unit tests. When a target's box is finalized, fold the chosen numbers back into
-/// its blocktype JSON.</para>
+/// <para>A throwaway tuning aid, so it lives in the Mod layer with no unit tests; finalized numbers belong in
+/// the blocktype JSON.</para>
 /// </summary>
 public sealed class ScribeBoxTuning
 {
-    // ── Inbox (ground) — defaults baked in from .boxtune, mirrored in inbox.json ────────────
+    // Inbox (ground); mirrored in inbox.json
     public float InboxX1 { get; set; } = 0.21f;
     public float InboxY1 { get; set; } = 0f;
     public float InboxZ1 { get; set; } = 0.28f;
@@ -28,8 +23,7 @@ public sealed class ScribeBoxTuning
     public float InboxY2 { get; set; } = 0.8f;
     public float InboxZ2 { get; set; } = 0.7f;
 
-    // ── Inbox (wall-mounted) — defaults baked in from .boxtune; differs from the ground Inbox
-    // (inbox.json's own collisionbox/selectionbox ships the ground box only — see its comment) ─
+    // Inbox (wall-mounted); inbox.json ships the ground box only
     public float InboxWallX1 { get; set; } = 0.21f;
     public float InboxWallY1 { get; set; } = 0.06f;
     public float InboxWallZ1 { get; set; } = 0f;
@@ -37,7 +31,7 @@ public sealed class ScribeBoxTuning
     public float InboxWallY2 { get; set; } = 0.84f;
     public float InboxWallZ2 { get; set; } = 0.4f;
 
-    // ── Scriptorium — defaults baked in from .boxtune, mirrored in scriptorium.json ─────────
+    // Scriptorium; mirrored in scriptorium.json
     public float ScriptoriumX1 { get; set; } = 0f;
     public float ScriptoriumY1 { get; set; } = 0f;
     public float ScriptoriumZ1 { get; set; } = 0f;
@@ -45,7 +39,7 @@ public sealed class ScribeBoxTuning
     public float ScriptoriumY2 { get; set; } = 1.2f;
     public float ScriptoriumZ2 { get; set; } = 1f;
 
-    // ── Assignment Desk — defaults baked in from .boxtune, mirrored in assignmentdesk.json ──
+    // Assignment Desk; mirrored in assignmentdesk.json
     public float AssignmentDeskX1 { get; set; } = 0f;
     public float AssignmentDeskY1 { get; set; } = 0f;
     public float AssignmentDeskZ1 { get; set; } = 0f;
@@ -53,9 +47,7 @@ public sealed class ScribeBoxTuning
     public float AssignmentDeskY2 { get; set; } = 1f;
     public float AssignmentDeskZ2 { get; set; } = 0.875f;
 
-    // ── Chalkboard — SELECTION ONLY (see HasCollisionBox); defaults baked in from .boxtune,
-    // mirrored in chalkboard.json's selectionbox. The block's collisionbox is
-    // null and stays null at every tuned value ─────────────────────────────────────────────────
+    // Chalkboard: selection only (see HasCollisionBox); mirrored in chalkboard.json
     public float ChalkboardX1 { get; set; } = 0.125f;
     public float ChalkboardY1 { get; set; } = 0.05f;
     public float ChalkboardZ1 { get; set; } = 0f;
@@ -69,8 +61,7 @@ public sealed class ScribeBoxTuning
 
     public static float ClampAxis(float v) => Math.Clamp(v, MinAxis, MaxAxis);
 
-    /// <summary>Clamp every one of the 30 axis values to <c>[0, 2]</c> in place (hand-edited JSON guard).
-    /// Returns this for chaining, mirroring <see cref="ScribeGearTuning.Normalized"/>.</summary>
+    /// <summary>Clamps all 30 axis values to <c>[0, 2]</c> in place (guards hand-edited JSON) and returns this.</summary>
     public ScribeBoxTuning Normalized()
     {
         InboxX1 = ClampAxis(InboxX1);
@@ -111,10 +102,8 @@ public sealed class ScribeBoxTuning
         return this;
     }
 
-    /// <summary>Builds the <see cref="Cuboidf"/> for a given target from its 6 matching properties. The
-    /// same box is used for both collision and selection for every target except <see cref="
-    /// ScribeBoxTuningTarget.Chalkboard"/> (each target has 6 fields, not 12, with Chalkboard as the
-    /// sole carve-out gated by <see cref="HasCollisionBox"/> instead of a second set of fields).</summary>
+    /// <summary>Builds the <see cref="Cuboidf"/> for a target from its 6 properties. Used for both collision and
+    /// selection; <see cref="HasCollisionBox"/> carves out the Chalkboard instead of a second set of fields.</summary>
     public Cuboidf CollisionBoxFor(ScribeBoxTuningTarget target) => target switch
     {
         ScribeBoxTuningTarget.Inbox => new Cuboidf(InboxX1, InboxY1, InboxZ1, InboxX2, InboxY2, InboxZ2),
@@ -125,12 +114,8 @@ public sealed class ScribeBoxTuning
         _ => throw new ArgumentOutOfRangeException(nameof(target), target, null),
     };
 
-    /// <summary>True for every target except <see cref="ScribeBoxTuningTarget.Chalkboard"/>: whether
-    /// <see cref="CollisionBoxFor"/>'s value for this target should be surfaced as a COLLISION box at
-    /// all. The Chalkboard ships with no collision box (painting-style, walk-through) and stays that
-    /// way regardless of its tuned axes — only its selection box (<see cref="CollisionBoxFor"/>, read
-    /// unconditionally by <c>RotatedSelectionBox</c>) is tunable. Consulted by
-    /// <see cref="BlockEntityScribeWritingStation.RotatedBox"/> so this stays a one-target carve-out
-    /// instead of a second box-resolution path.</summary>
+    /// <summary>False only for <see cref="ScribeBoxTuningTarget.Chalkboard"/>, which has no collision box
+    /// (walk-through) regardless of its tuned axes; only its selection box is tunable. Consulted by
+    /// <see cref="BlockEntityScribeWritingStation.RotatedBox"/>.</summary>
     public static bool HasCollisionBox(ScribeBoxTuningTarget target) => target != ScribeBoxTuningTarget.Chalkboard;
 }

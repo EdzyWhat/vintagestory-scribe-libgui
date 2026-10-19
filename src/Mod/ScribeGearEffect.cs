@@ -8,29 +8,18 @@ namespace Scribe;
 
 /// <summary>
 /// A transparent single-child wrapper that repaints its child (a rotated gear texture) as a solid-colour
-/// SILHOUETTE — every non-transparent pixel replaced by <paramref name="tint"/>, the gear's own alpha shape
-/// preserved — and optionally BLURRED. Used by the Timer-tab gearworks for two cheap 3D effects:
+/// SILHOUETTE (every non-transparent pixel becomes <paramref name="tint"/>, alpha shape preserved), optionally
+/// BLURRED. Used for the Timer-tab gearworks' cast shadow and the temporal gear's emissive glow; unlike
+/// <c>BoxStyle.BoxShadows</c> it follows the gear outline rather than the square box.
 ///
-/// <list type="bullet">
-/// <item><b>Cast shadow</b> — a dark, slightly-blurred silhouette drawn offset beneath each gear, so the
-/// round/toothed outline reads as a real shadow (unlike <c>BoxStyle.BoxShadows</c>, which would shadow the
-/// square box rect, not the gear silhouette).</item>
-/// <item><b>Emissive glow</b> — a teal, wider-blurred silhouette drawn behind the ONE temporal gear, the
-/// Skia-halo approach the mod already uses for cuneiform ink (CuneiformGlow), applied here to that gear
-/// alone.</item>
-/// </list>
+/// <para><b>How.</b> LibGUI's <c>DrawMaskedBox</c> draws with the shared paint but does NOT set its
+/// <c>ColorFilter</c> or <c>ImageFilter</c>. So those are set on the shared paint just before the child paints
+/// and restored after: a <c>SrcIn</c> blend colour-filter recolours the bitmap while keeping its alpha, and an
+/// optional blur image-filter softens it. The child's rotation is a canvas transform, so the silhouette rotates
+/// in lock-step.</para>
 ///
-/// <para><b>How.</b> LibGUI's textured-box paint (<c>DrawMaskedBox</c>) does <c>DrawBitmap(texture,
-/// SharedPaint)</c> and touches only <c>FilterQuality</c> — it does NOT set the paint's <c>ColorFilter</c> or
-/// <c>ImageFilter</c>. So we set those on the shared paint immediately before the child paints and restore
-/// them after: a <c>SrcIn</c> blend colour-filter recolours the drawn bitmap to <paramref name="tint"/> while
-/// keeping its alpha (the standard tint-to-solid recipe), and an optional blur image-filter softens it. The
-/// child's <c>AnimatedRotation</c> is a canvas transform, so the silhouette rotates in lock-step with the
-/// gear.</para>
-///
-/// <para><b>Filter lifetime.</b> Both filter kinds are cached by their parameters and NEVER disposed
-/// per-frame — the same discipline as <see cref="CuneiformGlowMask"/> (disposing a filter mid-record corrupts
-/// the recording canvas). Only a handful of distinct tints/sigmas ever exist, so the caches stay tiny.</para>
+/// <para><b>Filter lifetime.</b> Filters are cached by parameters and NEVER disposed per-frame (as in
+/// <see cref="CuneiformGlowMask"/>; disposing a filter mid-record corrupts the recording canvas).</para>
 /// </summary>
 internal sealed class ScribeGearEffect : SingleChildWidget
 {
@@ -48,9 +37,8 @@ internal sealed class ScribeGearEffect : SingleChildWidget
     public override void UpdateRenderObject(RenderObject renderObject)
         => ((GearEffectRender)renderObject).Configure(tint, blurSigma);
 
-    /// <summary>Cached <c>SrcIn</c> tint colour-filters keyed by ARGB. <c>Blend(color, SrcIn)</c> yields
-    /// <c>color.rgb</c> with <c>alpha = color.a × sourceAlpha</c> — a solid-colour silhouette following the
-    /// bitmap's own shape. Never disposed (see class remarks).</summary>
+    /// <summary>Cached <c>SrcIn</c> tint colour-filters keyed by ARGB: a solid-colour silhouette following the
+    /// bitmap's own alpha. Never disposed.</summary>
     private static readonly Dictionary<uint, SKColorFilter> TintCache = new();
 
     /// <summary>Cached Gaussian blur image-filters keyed by sigma (rounded). Never disposed.</summary>
@@ -91,8 +79,8 @@ internal sealed class ScribeGearEffect : SingleChildWidget
             var prevColorFilter = paint.ColorFilter;
             var prevImageFilter = paint.ImageFilter;
 
-            // Opaque white so the texture's DrawBitmap isn't alpha-modulated by a stale color (the DrawMaskedBox
-            // leak — see ScribeResetPaintColor); the tint/alpha of the effect come from the color filter.
+            // Opaque white so the texture isn't alpha-modulated by a stale color (the DrawMaskedBox leak; see
+            // ScribeResetPaintColor); the effect's tint/alpha come from the color filter.
             paint.Color = SKColors.White;
             paint.ColorFilter = TintFilter(tint);
             paint.ImageFilter = BlurFilter(blurSigma);

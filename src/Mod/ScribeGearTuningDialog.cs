@@ -16,15 +16,13 @@ using Vintagestory.API.Client;
 namespace Scribe;
 
 /// <summary>
-/// DEV-ONLY live-tuning window for the Timer-tab gearworks layout.
-/// A near-clone of <see cref="ScribeSettingsDialog"/>: a small draggable window hosting
-/// <see cref="ScribeNumericField"/>s that write straight through <see cref="ScribeModSystem.UpdateGearTuning"/>
-/// (which persists + raises <c>GearTuningChanged</c>), so nudging a number re-lays-out an open Clockmaker's
-/// Notebook Timer tab instantly — no rebuild/relaunch. Opened by the <c>.geartune</c> client command.
+/// DEV-ONLY live-tuning window for the Timer-tab gearworks layout, opened by the <c>.geartune</c> client command.
+/// A near-clone of <see cref="ScribeSettingsDialog"/>: <see cref="ScribeNumericField"/>s write through
+/// <see cref="ScribeModSystem.UpdateGearTuning"/> (which persists + raises <c>GearTuningChanged</c>), so an open
+/// Timer tab re-lays-out instantly.
 ///
-/// <para>Throwaway aid, not shipped UI: when the layout is finalized, fold the chosen numbers back into the
-/// <c>ScribeGearworks.Build</c> constants and delete this file, <see cref="ScribeGearTuning"/>, and the
-/// command. Deliberately NOT localized (raw English labels) for the same reason.</para>
+/// <para>Throwaway aid: when the layout is finalized, fold the numbers back into <c>ScribeGearworks.Build</c>
+/// and delete this file, <see cref="ScribeGearTuning"/>, and the command. Deliberately NOT localized.</para>
 /// </summary>
 public sealed class ScribeGearTuningDialog : GuiBase
 {
@@ -40,8 +38,7 @@ public sealed class ScribeGearTuningDialog : GuiBase
 
     public override string DialogCode => "scribegeartune";
 
-    /// <summary>Match <see cref="ScribeDialogBase.DrawOrder"/>'s 0.2 band so this stays on top of the
-    /// Clockmaker's Notebook it tunes live.</summary>
+    /// <summary>Matches <see cref="ScribeDialogBase.DrawOrder"/>'s 0.2 band so it stays above the Notebook it tunes.</summary>
     public override double DrawOrder => 0.2;
 
     protected override WindowConfig CreateWindowConfig() => new()
@@ -168,12 +165,10 @@ public sealed class ScribeGearTuningDialog : GuiBase
                     { AutoHide = false }))));
     }
 
-    /// <summary>A labeled float field: caption over a <see cref="ScribeNumericField"/>. Mirrors the settings
-    /// form's uncontrolled-field + <see cref="ValueKey"/> remount pattern so a blur-clamp settles the field
-    /// onto the persisted value; focus survives the write-through rebuild via the shared focus registry.
-    /// Keyed off the value ×100 (rounded) so the remount fires on any committed change, including the
-    /// sub-integer 0.05 scale steps (a bare int-round would collide 1.00 and 1.05 onto the same key and the
-    /// +/- buttons wouldn't visibly update).</summary>
+    /// <summary>A labeled float field: caption over a <see cref="ScribeNumericField"/>, using the settings form's
+    /// uncontrolled-field + <see cref="ValueKey"/> remount pattern so a blur-clamp settles onto the persisted
+    /// value; focus survives the rebuild via the shared focus registry. The key is value ×100 (rounded) so the
+    /// sub-integer 0.05 scale steps still remount (an int-round would collide 1.00 and 1.05).</summary>
     private Widget Field(string caption, ColorScheme colors, float value, float step, string id,
         Action<float> onChanged, Func<float, float> clamp)
     {

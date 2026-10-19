@@ -2,9 +2,7 @@ using Scribe.Core;
 
 namespace Scribe.Core.Tests;
 
-// Tests for the fixed-column TSV export/import lane. Mirrors the WHEN/THEN scenarios in the
-// scriptorium-import-export spec: fixed columns, title-as-row, integer Depth, comma-packed Special,
-// row-position sequence, loose/tolerant import, and escaping.
+// Tests for the fixed-column TSV export/import lane (scriptorium-import-export spec).
 public class ScribeDocumentTsvCodecTests
 {
     private static ScribeDocument SampleDocument()
@@ -52,8 +50,7 @@ public class ScribeDocumentTsvCodecTests
         Assert.Equal("page:craftinginfo-knapping", guideLink.LinkTarget);
         Assert.Equal("Knapping", guideLink.LinkLabel);
 
-        // The quest Link's title round-trips via the Text column (like a guide link); its LinkDescription
-        // has no column in this fixed-width format and does not round-trip (see TextFor's doc comment).
+        // The quest Link's title round-trips via the Text column; LinkDescription has no column and does not round-trip.
         var questLink = restored.Blocks[5];
         Assert.Equal("quest:vsquest/vsquest:quest-freeghost", questLink.LinkTarget);
         Assert.Equal("Free the Ghost", questLink.LinkLabel);

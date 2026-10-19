@@ -2,9 +2,6 @@ using Scribe.Core;
 
 namespace Scribe.Core.Tests;
 
-// Tests for the author-drawn, non-linear brightness response curve. Pin the
-// exact control points the user plotted, the piecewise-linear interpolation between them, the floor
-// semantics (x=0 anchor + monotonic lift), and the clamping of out-of-range inputs. Pure/game-agnostic.
 public class ScribeBrightnessCurveTests
 {
     private const float Floor = ScribePlayerSettings.DefaultIlluminationFloor; // 0.05 (the shipped floor)
@@ -29,7 +26,6 @@ public class ScribeBrightnessCurveTests
     [Fact]
     public void BrightKnee_MapsToFull()
     {
-        // Full GUI brightness is reached at input 0.90 (a bright-but-not-noon source), not only at noon.
         Assert.Equal(1.0f, ScribeBrightnessCurve.Evaluate(0.90f, Floor), 4);
     }
 
@@ -45,7 +41,6 @@ public class ScribeBrightnessCurveTests
     [Fact]
     public void BelowFirstPoint_InterpolatesFromFloor()
     {
-        // Halfway (x=0.225) between the floor anchor (0, 0.05) and the first point (0.45, 0.53).
         float expected = Floor + (0.53f - Floor) * 0.5f;
         Assert.Equal(expected, ScribeBrightnessCurve.Evaluate(0.225f, Floor), 4);
     }
@@ -53,17 +48,12 @@ public class ScribeBrightnessCurveTests
     [Fact]
     public void MidRange_OutputExceedsInput()
     {
-        // The whole point of the custom curve: for a given amount of local light the GUI is a touch brighter
-        // than a straight linear mapping — at input 0.45 the output (0.53) exceeds it. (On the author's
-        // transposed axes this is the pencil curve below-right of the red identity line, never crossing it.)
         Assert.True(ScribeBrightnessCurve.Evaluate(0.45f, Floor) > 0.45f);
     }
 
     [Fact]
     public void ReachesFullOnlyAtTop()
     {
-        // The curve reaches full brightness at x=0.90 and holds it through noon; just below the knee it is
-        // still under full (the mid ramp, not an early plateau).
         Assert.Equal(1.0f, ScribeBrightnessCurve.Evaluate(0.90f, Floor), 4);
         Assert.Equal(1.0f, ScribeBrightnessCurve.Evaluate(1.0f, Floor), 4);
         Assert.True(ScribeBrightnessCurve.Evaluate(0.80f, Floor) < 1.0f);
