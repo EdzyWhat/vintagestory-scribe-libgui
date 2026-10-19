@@ -5,7 +5,7 @@ using Scribe;
 namespace Integration.Tests;
 
 /// <summary>
-/// persist-known-players-for-assignment tasks.md 3.2/4.3: proves the server-side registry every
+/// Proves the server-side registry every
 /// online client's known-players sync gets broadcast from — <see cref="ScribeModSystem.OnPlayerNowPlaying"/>
 /// upserting a joining player, and an already-known player staying in the registry once a second
 /// player joins (the same snapshot <c>BroadcastKnownPlayers</c> would push to both). Atlas does not

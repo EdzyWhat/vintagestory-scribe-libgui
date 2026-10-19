@@ -7,11 +7,10 @@ using Vintagestory.API.Common;
 namespace Integration.Tests;
 
 /// <summary>
-/// fix-assignment-completion-doc-resolution: completing a pinned Accepted-assignment task must
+/// Completing a pinned Accepted-assignment task must
 /// derive Completed on the canonical <see cref="ScribeAssignmentStore"/> record even when the
-/// task's owning Notebook is not currently in the completing player's inventory (previously this
-/// silently never happened, since the derivation only ran inside <c>CompleteTaskForPlayer</c>'s
-/// resolved-document branch). Exercises the real production path
+/// task's owning Notebook is not currently in the completing player's inventory (the derivation
+/// must not depend on <c>CompleteTaskForPlayer</c>'s resolved-document branch). Exercises the real production path
 /// (<see cref="ScribeModSystem.CompleteTaskForPlayer"/>) the same way <see cref="PinScenarios"/>
 /// and <see cref="NoticeLifecycleScenarios"/> do.
 /// </summary>

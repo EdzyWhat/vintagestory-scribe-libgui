@@ -7,11 +7,10 @@ using Vintagestory.API.Common;
 namespace Integration.Tests;
 
 /// <summary>
-/// fix-death-history-inventory-race tasks 3.2, 4.1, 4.2, 5.1-5.4, 1.5: regression coverage for the
-/// Death-recording fallback added to <c>ScribeModSystem.History.cs</c> — when a competing mod's own
+/// Coverage for the Death-recording fallback in <c>ScribeModSystem.History.cs</c> — when a competing mod's own
 /// <c>OnEntityDeath</c> handler evicts a carried Notebook before Scribe's live scan runs, the Death
 /// entry is queued against that document's own id (via <see cref="ScribeModSystem.PendingHistoryStore"/>)
-/// instead of dropped, and flushed by <c>OnHistoryScanTick</c> the next time that document is seen in
+/// rather than dropped, and flushed by <c>OnHistoryScanTick</c> the next time that document is seen in
 /// a live carried slot — in its correct chronological position, per document id, regardless of who
 /// ends up carrying it.
 ///
@@ -51,7 +50,7 @@ public class HistoryInventoryRaceScenarios : AtlasScenarioBase
         await player.GiveItem(NotebookCode);
         var slot = player.Player.InventoryManager.ActiveHotbarSlot;
         var seed = new NotebookHost(slot);
-        seed.Flush(); // persist a real document so its DocId is stable across later re-reads (fix-tablet-notebook-docid-stamp-race: construction alone no longer stamps one)
+        seed.Flush(); // persist a real document so its DocId is stable across later re-reads (construction alone does not stamp one)
         var docId = seed.Document.DocId;
 
         var mod = Mod;
@@ -152,7 +151,7 @@ public class HistoryInventoryRaceScenarios : AtlasScenarioBase
         await original.GiveItem(NotebookCode);
         var originalSlot = original.Player.InventoryManager.ActiveHotbarSlot;
         var seed = new NotebookHost(originalSlot);
-        seed.Flush(); // persist a real document so its DocId is stable across later re-reads (fix-tablet-notebook-docid-stamp-race: construction alone no longer stamps one)
+        seed.Flush(); // persist a real document so its DocId is stable across later re-reads (construction alone does not stamp one)
         var docId = seed.Document.DocId;
         var stack = originalSlot.Itemstack!;
         originalSlot.Itemstack = null;
@@ -201,7 +200,7 @@ public class HistoryInventoryRaceScenarios : AtlasScenarioBase
         await victim.GiveItem(NotebookCode);
         var slot = victim.Player.InventoryManager.ActiveHotbarSlot;
         var host = new NotebookHost(slot);
-        host.Flush(); // persist a real document so its DocId is stable across later re-reads (fix-tablet-notebook-docid-stamp-race: construction alone no longer stamps one)
+        host.Flush(); // persist a real document so its DocId is stable across later re-reads (construction alone does not stamp one)
         var docId = host.Document.DocId;
 
         // Entries recorded (directly, for determinism) both chronologically before and after the

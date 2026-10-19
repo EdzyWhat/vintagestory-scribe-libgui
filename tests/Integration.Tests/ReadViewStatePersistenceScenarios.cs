@@ -8,7 +8,7 @@ using Vintagestory.API.Datastructures;
 namespace Integration.Tests;
 
 /// <summary>
-/// read-view-filter-and-collapse tasks 4.1/4.2/7.1: the Read View filter pill + subtask-group
+/// The Read View filter pill + subtask-group
 /// collapse set persist per Scribe item/block instance. RollbackWorld (not a fixture) is enough
 /// here — mirroring <see cref="ServerAuthoritativeEditScenarios"/> — because each scenario proves
 /// the wire-format round trip itself (tree attributes for the block host, ItemStack attributes for
@@ -74,8 +74,8 @@ public class ReadViewStatePersistenceScenarios : AtlasScenarioBase
 
         // Seed a real, persisted document (and its DocId) on the stack the way a first save would —
         // the server-side inventory scan (TryResolveDocHost) can only match a DocId that already
-        // exists on the stack's attributes. Constructing a NotebookHost alone no longer persists
-        // anything (fix-tablet-notebook-docid-stamp-race), so this needs an explicit Flush.
+        // exists on the stack's attributes. Constructing a NotebookHost alone does not persist
+        // anything, so this needs an explicit Flush.
         var seedHost = new NotebookHost(slot);
         seedHost.Flush();
         var docId = seedHost.Document.DocId;

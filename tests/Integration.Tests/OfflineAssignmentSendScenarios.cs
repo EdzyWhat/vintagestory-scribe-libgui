@@ -7,11 +7,10 @@ using Vintagestory.API.Common;
 namespace Integration.Tests;
 
 /// <summary>
-/// fix-offline-assignment-send-validation tasks.md §3: <see cref="ScribeModSystem.SendAssignmentBatch"/>'s
+/// <see cref="ScribeModSystem.SendAssignmentBatch"/>'s
 /// target-validation guard must accept a currently-offline player who is only known via the persisted
-/// <see cref="ScribeKnownPlayersStore"/> (persist-known-players-for-assignment), through BOTH delivery
-/// paths — and must still reject a target that is neither online nor known at all, exactly as before this
-/// change. A target uid is seeded directly into <c>KnownPlayersStore</c> and deliberately never joined as
+/// <see cref="ScribeKnownPlayersStore"/> through BOTH delivery
+/// paths — and must still reject a target that is neither online nor known at all, as unknown. A target uid is seeded directly into <c>KnownPlayersStore</c> and deliberately never joined as
 /// a live player, so it never enters the engine's online-player table and reproduces the exact
 /// "offline but previously known" condition.
 /// </summary>
@@ -54,8 +53,6 @@ public class OfflineAssignmentSendScenarios : AtlasScenarioBase
             },
         });
 
-        // Previously: the target-validation guard rejected this uid outright (never online this session),
-        // so the batch was silently dropped before either delivery path ran — no notice, no store record.
         var outputSlot = desk.Inventory[BlockEntityAssignmentDesk.NoticeOutputSlotIndex];
         Assert.NotNull(outputSlot.Itemstack);
         Assert.Equal(ScribeAssignmentState.Sent, Mod.AssignmentStore!.TryGet(assignmentId)!.Assignment!.State);
@@ -93,8 +90,8 @@ public class OfflineAssignmentSendScenarios : AtlasScenarioBase
         Assert.Equal(assignmentId, received[0].TaskId);
     }
 
-    /// <summary>Regression lock-in: a uid that is neither joined this session nor upserted into
-    /// <c>KnownPlayersStore</c> is still rejected exactly as before this change — no assignment record
+    /// <summary>A uid that is neither joined this session nor upserted into
+    /// <c>KnownPlayersStore</c> is rejected — no assignment record
     /// created, no notice placed in the output slot.</summary>
     [AtlasScenario(RollbackWorld = true)]
     public async Task SendNotice_ToTrulyUnknownPlayer_StillSilentlyRejected()

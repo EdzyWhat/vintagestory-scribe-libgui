@@ -6,7 +6,7 @@ using Scribe.Core;
 namespace Integration.Tests;
 
 /// <summary>
-/// add-pinned-task-foundation: exercises the per-player pin store through the real server path
+/// Exercises the per-player pin store through the real server path
 /// (the mod system's SetPinForPlayer / CompleteTaskForPlayer, which the network handlers delegate
 /// to), addressed by (DocId, TaskId). RollbackWorld is enough for the in-memory assertions here;
 /// restart-persistence lives in PersistenceScenarios.

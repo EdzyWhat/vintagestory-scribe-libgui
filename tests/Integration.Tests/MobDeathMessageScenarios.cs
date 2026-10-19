@@ -7,7 +7,7 @@ using Vintagestory.API.Common;
 namespace Integration.Tests;
 
 /// <summary>
-/// Regression coverage for creature-death / PvP History recording: the <c>scribe-mob-death-N</c>
+/// Coverage for creature-death / PvP History recording: the <c>scribe-mob-death-N</c>
 /// flavor pool is discovered without formatting a zero-arg template, Death/PvpKill fact capture is
 /// skipped when no relevant party carries a Notebook, and live-schema rows store facts (not a
 /// finished English sentence) that <see cref="HistoryDisplay"/> formats in the viewer locale.

@@ -7,14 +7,14 @@ using Vintagestory.API.Common;
 namespace Integration.Tests;
 
 /// <summary>
-/// fix-editor-assignment-completion-sync: the Editor view's own completion checkbox has no dedicated
+/// The Editor view's own completion checkbox has no dedicated
 /// completion message (<c>ScribeCompleteTaskMessage</c>) — it mutates <c>Done</c> locally and relies on
-/// the ordinary whole-document autosave flush to persist it. Before this change, neither whole-document
+/// the ordinary whole-document autosave flush to persist it. Each whole-document
 /// flush handler (<see cref="BlockEntityScribeWritingStation.ApplyEdit"/> for a Lectern,
-/// <see cref="ScribeModSystem.OnServerReceivedNotebookSave"/> for a Notebook/Tablet) ever called into
+/// <see cref="ScribeModSystem.OnServerReceivedNotebookSave"/> for a Notebook/Tablet) therefore calls into
 /// <see cref="ScribeModSystem.NotifyAssignmentDoneChanged"/>, so completing an assigned task purely
-/// through the Editor never derived Completed on the canonical <see cref="ScribeAssignmentStore"/>
-/// record — most visible on a Tablet, whose dialog offers no other tab to fall back on.
+/// through the Editor derives Completed on the canonical <see cref="ScribeAssignmentStore"/>
+/// record — essential on a Tablet, whose dialog offers no other tab.
 ///
 /// Exercises the production entry points directly, the same way <see cref="PinScenarios"/> and
 /// <see cref="AssignmentCompletionDocResolutionScenarios"/> do: <c>ApplyEdit</c> for the Lectern, and
@@ -49,7 +49,7 @@ public class EditorAssignmentCompletionSyncScenarios : AtlasScenarioBase
             Assert.Single(store.Sent(assigner.Player.PlayerUID)).Assignment!.State);
     }
 
-    // ---------- 1.2: NotifyDoneAssignmentsInDocument idempotency ----------
+    // ---------- NotifyDoneAssignmentsInDocument idempotency ----------
 
     [AtlasScenario(RollbackWorld = true)]
     public async Task NotifyDoneAssignmentsInDocument_is_idempotent_when_called_twice()
@@ -67,14 +67,14 @@ public class EditorAssignmentCompletionSyncScenarios : AtlasScenarioBase
         string? completedDateAfterFirst = Mod.AssignmentStore!.TryGet(assignmentId)!.Assignment!.CompletedDate;
 
         // Calling it again on the same (already-Completed) document must be a cheap no-op: the canonical
-        // store gate rejects it before any mutation or sync push, exactly like the design relies on
-        // instead of diffing old vs. new.
+        // store gate rejects it before any mutation or sync push, which is what lets the flush
+        // skip diffing old vs. new.
         Mod.NotifyDoneAssignmentsInDocument(doc);
         Assert.Equal(ScribeAssignmentState.Completed, Mod.AssignmentStore!.TryGet(assignmentId)!.Assignment!.State);
         Assert.Equal(completedDateAfterFirst, Mod.AssignmentStore!.TryGet(assignmentId)!.Assignment!.CompletedDate);
     }
 
-    // ---------- 2.1: Lectern's whole-document flush ----------
+    // ---------- Lectern's whole-document flush ----------
 
     [AtlasScenario(RollbackWorld = true)]
     public async Task Completing_an_assigned_task_via_the_Lecterns_Editor_flush_derives_completed()
@@ -108,7 +108,7 @@ public class EditorAssignmentCompletionSyncScenarios : AtlasScenarioBase
         AssertBothPartiesCompleted(assigner, assignee, assignmentId);
     }
 
-    // ---------- 3.1 / 3.2: Notebook/Tablet whole-document flush ----------
+    // ---------- Notebook/Tablet whole-document flush ----------
 
     private async Task<ITestPlayer> SeedAssigneeWithScribeItem(string playerName, string itemCode)
     {
@@ -145,7 +145,7 @@ public class EditorAssignmentCompletionSyncScenarios : AtlasScenarioBase
         ScribeDocumentAttributes.WriteTo(hotbar[0]!.Itemstack!, doc); // as if placed there by a prior Accept
         hotbar[0]!.MarkDirty();
 
-        // The Tablet's dialog has ONLY an Editor tab -- the reported bug's exact repro. Toggle Done
+        // The Tablet's dialog has ONLY an Editor tab -- so completion can only come from the Editor. Toggle Done
         // locally, then flush the whole document; no ScribeCompleteTaskMessage is ever sent.
         Assert.True(doc.ToggleTask(0));
         FlushNotebookSave(assignee, doc);
@@ -167,7 +167,7 @@ public class EditorAssignmentCompletionSyncScenarios : AtlasScenarioBase
         ScribeDocumentAttributes.WriteTo(hotbar[0]!.Itemstack!, doc);
         hotbar[0]!.MarkDirty();
 
-        // Same whole-document flush path as the Tablet above, establishing the fix isn't Tablet-specific --
+        // Same whole-document flush path as the Tablet above, showing the behavior isn't Tablet-specific --
         // completed via the Notebook's Editor tab, not the HUD, Pin Tab, or Read view.
         Assert.True(doc.ToggleTask(0));
         FlushNotebookSave(assignee, doc);
@@ -175,7 +175,7 @@ public class EditorAssignmentCompletionSyncScenarios : AtlasScenarioBase
         AssertBothPartiesCompleted(assigner, assignee, assignmentId);
     }
 
-    // ---------- 4.1: non-Accepted store record is left unchanged ----------
+    // ---------- non-Accepted store record is left unchanged ----------
 
     [AtlasScenario(RollbackWorld = true)]
     public async Task Editor_flush_never_resurrects_a_terminal_store_record()
@@ -201,7 +201,7 @@ public class EditorAssignmentCompletionSyncScenarios : AtlasScenarioBase
         Assert.Equal(ScribeAssignmentState.Discarded, store.TryGet(assignmentId)!.Assignment!.State);
     }
 
-    // ---------- 4.2: multiple completed assigned tasks in one save ----------
+    // ---------- multiple completed assigned tasks in one save ----------
 
     [AtlasScenario(RollbackWorld = true)]
     public async Task Editor_flush_with_two_completed_assigned_tasks_completes_both()
@@ -234,7 +234,7 @@ public class EditorAssignmentCompletionSyncScenarios : AtlasScenarioBase
         Assert.All(sent, b => Assert.Equal(ScribeAssignmentState.Completed, b.Assignment!.State));
     }
 
-    // ---------- 4.3: HUD/Pin Tab/Read-view paths are unaffected ----------
+    // ---------- HUD/Pin Tab/Read-view paths are unaffected ----------
 
     [AtlasScenario(RollbackWorld = true)]
     public async Task HUD_style_completion_still_works_and_a_later_editor_flush_leaves_it_unaffected()
@@ -260,7 +260,7 @@ public class EditorAssignmentCompletionSyncScenarios : AtlasScenarioBase
         AssertBothPartiesCompleted(assigner, assignee, assignmentId);
 
         // A later, unrelated whole-document flush of the same (now-Completed) document must not disturb
-        // it -- the new flush-time derivation call is exactly as no-op here as the idempotency covered above.
+        // it -- the flush-time derivation call is as much a no-op here as the idempotency covered above.
         lectern.OnRightClick(assignee.Player, wantEditor: true, quickAdd: false);
         var editedDoc = lectern.Document;
         editedDoc.AddTextSection("unrelated note");
