@@ -13,8 +13,7 @@ using Vintagestory.API.Datastructures;
 namespace Scribe;
 
 /// <summary>
-/// Client-only "soft auto-detect" (design.md Decision 10, Layer 2 — add-assignment-and-quest-support
-/// §11). Watches for quest accept/completion using vsquest's own SERVER-SYNCED state rather than any
+/// Client-only "soft auto-detect" (Layer 2). Watches for quest accept/completion using vsquest's own SERVER-SYNCED state rather than any
 /// reflection: <c>VsQuest.QuestSystem</c> stamps <c>"lastaccepted-{questId}[-{playerUid}]"</c> and
 /// <c>"playercompleted-{playerUid}"</c> onto the quest-giver ENTITY's <c>WatchedAttributes</c> (confirmed
 /// in <c>vsquest-src/Systems/QuestSystem.cs</c> and <c>Entity/Behavior/BehaviorQuestGiver.cs</c>) — a
@@ -23,7 +22,7 @@ namespace Scribe;
 /// checked directly against those two keys on every loaded "questgiver"-behavior entity, which is why
 /// this needs no Harmony/AccessTools at all for accept/complete detection.
 ///
-/// <para>Only the RICHER kill/block-place/block-break progress mirroring (§11.3) has no entity-attribute
+/// <para>Only the RICHER kill/block-place/block-break progress mirroring has no entity-attribute
 /// equivalent — vsquest keeps live tracker counts only inside the open <c>VsQuest.QuestSelectGui</c>'s
 /// <c>activeQuests</c> field. That best-effort enrichment alone uses the Tallybook-proven reflection
 /// route (<see cref="AccessTools.Field"/>/<see cref="AccessTools.Property"/> against the dialog by type
@@ -37,16 +36,16 @@ namespace Scribe;
 /// code before appending), so a re-notification on rejoin is a harmless, disclosed limitation rather than
 /// a correctness bug.</para>
 ///
-/// <para><b>Progression Framework (add-progression-framework-quest-support §3)</b>: a second,
+/// <para><b>Progression Framework</b>: a second,
 /// independently-gated tick path detects accept/complete/per-objective progress for player-scoped quests
 /// by reading Progression Framework's own server-synced <c>WatchedAttributes</c> tree
 /// (<see cref="PfPlayerQuestTreeKey"/>, a public const on that mod's <c>QuestSystem</c>) directly off
 /// <c>capi.World.Player.Entity</c> — no entity scan needed (the tree is keyed on the player's own entity,
 /// not an NPC's) and no reflection at all, unlike vsquest's progress-mirroring half above. Gated and
-/// fail-closed independently of the vsquest path (§3.5): a failure here disables PF detection only, for
+/// fail-closed independently of the vsquest path: a failure here disables PF detection only, for
 /// the session, and never touches vsquest's own accept/complete/progress state.</para>
 ///
-/// <para><b>Progression Framework server-scoped quests (add-progression-framework-server-quest-tracking)</b>:
+/// <para><b>Progression Framework server-scoped quests</b>:
 /// a THIRD, independently-gated tick path detects the same accept/complete/per-objective signals for
 /// server-scoped quests — one shared quest instance every player on the world contributes to together, with
 /// no per-player state of its own. Unlike the player-scoped tree above, this shared state has no
@@ -78,7 +77,7 @@ internal sealed class ScribeQuestWatcher
     /// accepted — confirmed in vsquest's own source, <c>QuestSystem.SetDouble(key, World.Calendar.TotalDays)</c>
     /// — a genuine re-accept of a repeatable quest overwrites it with a LARGER value). A value increasing
     /// mid-session (never the first read this session, which only means "already accepted before login")
-    /// is the fresh-reaccept signal Decision 4's reset-clear consumes (fix-quest-prompt-persistence-and-auto-pin).</summary>
+    /// is the fresh-reaccept signal the reset-clear consumes.</summary>
     private readonly Dictionary<string, double> _acceptedFingerprint = new(StringComparer.Ordinal);
 
     // ---- best-effort dialog reflection (progress mirroring only) ----
@@ -88,7 +87,7 @@ internal sealed class ScribeQuestWatcher
 
     // ---- Progression Framework (player-scoped quests, own WatchedAttributes tree) ----
     private const string PfPlayerQuestTreeKey = "progressionframework:questlog";
-    // Matches QuestSystem's own status strings exactly (decompiled source, confirmed 2026-09-02):
+    // Matches QuestSystem's own status strings exactly (confirmed against the decompiled source):
     // AcceptQuest writes "active"; CompleteQuest/CompleteObjective write "completed" (not "complete").
     private const string PfStatusActive = "active";
     private const string PfStatusComplete = "completed";
@@ -103,10 +102,9 @@ internal sealed class ScribeQuestWatcher
     /// re-accept signal.</summary>
     private readonly Dictionary<string, string> pfStatusFingerprint = new(StringComparer.Ordinal);
     private readonly Dictionary<string, Dictionary<string, string>> pfObjectiveStatus = new(StringComparer.Ordinal);
-    // Parallel to pfObjectiveStatus (same questCode -> objCode keying), added for
-    // add-progression-framework-quest-objective-subtasks: PF's numeric "progress" int per objective, read
+    // Parallel to pfObjectiveStatus (same questCode -> objCode keying): PF's numeric "progress" int per objective, read
     // alongside "status" but never conflated with it — a malformed/missing progress value must disable only
-    // this objective's live count (quest-auto-detect's fail-safe scenario), never accept/complete detection.
+    // this objective's live count, never accept/complete detection.
     private readonly Dictionary<string, Dictionary<string, int>> pfObjectiveProgress = new(StringComparer.Ordinal);
 
     // ---- Progression Framework server-scoped quests (reflected shared state, no WatchedAttributes) ----
@@ -146,7 +144,7 @@ internal sealed class ScribeQuestWatcher
     }
 
     /// <summary>The static objective definitions for a cataloged quest, positionally aligned with
-    /// <see cref="TryGetLiveProgress"/>'s counts (§11.3). False before the catalog has been read once
+    /// <see cref="TryGetLiveProgress"/>'s counts. False before the catalog has been read once
     /// (the first tick after login) or for an uncataloged quest code. VS Quest only — see
     /// <see cref="TryGetPfObjectiveStatus"/> for Progression Framework's equivalent.</summary>
     public bool TryGetObjectives(string questCode, out IReadOnlyList<ScribeQuestObjectiveDef> objectives)
@@ -157,7 +155,7 @@ internal sealed class ScribeQuestWatcher
     }
 
     /// <summary>Progression Framework's catalog objective definitions (code + required count) for a
-    /// cataloged quest (Decision 4 — matched by code, not position, against
+    /// cataloged quest (matched by code, not position, against
     /// <see cref="TryGetPfObjectiveStatus"/>). False before the PF catalog has been read once, PF isn't
     /// installed, or the quest code isn't cataloged.</summary>
     public bool TryGetPfObjectiveDefs(string questCode, out IReadOnlyList<ScribePfObjectiveDef> objectives)
@@ -168,7 +166,7 @@ internal sealed class ScribeQuestWatcher
     }
 
     /// <summary>Progression Framework's live per-objective status, keyed by each objective's own stable
-    /// code (Decision 4 — no positional zip needed, unlike vsquest, since PF's own attribute tree already
+    /// code (no positional zip needed, unlike vsquest, since PF's own attribute tree already
     /// correlates status to a code). False until this quest's tree has been read at least once this
     /// session, including whenever Progression Framework isn't installed or detection has self-disabled.</summary>
     public bool TryGetPfObjectiveStatus(string questCode, out IReadOnlyDictionary<string, string> statusByCode)
@@ -179,7 +177,7 @@ internal sealed class ScribeQuestWatcher
     }
 
     /// <summary>Progression Framework's live per-objective NUMERIC progress, keyed by each objective's own
-    /// stable code — the count add-progression-framework-quest-objective-subtasks drives a QuestObjective
+    /// stable code — the count that drives a QuestObjective
     /// subtask's <c>CurrentQuantity</c> from. False until this quest's tree has been read at least once this
     /// session, including whenever Progression Framework isn't installed or detection has self-disabled.</summary>
     public bool TryGetPfObjectiveProgress(string questCode, out IReadOnlyDictionary<string, int> progressByCode)
@@ -194,8 +192,7 @@ internal sealed class ScribeQuestWatcher
 
     /// <summary>Whether the player has been observed to start (accept or complete) the given quest code
     /// this client session, per whichever backend it belongs to — a pure read of the session-cached sets
-    /// each backend's tick path above already maintains for auto-detect (filter-quest-link-picker design.md
-    /// Decision 1). For vsquest, "started" requires the quest's giver to have been scanned this session
+    /// each backend's tick path above already maintains for auto-detect. For vsquest, "started" requires the quest's giver to have been scanned this session
     /// (<see cref="ScanGiver"/>); for Progression Framework, any recorded status (active or completed) for
     /// the code counts, from either the player-scoped or server-scoped tick path (both write
     /// <see cref="pfStatusFingerprint"/>). Used only to filter the "Add Quest Link" picker's candidate list —
@@ -275,7 +272,7 @@ internal sealed class ScribeQuestWatcher
         }
     }
 
-    /// <summary>Progression Framework's independently-gated detection path (§3.1-3.5): reads that mod's
+    /// <summary>Progression Framework's independently-gated detection path: reads that mod's
     /// own <see cref="PfPlayerQuestTreeKey"/> tree directly off the player's own entity — no entity scan,
     /// no reflection. Any failure (missing/malformed tree shape, e.g. after a PF update) permanently
     /// disables THIS path only for the session; vsquest's detection above is read in a separate try scope
@@ -333,8 +330,8 @@ internal sealed class ScribeQuestWatcher
                 {
                     if (objEntry.Value is not ITreeAttribute objTree) continue;
                     statusByCode[objEntry.Key] = objTree.GetString("status") ?? "";
-                    // A missing "progress" key leaves the last-cached value alone (quest-auto-detect's
-                    // fail-safe scenario: a malformed/absent count never overwrites with a spurious 0, and
+                    // A missing "progress" key leaves the last-cached value alone (a
+                    // malformed/absent count never overwrites with a spurious 0, and
                     // never affects the status read above).
                     if (objTree.HasAttribute("progress"))
                         progressByCode[objEntry.Key] = objTree.GetInt("progress", 0);
@@ -428,7 +425,7 @@ internal sealed class ScribeQuestWatcher
     }
 
     /// <summary>Best-effort refresh of <see cref="liveProgress"/> from the open quest dialog, if any
-    /// (§11.3). Mirrors Tallybook's <c>VsQuests.ReadQuestDialog()</c> exactly: find the dialog by type
+    /// Mirrors Tallybook's <c>VsQuests.ReadQuestDialog()</c> exactly: find the dialog by type
     /// name among <see cref="IGuiAPI.OpenedGuis"/>/<see cref="IGuiAPI.LoadedGuis"/>, then read
     /// <c>activeQuests</c> and each active quest's three tracker lists via <see cref="AccessTools"/>. Any
     /// exception permanently disables this half (accept/complete detection is untouched).</summary>

@@ -9,7 +9,7 @@ namespace Scribe;
 /// Paints a dialog backdrop bitmap behind its child with NEAREST-NEIGHBOUR sampling, so a small
 /// (native-resolution) pixel-art source scales up to the dialog as crisp, hard-edged blocks rather than
 /// the soft blur a linear upscale would give. This is why the backdrop PNGs can ship at their authored
-/// 128×145 size instead of an 8×-upscaled 1024×1160 blur.
+/// 128×145 size rather than as an 8×-upscaled 1024×1160 blur.
 ///
 /// <para><b>Why a custom widget.</b> The stock textured-box path (<c>BoxStyle.Texture</c> →
 /// <c>DrawMaskedBox</c>) hard-codes <c>FilterQuality = Medium</c> (smooth) and offers no way to select

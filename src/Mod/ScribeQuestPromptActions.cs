@@ -14,30 +14,27 @@ namespace Scribe;
 
 /// <summary>
 /// Shared "Link / Dismiss / Settings" action-button rendering + the 0/1/2+ Accept-destination-picker
-/// rule for a quest accept/completion prompt (rework-quest-accept-notification-styles) — used identically
+/// rule for a quest accept/completion prompt — used identically
 /// by the HUD banner (<see cref="HudScribePins"/>) and the center-screen modal
 /// (<see cref="GuiDialogScribeQuestPrompt"/>) so the two presentation styles' button colors and behavior
-/// can never drift apart (design: "the same three colored/bordered buttons... as the polished HUD
-/// banner"). Pure widget composition — no game-state reads beyond what's passed in.
+/// can never drift apart. Pure widget composition — no game-state reads beyond what's passed in.
 /// </summary>
 internal static class ScribeQuestPromptActions
 {
     /// <summary>A single bordered, tinted-fill action button in one of the three named accent colors
     /// (<see cref="ScribeRowConstants.QuestPromptLinkColor"/>/<see cref="ScribeRowConstants.QuestPromptDismissColor"/>/
     /// <see cref="ScribeRowConstants.QuestPromptSettingsColor"/>). Built on the stock
-    /// <see cref="Gui.Widgets.Basic.Button"/> — a purpose-built replacement (<c>ScribeAccentButton</c>) was
-    /// tried to strip the stock widget's hard-coded hover box-shadow (see VSAPI-NOTES.md's LibGUI section),
-    /// but wasn't worth maintaining a duplicate of library button logic for one button; reverted per direct
-    /// user direction. The downward-hover-shadow look is an accepted stock-LibGUI quirk here.</summary>
+    /// <see cref="Gui.Widgets.Basic.Button"/>, so the stock widget's hard-coded downward hover box-shadow
+    /// (see VSAPI-NOTES.md's LibGUI section) is an accepted quirk here rather than a duplicated button
+    /// implementation.</summary>
     public static Widget AccentButton(
         string label, Vector4 accent, float fontSize, Action? onTap, bool enabled = true,
         Vector4? textColor = null, float? glowWidth = null, Vector4? glowColor = null)
     {
         var variantStyle = new ButtonVariantStyle
         {
-            // Fill alpha per interaction state (post-ship retune via tools/quest-prompt-colors/index.html —
-            // was 0.16f/0.28f/0.38f): the buttons now read as noticeably more solid/filled rather than a
-            // faint tint, which is why the label text below needed a decoupled color option.
+            // Fill alpha per interaction state: solid enough that the buttons read as filled rather than
+            // a faint tint, which is why the label text below has a decoupled color option.
             BackgroundColor = accent with { W = enabled ? 0.29f : 0.05f },
             HoverBackgroundColor = accent with { W = enabled ? 0.48f : 0.05f },
             PressBackgroundColor = accent with { W = enabled ? 0.68f : 0.05f },
@@ -69,7 +66,7 @@ internal static class ScribeQuestPromptActions
     /// documents — nothing to place onto), a direct Link button (a completion-prompt, which has no
     /// destination to choose, or exactly 1 candidate), or a two-step tap revealing a candidate picker
     /// dropdown above the button (2+ candidates) — mirrors the Inbox Accept control /
-    /// <c>GuiDialogTaskNotice</c>'s own Accept shape (add-progression-framework-quest-support Decision 3).
+    /// <c>GuiDialogTaskNotice</c>'s own Accept shape.
     /// Returns the picker widget (or null when not shown) and the button separately so each host lays
     /// them out in its own structure.</summary>
     public static (Widget? Picker, Widget Button) BuildLinkControl(

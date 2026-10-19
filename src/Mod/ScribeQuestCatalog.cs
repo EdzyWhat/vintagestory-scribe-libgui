@@ -10,17 +10,15 @@ using Vintagestory.API.Config;
 namespace Scribe;
 
 /// <summary>
-/// One entry from an installed quest mod's catalog, resolved for the Quest Link picker
-/// (add-assignment-and-quest-support 10.1). <see cref="QuestCode"/> is the quest's own (already
+/// One entry from an installed quest mod's catalog, resolved for the Quest Link picker. <see cref="QuestCode"/> is the quest's own (already
 /// domain-qualified) id, e.g. <c>"vsquest:quest-freeghost"</c> — stored verbatim after the <c>"quest:"</c>
 /// prefix (<see cref="Scribe.Core.ScribeLinkTarget.ForQuest"/>), so a Layer 2 auto-detect correlation can
 /// compare against the exact same string later without re-deriving anything. <see cref="Source"/> is the
-/// backend mod that owns this entry (<see cref="Scribe.Core.ScribeQuestSource"/> —
-/// add-progression-framework-quest-support Decision 1), always recorded on the created Link so later
+/// backend mod that owns this entry (<see cref="Scribe.Core.ScribeQuestSource"/>), always recorded on the created Link so later
 /// resolution never has to guess which backend a quest code came from. <see cref="Objectives"/> is
-/// vsquest-specific (positional kill/place/break tracking, §11.3) — a Progression Framework entry from
+/// vsquest-specific (positional kill/place/break tracking) — a Progression Framework entry from
 /// <see cref="ScribeProgressionFrameworkQuestCatalog"/> always leaves it empty; its own per-objective
-/// progress is read by objective code, not by position (Decision 4), through
+/// progress is read by objective code, not by position, through
 /// <see cref="ScribeQuestWatcher"/>'s separate PF-specific surface. For vsquest, it includes the
 /// static gather objectives used by one-shot QuestObjective generation; live progress formatting
 /// filters those back out because vsquest exposes no gather counter.
@@ -29,8 +27,7 @@ internal readonly record struct ScribeQuestCatalogEntry(
     string Source, string QuestCode, string Title, string? Description,
     IReadOnlyList<ScribeQuestObjectiveDef> Objectives);
 
-/// <summary>Which vsquest tracker list an objective belongs to (add-assignment-and-quest-support §11
-/// progress mirroring) — matches <c>VsQuest.ActiveQuest.trackerProgress()</c>'s fixed concatenation
+/// <summary>Which vsquest tracker list an objective belongs to (for progress mirroring) — matches <c>VsQuest.ActiveQuest.trackerProgress()</c>'s fixed concatenation
 /// order (kill, then block-place, then block-break), which is how a live tracker count read off the
 /// open quest dialog lines up positionally with the static objective it belongs to. Gather is a
 /// static-only kind and has no corresponding live tracker count.</summary>
@@ -38,7 +35,7 @@ internal enum ScribeQuestObjectiveKind { Kill, BlockPlace, BlockBreak, Gather }
 
 /// <summary>One static objective definition (a required count of a matching entity/block code),
 /// paired positionally with a live <c>EventTracker.count</c> read off <c>VsQuest.ActiveQuest</c> by
-/// <see cref="ScribeQuestWatcher"/> to render "count/demand" progress (§11.3). Gather objectives also
+/// <see cref="ScribeQuestWatcher"/> to render "count/demand" progress. Gather objectives also
 /// live here for one-shot static criteria generation; <see cref="ScribeQuestCatalog.FormatProgress"/>
 /// excludes them from the positional live-count zip because vsquest exposes no gather counter.</summary>
 internal readonly record struct ScribeQuestObjectiveDef(
@@ -52,9 +49,9 @@ internal readonly record struct ScribeQuestObjectiveResolution(
     string Code, string DisplayName, bool HasItemStack);
 
 /// <summary>
-/// Reads the installed quest mod's static <c>config/quests/*.json</c> catalog (design.md Decision 10,
-/// "Layer 1"). Deliberately reflection- and dependency-free: unlike the Layer 2 soft auto-detect (§11,
-/// which reaches into <c>VsQuest.QuestSelectGui</c> internals via Harmony/reflection), Layer 1 only needs
+/// Reads the installed quest mod's static <c>config/quests/*.json</c> catalog ("Layer 1").
+/// Deliberately reflection- and dependency-free: unlike the Layer 2 soft auto-detect (which
+/// reaches into <c>VsQuest.QuestSelectGui</c> internals via Harmony/reflection), Layer 1 only needs
 /// the quest ids/titles/descriptions that <c>vsquest</c> itself loads from these same JSON assets — so it
 /// reads them itself with a tiny local DTO, never touching the vsquest assembly at all. This keeps the
 /// "no new mod dependencies" guardrail intact: <c>vsquest</c> is optional and gated purely on
@@ -63,13 +60,12 @@ internal readonly record struct ScribeQuestObjectiveResolution(
 ///
 /// <para>Searches every installed mod's domain, not just <c>vsquest</c>'s own, mirroring how
 /// <c>VsQuest.QuestSystem.AssetsLoaded</c> itself scans every installed mod's domain — real quest content is
-/// always contributed by a separate dependent mod under its own domain (e.g. VS Village)
-/// (fix-quest-catalog-domain-scoping).</para>
+/// always contributed by a separate dependent mod under its own domain (e.g. VS Village).</para>
 ///
 /// <para>Title/description are resolved via <c>Lang.Get(id + "-title"/"-desc")</c> — the catalog JSON
 /// carries no display text of its own (confirmed by decompiling <c>VsQuest.QuestSelectGui</c>). Captured
 /// once at picker-open time; the caller persists the resolved strings into the created Link block, which
-/// never re-reads this catalog (orphan-safe per Decision 10).</para>
+/// never re-reads this catalog (orphan-safe).</para>
 /// </summary>
 internal static class ScribeQuestCatalog
 {
@@ -83,10 +79,10 @@ internal static class ScribeQuestCatalog
         => code?.StartsWith(StaticObjectiveCodePrefix, StringComparison.Ordinal) == true;
 
     /// <summary>Formats live kill/block-place/block-break counts against their static objectives as a
-    /// compact "Kills 2/5 · Blocks placed 0/3" line (§11.3), zipping the two lists positionally (index
+    /// compact "Kills 2/5 · Blocks placed 0/3" line, zipping the two lists positionally (index
     /// <c>i</c> in one is objective/count <c>i</c> in the other — see <see cref="ScribeQuestObjectiveDef"/>'s
     /// doc-comment). Null when either list is empty, so a caller can treat null as "nothing to show"
-    /// (no gather-objective progress is ever included here — a permanent gap, design.md Decision 10).</summary>
+    /// (no gather-objective progress is ever included here).</summary>
     public static string? FormatProgress(
         IReadOnlyList<ScribeQuestObjectiveDef> objectives, IReadOnlyList<int> counts)
     {
