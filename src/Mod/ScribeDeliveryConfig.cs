@@ -4,15 +4,11 @@ using Vintagestory.API.Common;
 namespace Scribe;
 
 /// <summary>
-/// Reads the server admin `DeliveryMode`/radius settings off
-/// this project's existing world-config mechanism (<c>worldconfig.json</c>'s
-/// <c>worldConfigAttributes</c>, the same convention <c>scribeClockmakerRequiresTrait</c> uses) — read
-/// fresh on every call, never cached, so a value
-/// changed live (e.g. via the <c>/worldconfig set</c> server command) takes effect for the very next
-/// read with no restart. Both sides read identically: the server
-/// consults it to gate a send and run the range check; the client consults it (its own copy of
-/// <see cref="IWorldAccessor.Config"/>) to decide whether the Create Assignments tab shows the
-/// delivery-mode toggle/notice slots at all.
+/// Reads the admin <c>DeliveryMode</c>/radius settings from <c>worldconfig.json</c>'s
+/// <c>worldConfigAttributes</c>. Read fresh on every call (never cached) so a live <c>/worldconfig set</c>
+/// takes effect immediately. The server uses it to gate sends and run the range check; the client reads its
+/// own <see cref="IWorldAccessor.Config"/> copy to decide whether the Create Assignments tab shows the
+/// delivery-mode toggle/notice slots.
 /// </summary>
 internal static class ScribeDeliveryConfig
 {

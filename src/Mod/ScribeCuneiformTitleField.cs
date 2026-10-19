@@ -1,15 +1,10 @@
-// Live cuneiform single-line title input. The tablet's title bar reads and
-// edits in cuneiform like its rows, but the base dialog's title uses a stock LibGUI TextField driven by a
-// shared TextEditingController + FocusNode — NOT the ScribeMultilineField State. So this is a purpose-built
-// single-line input that is a DROP-IN for that TextField: same controller, same focus node, same OnKeyDown
-// hook. The base's title-commit machinery (_isTitleEditing, CommitTitleIfEditing, the blur listener, the
-// deferred _pendingTitleEditRebuild/_pendingTitleFocus) all key off that controller/focus node, so they keep
-// working unchanged — only the rendered widget differs.
-//
-// It renders through ScribeCuneiformFieldRender in single-line mode by default (a long title is hard-clipped
-// by an enclosing Clip at the band width, since cuneiform has no '…' glyph); with SingleLine=false it WRAPS
-// to the band width and the title slot caps it at two lines. Keyboard handling mirrors LibGUI's
-// TextField (typing, Backspace/Delete, Left/Right/Home/End, clipboard) minus selection: it is caret-only.
+// Live cuneiform single-line title input: a drop-in for the base dialog's stock LibGUI TextField (same
+// TextEditingController, FocusNode, and OnKeyDown hook), so the base's title-commit machinery
+// (_isTitleEditing, CommitTitleIfEditing, the blur listener, the deferred _pendingTitleEditRebuild/_pendingTitleFocus)
+// keeps working unchanged; only the rendered widget differs. Renders through ScribeCuneiformFieldRender,
+// single-line and hard-clipped by default (no '…' glyph), or wrapped to the band width with SingleLine=false
+// (the title slot caps it at two lines). Keyboard handling mirrors TextField (typing, Backspace/Delete,
+// Left/Right/Home/End, clipboard) minus selection: caret-only.
 
 using System;
 using Gui.Core.Framework;         // RenderObject
@@ -25,10 +20,8 @@ namespace Scribe;
 
 /// <summary>
 /// A single-line cuneiform text input bound to an external <see cref="TextEditingController"/> and
-/// <see cref="FocusNode"/> — a drop-in for the base dialog's stock <see cref="Gui.Widgets.Input.TextField"/>
-/// title editor, so <see cref="ScribeDialogBase"/>'s title commit/blur/deferred-rebuild machinery (all keyed
-/// off the shared controller and focus node) is untouched. Renders via <see cref="ScribeCuneiformFieldRender"/>
-/// in single-line mode with a synthetic caret. Caret-only (no selection gestures).
+/// <see cref="FocusNode"/>, a drop-in for the base dialog's stock <see cref="Gui.Widgets.Input.TextField"/> title
+/// editor so <see cref="ScribeDialogBase"/>'s title commit/blur machinery is untouched. Caret-only (no selection).
 /// </summary>
 public sealed class ScribeCuneiformTitleField : StatefulWidget, IFocusable
 {
@@ -66,31 +59,24 @@ public sealed class ScribeCuneiformTitleField : StatefulWidget, IFocusable
     public FocusNode FocusNode { get; }
     public float FontSizeEm { get; }
     public GlyphBundle? Bundle { get; }
-    /// <summary>Hand-written jitter strength (0..1) for the title strokes; 0 = crisp.</summary>
+    /// <summary>Jitter strength (0..1) for the title strokes; 0 = crisp.</summary>
     public float JitterStrength { get; }
-    /// <summary>Fixed base seed for the title jitter, so the title wobbles consistently and typing does not
-    /// reseed the letters already on screen.</summary>
+    /// <summary>Fixed jitter seed, so typing does not reseed letters already on screen.</summary>
     public int JitterSeed { get; }
-    /// <summary>Whole-character rotation in degrees for the title glyphs;
-    /// 0 = upright. Applied after jitter, at paint time only.</summary>
+    /// <summary>Whole-character rotation in degrees; 0 = upright. Paint-time only.</summary>
     public float RotationDegrees { get; }
-    /// <summary>Whether newly-typed title text presses in stroke-by-stroke. When false (the default), the
-    /// title reveals instantly. Gated by the player's client setting, mirroring the rows.</summary>
+    /// <summary>Whether newly-typed title text presses in stroke-by-stroke (gated by the player's client setting,
+    /// like the rows); false reveals instantly.</summary>
     public bool Progression { get; }
-    /// <summary>Per-material outer glow behind the title strokes; default
-    /// disabled. Lifts the editing title off the clay backdrop the same way the resting title and rows do.</summary>
+    /// <summary>Per-material outer glow behind the title strokes; default disabled.</summary>
     public CuneiformGlow Glow { get; }
-    /// <summary>Per-view cuneiform stroke-weight scale; 1 = base weight.
-    /// Passed straight to the title render object so the editing title firms up/thins with the drying
-    /// state exactly like the rows and resting title.</summary>
+    /// <summary>Stroke-weight scale passed to the render object; 1 = base weight.</summary>
     public float StrokeWeightScale { get; }
     /// <summary>When true (default) the title is one hard-clipped line; when false it WRAPS to the band width
-    /// — the enclosing title slot caps the visible height at two lines. Caret nav is
-    /// by character index either way, so wrapping is purely a render/layout property of the same text buffer.</summary>
+    /// (the title slot caps visible height at two lines). Caret nav is by character index either way.</summary>
     public bool SingleLine { get; }
-    /// <summary>Parent key hook, invoked BEFORE this field acts on a key (mirrors LibGUI's TextField). The
-    /// tablet points this at the base's shared title key handler for the maxlength gate + Enter/Escape
-    /// commit, so a cuneiform title honors the identical limit and commit rules as the normal title field.</summary>
+    /// <summary>Parent key hook, invoked BEFORE this field acts on a key (mirrors TextField). The tablet points it
+    /// at the base's title key handler for the maxlength gate and Enter/Escape commit.</summary>
     public Action<KeyboardEvent>? OnKeyDown { get; }
 
     public override State CreateState() => new ScribeCuneiformTitleFieldState();
@@ -101,11 +87,9 @@ internal sealed class ScribeCuneiformTitleFieldState : State<ScribeCuneiformTitl
     private TextEditingController Controller => Widget.Controller;
     private FocusNode FocusNode => Widget.FocusNode;
 
-    // Stroke-progression reveal, mirroring the row field: only a pure APPEND to the tracked title animates
-    // its new suffix; any other change snaps to fully revealed. The reveal controller exists only when
-    // Widget.Progression is set.
-    /// <summary>The shared stroke-count reveal schedule (same single Core speed knob as the rows, so the
-    /// title band can't drift from them).</summary>
+    // Stroke-progression reveal, mirroring the row field: only a pure APPEND animates its new suffix; any
+    // other change snaps to fully revealed. revealController exists only when Widget.Progression is set.
+    /// <summary>The shared stroke-count reveal schedule (same Core speed knob as the rows).</summary>
     private static readonly Scribe.Core.Cuneiform.RevealSchedule RevealScheduleShared =
         new(Scribe.Core.Cuneiform.CuneiformReveal.PerStrokeMs);
     private AnimationController? revealController;
@@ -116,15 +100,13 @@ internal sealed class ScribeCuneiformTitleFieldState : State<ScribeCuneiformTitl
     public override void InitState()
     {
         base.InitState();
-        // The controller and focus node are owned by the base dialog (shared with the resting display and the
-        // commit machinery); we only listen so a caret/text change from elsewhere repaints this field.
+        // The controller and focus node are owned by the base dialog; we only listen so external changes repaint.
         FocusNode.Owner = Element;
         Controller.AddListener(OnControllerChanged);
         FocusNode.AddListener(OnFocusChanged);
 
-        // Existing title text starts fully revealed (no animation on open); only later appends press in.
-        // The controller only exists when progression is enabled — off means UpdateReveal is a no-op and
-        // the title reveals instantly, matching the rows' gate.
+        // Existing title text starts fully revealed; only later appends press in. Without Progression there is no
+        // controller and the title reveals instantly.
         revealTrackedText = Controller.Text;
         if (Widget.Progression)
         {
@@ -157,9 +139,8 @@ internal sealed class ScribeCuneiformTitleFieldState : State<ScribeCuneiformTitl
 
     private void OnFocusChanged() => SetState(() => { });
 
-    /// <summary>Classify the latest controller text against the tracked title: a pure append animates only
-    /// the new suffix (prior letters become the always-revealed baseline); anything else snaps to fully
-    /// revealed. Mirrors the row field's <c>UpdateReveal</c>.</summary>
+    /// <summary>A pure append animates only the new suffix (prior letters become the always-revealed baseline);
+    /// anything else snaps to fully revealed.</summary>
     private void UpdateReveal()
     {
         if (revealController is null)
@@ -199,9 +180,8 @@ internal sealed class ScribeCuneiformTitleFieldState : State<ScribeCuneiformTitl
         revealTrackedText = text;
     }
 
-    /// <summary>Prefix-sum of the per-character stroke-units for <paramref name="forText"/>, so the title's
-    /// reveal duration matches the render object's per-stroke timing exactly (mirrors the row field). Falls
-    /// back to one unit per character when the bundle isn't loaded yet.</summary>
+    /// <summary>Prefix-sum of per-character stroke-units for <paramref name="forText"/>, matching the render
+    /// object's per-stroke timing; one unit per character when the bundle is not loaded yet.</summary>
     private int[] CumulativeRevealUnits(string forText)
     {
         if (Widget.Bundle is not { } bundle)
@@ -243,9 +223,7 @@ internal sealed class ScribeCuneiformTitleFieldState : State<ScribeCuneiformTitl
             return;
         }
 
-        // Let the parent (the base title handler) gate the key first — maxlength + Enter/Escape commit. If it
-        // marks the event handled, stop before mutating (a blocked over-limit keystroke, or a commit that has
-        // already rebuilt the title back to display mode).
+        // Let the parent handler gate the key first (maxlength, Enter/Escape commit); stop if it handled the event.
         Widget.OnKeyDown?.Invoke(e);
         if (e.Handled)
         {
@@ -314,9 +292,8 @@ internal sealed class ScribeCuneiformTitleFieldState : State<ScribeCuneiformTitl
         Controller.Selection = TextSelection.Collapsed(caret + s.Length);
     }
 
-    /// <summary>Place the caret from a click. Cuneiform hit-testing lives in the render object
-    /// (<see cref="ScribeCuneiformFieldRender.OffsetAtPosition"/>); the GestureDetector proxy wraps it as its
-    /// single child, so a proxy-local point maps straight through.</summary>
+    /// <summary>Places the caret from a click via the render object's hit-test; the GestureDetector proxy wraps
+    /// it as its single child, so a proxy-local point maps straight through.</summary>
     private void OnPress(PointerEvent e)
     {
         FocusNode.RequestFocus();

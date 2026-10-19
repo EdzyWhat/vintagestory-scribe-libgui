@@ -11,19 +11,15 @@ using Vintagestory.GameContent;   // GuiHandbookItemStackPage.PageCodeForStack (
 namespace Scribe;
 
 /// <summary>
-/// One grid-recipe variant a Crafting Task can bind to: a stable
-/// <see cref="Signature"/> string, the concrete output code and its per-craft yield, the derived counting
-/// <see cref="Ingredients"/> (Core-neutral <see cref="ScribeCraftIngredient"/>s), any non-counting
-/// <see cref="Notes"/> (liquids), and a player-facing <see cref="Label"/> distinguishing this variant
-/// from the item's other recipes. Produced by <see cref="ScribeCraftRecipeProbe"/> from the live client
-/// recipe registry; consumed by the Handbook link builder (<see cref="ScribeHandbookPatch"/>) and the
-/// generator/self-heal (<see cref="ScribeModSystem.AddCraftFromHandbook"/>).
+/// One grid-recipe variant a Crafting Task can bind to: a stable <see cref="Signature"/>, the concrete output
+/// code and per-craft yield, the counting <see cref="Ingredients"/>, non-counting <see cref="Notes"/> (liquids),
+/// and a player-facing <see cref="Label"/> distinguishing it from the item's other recipes. Produced by
+/// <see cref="ScribeCraftRecipeProbe"/> from the live client recipe registry.
 /// </summary>
 internal sealed record ScribeCraftRecipeVariant(
     string Signature,
-    // The Craft parent's target string: the recipe's resolved output re-encoded via ScribeItemRef.Encode
-    // (attribute-preserving for lanterns/meals; a bare code for common items). Used as the item code handed
-    // to AddCraftFromHandbook so the parent resolves to the correct display name.
+    // The Craft parent's target: the recipe's resolved output re-encoded via ScribeItemRef.Encode
+    // (attribute-preserving for lanterns/meals), so the parent resolves to the correct display name.
     string OutputCode,
     int OutputPerCraft,
     string Label,
@@ -31,50 +27,33 @@ internal sealed record ScribeCraftRecipeVariant(
     IReadOnlyList<string> Notes);
 
 /// <summary>
-/// Reads the live client grid-recipe registry (<see cref="IWorldAccessor.GridRecipes"/>) and derives, for a
-/// given output item, the Crafting-Task recipe variants and their ingredient shopping lists
-/// This is the Mod-side bridge that feeds the VS recipe data into the
-/// API-free Core model (<see cref="ScribeCraftIngredient"/> / <see cref="ScribeCraftMath"/>).
+/// Reads the live client grid-recipe registry (<see cref="IWorldAccessor.GridRecipes"/>) and derives, for an
+/// output item, the Crafting-Task recipe variants and their ingredient lists, feeding VS recipe data into the
+/// API-free Core model. Client-only.
 ///
-/// <para><b>Why the grid registry is enough:</b> Vintage Story expands variant/wildcard grid recipes into one
-/// CONCRETE <see cref="GridRecipe"/> per resolved output at load time (the same fan-out the vanilla Handbook
-/// "Created by" section iterates — see <c>CollectibleBehaviorHandbookTextAndExtraInfo.addCreatedByInfo</c>).
-/// So each metal lantern is its own concrete recipe whose <see cref="GridRecipe.ResolvedIngredients"/> carry concrete
-/// codes for the chosen variant (birch-plank ⇒ birch-log), while a genuinely broad ingredient stays a
-/// wildcard. We therefore never do variant substitution ourselves — we read the resolved codes off the
-/// recipe (concrete for <c>{var}</c>, family for real wildcards).</para>
+/// <para>VS expands variant/wildcard grid recipes into one CONCRETE <see cref="GridRecipe"/> per resolved output
+/// at load time, so <see cref="GridRecipe.ResolvedIngredients"/> carry concrete codes for the chosen variant
+/// (<c>{var}</c>) while a genuinely broad ingredient stays a wildcard. No variant substitution is done here.</para>
 ///
-/// <para><b>Variant identity via the Handbook page code</b>: we key a
-/// recipe to its output by <see cref="GuiHandbookItemStackPage.PageCodeForStack"/> — the same
-/// attribute-qualified string VS itself uses per Handbook page (Tallybook's proven approach). It folds the
-/// distinguishing attributes (a lantern's material/lining/glass) into identity, so the 13 metal fan-outs of
-/// one code family get 13 distinct identities instead of colliding on the bare code. Both
-/// <see cref="MatchingRecipes"/> (equality against the viewed page's stack) and <see cref="SignatureOf"/> are
-/// built on it; we never use <c>Output.ResolvedItemStack.Satisfies</c> for output matching (that
-/// attribute-subset test over-matches across variants).</para>
+/// <para>Variant identity is the Handbook page code (<see cref="GuiHandbookItemStackPage.PageCodeForStack"/>),
+/// which folds distinguishing attributes (a lantern's material/lining/glass) into identity;
+/// <see cref="MatchingRecipes"/> and <see cref="SignatureOf"/> are built on it. <c>Output.ResolvedItemStack.Satisfies</c>
+/// is avoided because its attribute-subset test over-matches across variants.</para>
 ///
-/// <para><b>Signature</b>: <c>outputPageCode|ingredientPattern|WxH</c> — stable, session-independent
-/// fields. It re-resolves the same variant on document-open/self-heal without
-/// persisting the (recipe-update-fragile) ingredient list. When several recipes share a signature we take
-/// the first in registry order (deterministic); an unresolvable signature degrades gracefully (the parent
-/// stays a plain output tracker, children untouched — never a crash or mass-delete).</para>
-///
-/// <para>Client-only (the recipe registry and the Handbook are client-side here).</para>
+/// <para>Signature: <c>outputPageCode|ingredientPattern|WxH</c>, stable across sessions so a variant re-resolves
+/// without persisting the ingredient list. Duplicates take the first recipe in registry order; an unresolvable
+/// signature degrades gracefully (parent stays a plain output tracker, children untouched).</para>
 /// </summary>
 internal static class ScribeCraftRecipeProbe
 {
-    /// <summary>All grid-recipe variants whose primary output satisfies <paramref name="stack"/> (the Handbook
-    /// page's own attributed <see cref="ItemStack"/>), deduplicated by
-    /// <see cref="ScribeCraftRecipeVariant.Signature"/> and labeled to distinguish them. Empty when the item
-    /// has no grid recipe (the Handbook then shows no "Add Crafting Task" link). Never throws.
+    /// <summary>All grid-recipe variants whose primary output matches <paramref name="stack"/>, deduplicated by
+    /// <see cref="ScribeCraftRecipeVariant.Signature"/> and labeled. Empty when the item has no grid recipe.
+    /// Never throws.
     ///
-    /// <para>Takes the attributed stack rather than a bare code: an
-    /// attribute-encoded output (a lantern's <c>material</c>/<c>glass</c>/<c>lining</c>) only satisfies its
-    /// recipe's <c>Output.ResolvedItemStack.Satisfies(stack)</c> when the stack actually carries those
-    /// attributes — the same input vanilla's "Created by" uses. A bare code would drop them and
-    /// match nothing. Each variant's <see cref="ScribeCraftRecipeVariant.OutputCode"/>
-    /// is the recipe's resolved output re-encoded via <see cref="ScribeItemRef.Encode"/>, so a Craft parent
-    /// created from it names correctly.</para></summary>
+    /// <para>Takes the attributed stack, not a bare code: attribute-encoded outputs (a lantern's
+    /// material/glass/lining) only match when the stack carries those attributes. Each variant's
+    /// <see cref="ScribeCraftRecipeVariant.OutputCode"/> is the resolved output re-encoded via
+    /// <see cref="ScribeItemRef.Encode"/>.</para></summary>
     public static IReadOnlyList<ScribeCraftRecipeVariant> ProbeVariants(ICoreClientAPI capi, ItemStack? stack)
     {
         if (stack is null) return System.Array.Empty<ScribeCraftRecipeVariant>();
@@ -89,8 +68,7 @@ internal static class ScribeCraftRecipeProbe
             bySig.TryAdd(sig, recipe);
         }
 
-        // Label each variant. A lone recipe gets the plain "Add Crafting Task"; with several, each is
-        // distinguished by its first counting ingredient's name, falling back to "Recipe N".
+        // A lone recipe gets the plain label; several are distinguished by DistinguishingName.
         var result = new List<ScribeCraftRecipeVariant>(bySig.Count);
         bool single = bySig.Count == 1;
         int n = 0;
@@ -101,9 +79,8 @@ internal static class ScribeCraftRecipeProbe
             string label = single
                 ? Lang.Get("scribe:scribe-gui-handbook-addcraft")
                 : Lang.Get("scribe:scribe-gui-handbook-addcraft-variant", DistinguishingName(capi, recipe, ingredients, n));
-            // Encode the recipe's RESOLVED output stack (attributes included) as the Craft parent's target, so
-            // an attribute-encoded output (a copper lantern) names correctly. With no resolved output stack
-            // there is no concrete code to read, so fall back to the queried stack's own bare code.
+            // Encode the resolved output stack (attributes included) as the Craft parent's target; with none,
+            // fall back to the queried stack's bare code.
             string outputCode = recipe.Output?.ResolvedItemStack is { } outStack
                 ? ScribeItemRef.Encode(outStack)
                 : stack.Collectible.Code.ToString();
@@ -118,12 +95,9 @@ internal static class ScribeCraftRecipeProbe
         return result;
     }
 
-    /// <summary>Re-resolve the single grid recipe a persisted <paramref name="signature"/> identifies and
-    /// derive its PER-CRAFT ingredient list + notes + output-per-craft (generator + self-heal path). The
-    /// caller computes <c>craftsNeeded</c> from the returned <c>OutputPerCraft</c> and hands the per-craft
-    /// ingredients to <see cref="ScribeDocument.ReconcileCraftIngredients"/>, which does the batch scaling.
-    /// Returns null when no live recipe matches the signature (graceful degrade). Never
-    /// throws.</summary>
+    /// <summary>Re-resolves the single grid recipe a persisted <paramref name="signature"/> identifies and derives
+    /// its PER-CRAFT ingredients, notes, and output-per-craft; batch scaling is done by
+    /// <see cref="ScribeDocument.ReconcileCraftIngredients"/>. Null when no live recipe matches. Never throws.</summary>
     public static (IReadOnlyList<ScribeCraftIngredient> Ingredients, IReadOnlyList<string> Notes, int OutputPerCraft)? ResolveBySignature(
         ICoreClientAPI capi, string? signature)
     {
@@ -147,11 +121,8 @@ internal static class ScribeCraftRecipeProbe
         return q < 1 ? 1 : q;
     }
 
-    /// <summary>DEV (<c>.scribeprobe</c>): a one-shot, human-readable dump of
-    /// what the probe sees for <paramref name="stack"/> — its Handbook page code, and for each matched grid
-    /// recipe the full <see cref="SignatureOf"/>, derived counting ingredients (code × per-craft qty), and
-    /// notes. For confirming in-game that e.g. a copper and a gold
-    /// lantern resolve to DISTINCT page codes/signatures. Client-only; never throws.</summary>
+    /// <summary>DEV (<c>.scribeprobe</c>): a human-readable dump of the page code, matched recipes, signatures,
+    /// counting ingredients, and notes the probe sees for <paramref name="stack"/>. Client-only; never throws.</summary>
     public static string Describe(ICoreClientAPI capi, ItemStack? stack)
     {
         if (stack is null) return "scribeprobe: no item — hold one, or pass a code (e.g. .scribeprobe game:plank-oak).";
@@ -181,15 +152,10 @@ internal static class ScribeCraftRecipeProbe
 
     // ---- internals ----
 
-    /// <summary>Grid recipes whose PRIMARY output is the SAME Handbook variant as <paramref name="stack"/> (the
-    /// viewed page's own attributed stack), keyed by <see cref="GuiHandbookItemStackPage.PageCodeForStack"/>
-    /// equality and honoring <see cref="RecipeBase.ShowInCreatedBy"/>.
-    /// Byproduct/returned-stack outputs are intentionally excluded — a Crafting Task targets a recipe's main
-    /// product.
-    ///
-    /// <para>Page-code equality is used rather than an <c>Output.ResolvedItemStack.Satisfies(stack)</c> subset test,
-    /// which over-matches across attribute variants (every metal lantern satisfies every other).
-    /// Equality is exact and direction-free. A stack that yields no page code (<c>"?"</c>) matches nothing.</para></summary>
+    /// <summary>Grid recipes whose PRIMARY output is the same Handbook variant as <paramref name="stack"/>
+    /// (<see cref="GuiHandbookItemStackPage.PageCodeForStack"/> equality), honoring
+    /// <see cref="RecipeBase.ShowInCreatedBy"/>. Byproducts are excluded. Equality, not a <c>Satisfies</c> subset
+    /// test, which over-matches across attribute variants; a stack with no page code (<c>"?"</c>) matches nothing.</summary>
     private static IEnumerable<GridRecipe> MatchingRecipes(ICoreClientAPI capi, ItemStack stack)
     {
         var all = capi.World.GridRecipes;
@@ -204,13 +170,10 @@ internal static class ScribeCraftRecipeProbe
         }
     }
 
-    /// <summary>Collapse a recipe's grid cells into a per-ingredient counting list plus non-counting notes.
-    /// Cells with the same resolved code are summed (three log cells ⇒ one "log ×3"); tool ingredients
-    /// (<see cref="CraftingRecipeIngredient.IsTool"/>) are dropped (not consumed); liquid ingredients become a
-    /// non-counting note line. Each counting ingredient's code is CONCRETE when the
-    /// recipe resolved it to an exact stack (<c>{var}</c>-bound), or the broad WILDCARD code when it is a
-    /// genuine family. Quantities are PER-CRAFT; batch scaling is applied later by
-    /// <see cref="ScribeDocument.ReconcileCraftIngredients"/>.</summary>
+    /// <summary>Collapses a recipe's grid cells into a counting ingredient list plus non-counting notes. Cells with
+    /// the same resolved code are summed; tools (<see cref="CraftingRecipeIngredient.IsTool"/>) are dropped; liquid
+    /// cells become notes. A code is CONCRETE when the recipe resolved an exact stack, else the WILDCARD code.
+    /// Quantities are PER-CRAFT; batch scaling is applied by <see cref="ScribeDocument.ReconcileCraftIngredients"/>.</summary>
     private static (IReadOnlyList<ScribeCraftIngredient>, IReadOnlyList<string>) DeriveIngredients(
         ICoreClientAPI capi, GridRecipe recipe)
     {
@@ -224,18 +187,14 @@ internal static class ScribeCraftRecipeProbe
         {
             foreach (var cell in cells)
             {
-                // Tools / non-consumed cells / tags-only matchers never become a counting child.
-                // Consume is the API's preferred "not a tool" flag (≈ !IsTool). TagsOnly + the default
-                // Code of *:* would otherwise EncodeWildcard into a "Pocketsun (any variant)" Tracker.
+                // Skip tools, non-consumed cells, and tags-only matchers (their default *:* code would encode
+                // as a bogus wildcard Tracker).
                 if (cell is null || cell.IsTool || !cell.Consume) continue;
                 if (cell.MatchingType == EnumRecipeMatchType.TagsOnly) continue;
 
                 var resolved = cell.ResolvedItemStack?.Collectible;
-                // A liquid sitting directly in a GRID CELL (rare — vanilla liquids live in containers, so this
-                // path effectively never fires for survival grid recipes) has no `requiresLitres` to count in
-                // litres, so it degrades to a note here — the same resolve-or-note outcome the containerized
-                // path (TryAddLiquid, below) reaches when a liquid can't be resolved. The container path reads recipe/ingredient attributes, not grid cells, so there is no
-                // double-emit with this branch.
+                // A liquid directly in a grid cell (rare; vanilla liquids live in containers, see TryAddLiquid) has no
+                // `requiresLitres`, so it degrades to a note.
                 if (resolved is not null && resolved.MatterState == EnumMatterState.Liquid)
                 {
                     string noteText = Lang.Get("scribe:scribe-gui-craft-liquid-note", DisplayName(capi, cell));
@@ -256,41 +215,31 @@ internal static class ScribeCraftRecipeProbe
             .Select(code => new ScribeCraftIngredient(code, perCode[code]))
             .ToList();
 
-        // Containerized-liquid ingredients (ink-and-quill, poultice, bandage, oillamp, beenade): the liquid is
-        // NOT a grid cell — it's declared on the recipe as attributes.liquidContainerProps.requiresContent, so
-        // the per-cell MatterState check above never fires (the cell is the solid bowl). Emit each such liquid as
-        // a COUNTING liquid ingredient (litre-based Tracker), mirroring vanilla
-        // BlockLiquidContainerBase.OnHandbookRecipeRender (VSAPI-NOTES.md § craft); an unresolvable liquid
-        // degrades to a note. The bowl stays counted as a normal ingredient (it is genuinely required).
+        // Containerized liquids (ink-and-quill, poultice, bandage, oillamp, beenade) are declared as
+        // attributes.liquidContainerProps.requiresContent, not as grid cells, so the MatterState check above never
+        // fires. Emitted as COUNTING litre ingredients, mirroring vanilla
+        // BlockLiquidContainerBase.OnHandbookRecipeRender (VSAPI-NOTES.md § craft); unresolvable ones become notes.
         TryAddLiquid(capi, recipe, ingredients, notes, seenNotes);
 
         return (ingredients, notes);
     }
 
-    /// <summary>Emit each containerized-liquid requirement declared on the recipe (not on a grid cell) as a
-    /// COUNTING liquid ingredient, falling back to a note when it can't be resolved.
-    /// The requirement lives at
-    /// <c>attributes.liquidContainerProps.requiresContent</c> (recipe-level, what the survival recipes use),
-    /// with a per-ingredient <c>RecipeAttributes.requiresContent</c> fallback — the same authoritative source
-    /// vanilla reads in <c>BlockLiquidContainerBase.OnHandbookRecipeRender</c>: <c>requiresContent.code</c>
-    /// (the liquid code), <c>requiresContent.type</c> (<c>item</c>|<c>block</c>), and the SIBLING
-    /// <c>requiresLitres</c> float. The container bowl remains a normal counted ingredient; only the liquid it
-    /// must hold is added here.
+    /// <summary>Emits each containerized-liquid requirement declared on the recipe (not a grid cell) as a
+    /// COUNTING liquid ingredient, or as a note when it cannot be resolved.
+    /// Reads recipe-level <c>attributes.liquidContainerProps.requiresContent</c>, falling back to per-ingredient
+    /// <c>RecipeAttributes.requiresContent</c>, as vanilla's <c>OnHandbookRecipeRender</c> does:
+    /// <c>code</c>, <c>type</c> (<c>item</c>|<c>block</c>), and the SIBLING <c>requiresLitres</c> float.
     ///
-    /// <para>Per distinct liquid code: if the code is concrete, <c>requiresLitres &gt; 0</c>, and the item/block
-    /// stack resolves, add a liquid <see cref="ScribeCraftIngredient"/> (litre-counted). Otherwise append the
-    /// <c>scribe:scribe-gui-craft-liquid-note</c> Text note naming the liquid (graceful degrade).
-    /// Duplicate liquid codes are merged by summing their litres before emission, because
-    /// <see cref="ScribeDocument.ReconcileCraftIngredients"/> expects distinct codes. Defensive: every access is
-    /// null-safe and the only throw risk (a bad AssetLocation) is caught, so a malformed recipe simply yields
-    /// no ingredient and no note.</para></summary>
+    /// <para>A concrete code with <c>requiresLitres &gt; 0</c> whose stack resolves becomes a litre-counted
+    /// <see cref="ScribeCraftIngredient"/>; otherwise a <c>scribe:scribe-gui-craft-liquid-note</c> note.
+    /// Duplicate codes are merged by summing litres because
+    /// <see cref="ScribeDocument.ReconcileCraftIngredients"/> expects distinct codes. Access is null-safe and a bad
+    /// AssetLocation is caught, so a malformed recipe yields no ingredient and no note.</para></summary>
     private static void TryAddLiquid(
         ICoreClientAPI capi, GridRecipe recipe,
         List<ScribeCraftIngredient> ingredients, List<string> notes, HashSet<string> seenNotes)
     {
-        // Collect requirements (code + type + litres). Recipe-level liquidContainerProps takes precedence (the
-        // survival-recipe form); only when it is absent do we gather the per-ingredient RecipeAttributes across
-        // every cell that carries one.
+        // Recipe-level liquidContainerProps wins; only when absent are per-ingredient RecipeAttributes gathered.
         var reqs = new List<(string Code, string? Type, float Litres)>();
 
         var recipeProps = recipe.Attributes?["liquidContainerProps"];
@@ -313,7 +262,7 @@ internal static class ScribeCraftRecipeProbe
         }
         if (reqs.Count == 0) return;
 
-        // Merge duplicate liquid codes by summing litres (ReconcileCraftIngredients expects distinct codes).
+        // Merge duplicate liquid codes by summing litres.
         var byCode = new Dictionary<string, (string? Type, float Litres)>();
         var codeOrder = new List<string>();
         foreach (var (code, type, litres) in reqs)
@@ -327,7 +276,6 @@ internal static class ScribeCraftRecipeProbe
         {
             var (type, litres) = byCode[code];
 
-            // Fully resolvable → a counting liquid ingredient; anything else → the fallback note.
             ItemStack? stack = code.Contains('*') ? null : ResolveLiquidStack(capi, code, type);
             if (stack is not null && litres > 0f)
             {
@@ -343,9 +291,8 @@ internal static class ScribeCraftRecipeProbe
         }
     }
 
-    /// <summary>Read one <c>requiresContent.code</c>/<c>type</c> + sibling <c>requiresLitres</c> off a
-    /// liquid-container props object (either the recipe-level <c>liquidContainerProps</c> or a cell's
-    /// <c>RecipeAttributes</c>) and append it to <paramref name="reqs"/>. Skips a missing/empty code.</summary>
+    /// <summary>Reads one <c>requiresContent</c> code/type plus the sibling <c>requiresLitres</c> from a
+    /// liquid-container props object into <paramref name="reqs"/>; skips a missing/empty code.</summary>
     private static void AddLiquidRequirement(List<(string Code, string? Type, float Litres)> reqs, JsonObject props)
     {
         string? code = props["requiresContent"]["code"].AsString(null);
@@ -355,9 +302,8 @@ internal static class ScribeCraftRecipeProbe
         reqs.Add((code!, type, litres));
     }
 
-    /// <summary>Resolve a concrete liquid code to a display <see cref="ItemStack"/> (item vs block per
-    /// <paramref name="type"/>), used both to confirm the liquid's identity and to name it. Returns null on a
-    /// bad location or an unregistered code (the caller then degrades to the note).</summary>
+    /// <summary>Resolves a concrete liquid code to a display <see cref="ItemStack"/> (item or block per
+    /// <paramref name="type"/>); null on a bad location or unregistered code.</summary>
     private static ItemStack? ResolveLiquidStack(ICoreClientAPI capi, string code, string? type)
     {
         try
@@ -370,36 +316,29 @@ internal static class ScribeCraftRecipeProbe
         catch { return null; }
     }
 
-    /// <summary>The code a counting ingredient contributes to a child Tracker: the CONCRETE resolved code for
-    /// an exact (<c>{var}</c>-bound) ingredient, or the WILDCARD code for a genuine family ingredient.
-    /// A wildcard that carries an <c>allowedVariants</c>/<c>skipVariants</c> restriction (e.g. the Hunter's
-    /// Backpack's <c>{ code:"*", allowedVariants:[…] }</c>) is encoded via
-    /// <see cref="ScribeItemRef.EncodeWildcard"/> so the child Tracker keeps the variant filter — otherwise a
-    /// bare <c>game:*</c> counts every carried item and displays as "Item-Air". An unrestricted wildcard encodes to its bare code (unchanged). Null when neither is available.</summary>
+    /// <summary>The code a counting ingredient contributes to a child Tracker: the CONCRETE resolved code for an
+    /// exact ingredient, else the WILDCARD code. A wildcard with an <c>allowedVariants</c>/<c>skipVariants</c>
+    /// restriction is encoded via <see cref="ScribeItemRef.EncodeWildcard"/> so the Tracker keeps the variant
+    /// filter (a bare <c>game:*</c> would count every carried item). Null when neither is available.</summary>
     private static string? IngredientCode(CraftingRecipeIngredient ingredient)
     {
         if (ingredient.MatchingType == EnumRecipeMatchType.Exact && ingredient.ResolvedItemStack?.Collectible?.Code is { } concrete)
             return concrete.ToString();
         if (ingredient.MatchingType == EnumRecipeMatchType.TagsOnly) return null;
         if (ingredient.Code is not { } wild) return null;
-        // CraftingRecipeIngredient.Code defaults to new AssetLocation("*","*") (*:*). Never encode that
-        // as a family Tracker — it counts every carried item and displays as "Pocketsun (any variant)".
+        // Code defaults to *:*; never encode that as a family Tracker (it would count every carried item).
         if (wild.Domain == "*" && wild.Path == "*") return null;
         return ScribeItemRef.EncodeWildcard(wild, ingredient.AllowedVariants, ingredient.SkipVariants);
     }
 
-    /// <summary>Sentinel page code for a recipe/stack that yields no <see cref="GuiHandbookItemStackPage.PageCodeForStack"/>
-    /// (null resolved output, or the primitive throwing). Two <c>"?"</c>s never match a real variant because
+    /// <summary>Sentinel page code for a recipe/stack with no page code. Two <c>"?"</c>s never match because
     /// <see cref="MatchingRecipes"/> bails when the viewed stack itself resolves to <c>"?"</c>.</summary>
     private const string UnknownPageCode = "?";
 
-    /// <summary>The variant signature: <c>outputPageCode|ingredientPattern|WxH</c>. The pattern and dimensions are
-    /// retained client-side (<see cref="GridRecipe.FreeRAMServer"/> only nulls them server-side). The output
-    /// field is the attribute-qualified <see cref="OutputPageCode"/> so each
-    /// metal/lining/glass variant gets a distinct signature instead of colliding on the bare code.
-    ///
-    /// <para>A signature that no longer re-resolves leaves the parent a plain output tracker (children
-    /// intact).</para></summary>
+    /// <summary>The variant signature <c>outputPageCode|ingredientPattern|WxH</c>. Pattern and dimensions survive
+    /// client-side (<see cref="GridRecipe.FreeRAMServer"/> only nulls them server-side); the attribute-qualified
+    /// output keeps metal/lining/glass variants distinct. A signature that no longer re-resolves leaves the parent
+    /// a plain output tracker.</summary>
     private static string SignatureOf(GridRecipe recipe)
     {
         string output = OutputPageCode(recipe);
@@ -407,15 +346,13 @@ internal static class ScribeCraftRecipeProbe
         return $"{output}|{pattern}|{recipe.Width}x{recipe.Height}";
     }
 
-    /// <summary>The attribute-qualified Handbook page code of a grid recipe's resolved primary output
-    /// — the variant-identity primitive VS uses per Handbook page. Returns
-    /// <see cref="UnknownPageCode"/> when the recipe has no resolved output stack.</summary>
+    /// <summary>The attribute-qualified Handbook page code of a recipe's resolved primary output;
+    /// <see cref="UnknownPageCode"/> when it has none.</summary>
     private static string OutputPageCode(GridRecipe recipe)
         => recipe.Output?.ResolvedItemStack is { } outStack ? PageCodeForStack(outStack) : UnknownPageCode;
 
-    /// <summary>Guarded wrapper over <see cref="GuiHandbookItemStackPage.PageCodeForStack"/>: the shared
-    /// variant-identity key for both output matching and signatures. Returns <see cref="UnknownPageCode"/> if
-    /// the primitive returns null or throws, so a degenerate stack can never masquerade as a real variant.</summary>
+    /// <summary>Guarded <see cref="GuiHandbookItemStackPage.PageCodeForStack"/>: returns
+    /// <see cref="UnknownPageCode"/> on null or throw, so a degenerate stack never masquerades as a real variant.</summary>
     private static string PageCodeForStack(ItemStack stack)
     {
         try { return GuiHandbookItemStackPage.PageCodeForStack(stack) ?? UnknownPageCode; }
@@ -429,8 +366,7 @@ internal static class ScribeCraftRecipeProbe
     {
         if (ingredients.Count > 0)
         {
-            // A concrete ingredient code resolves to a stack whose name distinguishes the variant; a genuine
-            // wildcard family won't resolve, so fall through to the ordinal.
+            // A concrete code resolves to a distinguishing name; a wildcard family will not, so fall through to the ordinal.
             var stack = ScribeItemRef.ResolveStack(capi.World, ingredients[0].ItemCode);
             if (stack is not null) return stack.GetName();
         }
