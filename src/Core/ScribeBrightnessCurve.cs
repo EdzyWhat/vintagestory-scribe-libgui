@@ -8,7 +8,7 @@ namespace Scribe.Core;
 ///
 /// <para><b>Shipped curve</b> (input to output): <c>0.00 → floor</c>, <c>0.45 → 0.53</c>, <c>0.90 → 1.00</c>,
 /// <c>1.00 → 1.00</c>: dim but visible in darkness, a brisk mid ramp, full brightness at a bright-but-not-noon
-/// source, flat above.</para>
+/// source (the 0.90 knee sits between a large lantern and a very bright source), flat above.</para>
 ///
 /// <para><b>Light-level mapping.</b> Vintage Story maps light-level index V (0..31) to brightness via its
 /// <c>blockLightLevels</c> table (general.json), NOT V/31; the table reaches <c>1.0</c> at V=26. V=20 (large

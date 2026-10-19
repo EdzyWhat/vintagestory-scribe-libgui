@@ -76,7 +76,8 @@ public sealed partial class ScribeModSystem
                         byte[] blob  = r.ReadBytes(len);
                         var    store = TimerStore.Deserialize(blob);
                         // Resume Running and fired-but-undismissed timers; a Fired timer carries FiredElapsedSeconds so its
-                        // auto-disappear resumes rather than restarts (matches the filter in OnGameWorldSave).
+                        // auto-disappear resumes rather than restarts (matches the filter in OnGameWorldSave). v1 saves never
+                        // persisted Fired timers, so no legacy Fired blob can carry elapsed=0 and flash a full window.
                         if (store.Status == TimerStatus.Running && store.RemainingSeconds > 0)
                             timerStores[uid] = store;
                         else if (store.Status == TimerStatus.Fired)

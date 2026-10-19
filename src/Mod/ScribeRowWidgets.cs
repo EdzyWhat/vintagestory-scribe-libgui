@@ -507,7 +507,8 @@ internal static class ScribeItemLabel
             // Display-only: caret and selection are zeroed and hidden. Jitter is seeded from the label so
             // strokes are stable frame-to-frame (no TaskId here; the seed only needs stability). Inner pad
             // is 0: the item row applies only a right FieldPadX, and matching Task-row FieldPadY would drop
-            // tablet names ~6px below the checkbox/stepper horizon.
+            // tablet names ~6px below the checkbox/stepper horizon (the taller
+            // cuneiform line comes from LineHeightRatio, not extra pad).
             return new ScribeCuneiformFieldRenderWidget(
                 text: label,
                 caret: 0,

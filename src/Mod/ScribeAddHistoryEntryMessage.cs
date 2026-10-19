@@ -9,12 +9,15 @@ namespace Scribe;
 [ProtoContract]
 public sealed class ScribeAddHistoryEntryMessage
 {
+    /// <summary>The notebook document's <c>DocId</c> as 16 raw bytes.</summary>
     [ProtoMember(1)]
     public byte[]? DocIdBytes { get; set; }
 
+    /// <summary>The client-generated entry identifier as 16 raw bytes.</summary>
     [ProtoMember(2)]
     public byte[]? EntryId { get; set; }
 
+    /// <summary>The entry's text (trimmed, max <see cref="Scribe.Core.ScribeDocumentCodec.MaxTaskTextLength"/> chars).</summary>
     [ProtoMember(3)]
     public string? Text { get; set; }
 
@@ -23,6 +26,7 @@ public sealed class ScribeAddHistoryEntryMessage
     [ProtoMember(4)]
     public string? TargetInventoryId { get; set; }
 
+    /// <summary>The slot index within <see cref="TargetInventoryId"/>. Ignored when that id is null.</summary>
     [ProtoMember(5)]
     public int TargetSlotId { get; set; }
 }

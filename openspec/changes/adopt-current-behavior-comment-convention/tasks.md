@@ -18,19 +18,19 @@
 ## 4. Review and merge
 
 - [x] 4.1 Review the flagged uncertain comments and stale-comment corrections from all reports; verify each is accepted, adjusted, or reverted
-- [ ] 4.2 Spot-check at least one file per batch (prioritizing `HudScribePins.cs` and `ScribeDialogBase.*`) by comparing comment claims against the code; verify no live constraint was dropped
+- [x] 4.2 Spot-check at least one file per batch (prioritizing `HudScribePins.cs` and `ScribeDialogBase.*`) by comparing comment claims against the code; verify no live constraint was dropped
 - [x] 4.3 Merge the batch branches; verify no conflicts and run the verification script against the original base commit with exit 0
 - [x] 4.4 Run `dotnet test tests/Core.Tests` on the merged result; verify all tests pass
 
 ## 5. Notes and wrap-up
 
 - [x] 5.1 Add the relocated API/engine facts collected in the reports to `VSAPI-NOTES.md`; verify each fact appears once and any retained code comment is a one-line pointer
-- [ ] 5.2 Measure the result and record it in the archive notes: history-marker grep count in comments (target 0 outside deliberate exceptions) and before/after comment and total line counts; verify the numbers are reported
-- [ ] 5.3 Decide whether to add a history-marker lint to `build/verify.sh` as a follow-up change; verify the decision is recorded
+- [x] 5.2 Measure the result and record it in the archive notes: history-marker grep count in comments (target 0 outside deliberate exceptions) and before/after comment and total line counts; verify the numbers are reported
+- [x] 5.3 Decide whether to add a history-marker lint to `build/verify.sh` as a follow-up change; verify the decision is recorded
 
 ## 6. Second pass: restating comments
 
 - [x] 6.1 Pilot the aggressive rubric on three batches (`hud-pins`, one `mod-*`, one `tests-*`); verify each is IL-identical and inspect the cuts for lost constraints before proceeding
 - [x] 6.2 Run the aggressive pass on the remaining batches; verify every report states IL-identical with no reverted files
-- [ ] 6.3 Resolve reviewer concerns from the second pass (restore any lost live constraint); verify the concerns list is empty or each item is dispositioned
-- [ ] 6.4 Merge the second-pass branches and run the verification script against the pre-sweep commit plus `dotnet test tests/Core.Tests`; verify IL identical and all tests pass
+- [x] 6.3 Resolve reviewer concerns from the second pass (restore any lost live constraint); verify the concerns list is empty or each item is dispositioned
+- [x] 6.4 Merge the second-pass branches and run the verification script against the pre-sweep commit plus `dotnet test tests/Core.Tests`; verify IL identical and all tests pass

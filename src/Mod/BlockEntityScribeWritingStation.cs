@@ -484,7 +484,6 @@ public abstract class BlockEntityScribeWritingStation : BlockEntity, IRotatable,
     /// <para>Race: a concurrent whole-document <see cref="ApplyEdit"/> under the edit lock can clobber this
     /// write and vice versa (last write wins).</para>
     /// </summary>
-    /// </summary>
     public bool SetTaskTextFromReader(Guid taskId, string text)
     {
         if (Api is not ICoreServerAPI) return false;

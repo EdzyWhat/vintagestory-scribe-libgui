@@ -150,7 +150,8 @@ internal sealed class CarryOnBridge
     private static object? GetProp(object obj, string name) => obj.GetType().GetProperty(name)?.GetValue(obj);
 
     /// <summary>Recursively searches a frozen block-entity tree for Notebook/Tablet ItemStacks. Container
-    /// block entities serialize their slots under differing keys, so this recurses into every nested
+    /// block entities serialize their slots under differing keys (vanilla inventories nest an <c>inventory</c> sub-tree holding a <c>slots</c>
+    /// sub-tree of <see cref="ItemstackAttribute"/>s), so this recurses into every nested
     /// <see cref="ITreeAttribute"/> and checks every <see cref="ItemstackAttribute"/> leaf rather than
     /// relying on key names.</summary>
     private void WalkTree(ITreeAttribute tree, object rootCarriedBlock, Entity entity, List<CarriedNotebookRef> results)

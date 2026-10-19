@@ -23,6 +23,9 @@ internal readonly record struct TabletReadability(
     // Each cell is authored INDEPENDENTLY: this is data, not a rule. Do not "simplify" apparent overlap
     // (glow tints, stroke scale wet 1.2 / hard 1.0 / fired 0.95, offset X == Y) into shared constants; a
     // retune may diverge them.
+    //
+    // Provenance: BlueFired, RedHard, RedFired, FireHard and FireFired hold values from an earlier glyph-forge
+    // export than the other five cells; those five (from the later, partial export) still need in-game verification.
 
     private static readonly TabletReadability BlueWet = new(
         BodyInk: new Vector4(0.176f, 0.180f, 0.184f, 1f),

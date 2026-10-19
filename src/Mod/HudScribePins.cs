@@ -279,7 +279,8 @@ public sealed class HudScribePins : GuiBase
 
     /// <summary>Minimap clearance width for the <see cref="ScribeHudAnchor.TopRight"/> anchor, read from the
     /// open vanilla minimap HUD dialog's bounds, converted to this HUD's GUIScale-normalized units, plus the
-    /// vanilla dialog-to-screen padding. Falls back to <see cref="DefaultTopRightMinimapClearanceX"/> when the
+    /// vanilla dialog-to-screen padding. OuterWidth is raw pixels, divided by scale to match how screenW is
+    /// derived from FrameWidth. Falls back to <see cref="DefaultTopRightMinimapClearanceX"/> when the
     /// dialog isn't resolvable (not composed yet, or the full map is open).</summary>
     private float ResolveTopRightMinimapClearanceX(float scale)
     {
@@ -1233,7 +1234,8 @@ internal sealed class HudPinsContent : StatelessWidget
         var children = new List<Widget> { BuildHeader(colors, glow) };
 
         // Quest prompt banner: shown regardless of collapse state so a collapsed HUD doesn't hide it. Wrapped in a
-        // slide-in keyed by the prompt's own identity: a new prompt slides in, the same prompt across rebuilds stays settled.
+        // slide-in keyed by the prompt's own identity: a new prompt slides in, the same prompt across rebuilds stays settled. The "questprompt:" key prefix
+        // keeps it distinct from any row's TaskId key in the shared collapseRegistry.
         if (questPrompts.Count > 0)
         {
             var bannerPrompt = questPrompts[0];

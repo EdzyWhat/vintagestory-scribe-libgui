@@ -223,6 +223,7 @@ public sealed partial class ScribeModSystem
         int resultingBlocks = message.Append
             ? (targetDoc?.BlockCount ?? 0) + sourceDoc.BlockCount
             : sourceDoc.BlockCount;
+        // A non-document target can't reach here (Scribe-only slots), so a missing item is treated as uncapped/writeable.
         if (targetSlot.Itemstack.Collectible is IScribeDocumentItem targetItem
             && !targetItem.DocumentPolicy(targetSlot).CanHold(resultingBlocks))
         {
@@ -305,6 +306,7 @@ public sealed partial class ScribeModSystem
         int resultingBlocks = message.Append
             ? (targetDoc?.BlockCount ?? 0) + incoming.BlockCount
             : incoming.BlockCount;
+        // A non-document target can't reach here (Scribe-only slots), so a missing item is treated as uncapped/writeable.
         if (targetSlot.Itemstack.Collectible is IScribeDocumentItem targetItem
             && !targetItem.DocumentPolicy(targetSlot).CanHold(resultingBlocks))
         {

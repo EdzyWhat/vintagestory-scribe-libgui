@@ -16,7 +16,8 @@ namespace Scribe;
 /// behavior. Modeled on <see cref="ItemScribeNotebook"/>: MaxStackSize 1, right-click opens, shift passes
 /// through to ground storage, and a server-side <c>Crafted</c> history entry. The document persists on the
 /// ItemStack via <see cref="ScribeDocumentAttributes"/> and a <see cref="TabletHost"/> that caps the tier at
-/// 10 task blocks and 1 pin; right-click opens <see cref="GuiDialogScribeTablet"/>.
+/// 10 task blocks and 1 pin; right-click opens <see cref="GuiDialogScribeTablet"/>. There is deliberately no
+/// stylus-in-offhand edit gate (deferred).
 /// </summary>
 public class ItemScribeTablet : Item, IScribeDocumentItem
 {

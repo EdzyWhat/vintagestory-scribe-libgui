@@ -615,7 +615,8 @@ public abstract partial class ScribeDialogBase
         ForceRebuild();
     }
 
-    /// <summary>Snapshots the scroll offset to re-apply after the next view's first layout (see <see cref="pendingRestoreScrollOffset"/>).</summary>
+    /// <summary>Snapshots the scroll offset to re-apply after the next view's first layout (see <see cref="pendingRestoreScrollOffset"/>). Needed on edit-to-read
+    /// (the virtualized read list lays out lazily); read-to-edit needs none since the editor's non-virtualized scroll view measures immediately.</summary>
     private void CaptureScrollForRestore()
     {
         pendingRestoreScrollOffset = sharedScrollController.Offset;

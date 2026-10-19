@@ -93,7 +93,7 @@ public sealed partial class ScribeModSystem
     /// Completes a pinned task by identity. Store-first with write-through: toggles the pin's done-state
     /// in the store (authoritative, so it works with an unresolvable source), writes it through to the source
     /// document when it resolves (acting player only), then applies <paramref name="policy"/>: <c>Sink</c>
-    /// keeps the done pin, <c>Unpin</c> removes it, <c>Delete</c> removes the task and pin. Removal fires only
+    /// keeps the done pin, <c>Unpin</c> removes it, <c>Delete</c> removes the task from the source when it resolves (else only the pin). Removal fires only
     /// on a transition INTO done. The policy is the caller's already-normalized client preference.
     /// Re-pushes once if the set changed. Public so the block-entity layer and integration suite use the production path.
     /// </summary>

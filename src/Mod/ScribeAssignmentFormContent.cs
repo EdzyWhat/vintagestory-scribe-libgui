@@ -22,6 +22,7 @@ namespace Scribe;
 /// rendered Read-view-style with independent Selected checkboxes (<see cref="ScribeAssignmentStageContent"/>),
 /// a "Delete from source on send" toggle, and the target-player picker + batch-Send button. Staging and
 /// selection only; Sent history lives on its own tab (<see cref="ScribeDialogBase.BuildSentAssignmentHistoryContent"/>).
+/// </summary>
 internal sealed class ScribeAssignmentFormContent : StatefulWidget
 {
     public ScribeAssignmentFormContent(

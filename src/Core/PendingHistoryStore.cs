@@ -10,6 +10,8 @@ namespace Scribe.Core;
 /// the next time it is seen in a live carried slot.
 ///
 /// No pruning: entries for a document never seen again persist, an accepted cost for a rare path.
+/// A count cap or age expiry would add bookkeeping for little gain (a small, unbounded set of tiny entries);
+/// revisit if save growth shows otherwise.
 /// The Mod layer's <c>OnHistoryScanTick</c> calls <see cref="TakeAll"/> and owns persistence,
 /// mirroring <see cref="ScribePlayerLocationStore"/>.
 ///

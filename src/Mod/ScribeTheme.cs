@@ -196,7 +196,9 @@ internal static class ScribeTheme
     }
 
     /// <summary>The state-INDEPENDENT color roles for one clay material: everything
-    /// <see cref="ClayPalette"/> needs except the body ink, which is per-<c>(material, state)</c>.</summary>
+    /// <see cref="ClayPalette"/> needs except the body ink, which is per-<c>(material, state)</c>. <c>Accent</c> drives
+    /// button hover/press, caret, focus border and selection; <c>Secondary</c> (pinned-row wash) must read distinct from it so the
+    /// focus border stays legible on a pinned row.</summary>
     private readonly record struct ClayColors(
         Vector4 Accent, Vector4 OnAccent, Vector4 Secondary,
         Vector4 Surface, Vector4 SurfaceLow, Vector4 SurfaceHigh, Vector4 Background, Vector4 Border);

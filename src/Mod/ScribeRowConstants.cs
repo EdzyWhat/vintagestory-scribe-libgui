@@ -156,7 +156,7 @@ internal static class ScribeRowConstants
 
     // ── Quest-prompt action button colors ──────────────────────────────────────────────────────────
     // ColorScheme has no Success/Warning role, so these are fixed colors, held in one place so the HUD
-    // banner and the center modal (ScribeQuestPromptActions) cannot drift apart.
+    // banner and the center modal (ScribeQuestPromptActions) cannot drift apart. Colors are tuned in tools/quest-prompt-colors/index.html.
 
     /// <summary>"Track Quest" action color, a deep saturated green that stays green under the higher
     /// per-state fill alpha (<see cref="ScribeQuestPromptActions.AccentButton"/>).</summary>

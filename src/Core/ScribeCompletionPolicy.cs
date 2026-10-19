@@ -3,7 +3,8 @@ namespace Scribe.Core;
 /// <summary>
 /// What happens to a pinned task, and the player's pin for it, when the player completes it. A per-player,
 /// client-local preference (<see cref="ScribePlayerSettings.CompletionPolicy"/>): the client sends its policy
-/// with the completion request and the server validates, normalizes and applies it. Pure BCL.
+/// with the completion request and the server validates, normalizes and applies it. Sent over the wire and
+/// persisted as a byte: append new members only, never renumber. Pure BCL.
 /// </summary>
 public enum ScribeCompletionPolicy : byte
 {
