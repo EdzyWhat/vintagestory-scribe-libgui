@@ -24,29 +24,22 @@ public sealed class ScribeAssignmentActionMessage
     [ProtoMember(2)]
     public byte Action { get; set; }
 
-    /// <summary>Accept-time placement target — the
-    /// <c>InventoryID</c> of the slot the client resolved to receive the accepted task (the currently
-    /// held document, or the single/chosen inventory candidate). Ignored for every action other than
-    /// Accept. Null falls back to the active hand, mirroring <c>ResolveItemPacketSlot</c>'s existing
-    /// convention.</summary>
+    /// <summary>Accept-time placement target: the <c>InventoryID</c> of the slot the client resolved to receive
+    /// the accepted task. Ignored except for Accept. Null falls back to the active hand, as
+    /// <c>ResolveItemPacketSlot</c> does.</summary>
     [ProtoMember(3)]
     public string? TargetInventoryId { get; set; }
 
-    /// <summary>Slot index within <see cref="TargetInventoryId"/>. Ignored for every action other than
-    /// Accept. Defaults to -1 (unresolved) so an absent value never aliases slot 0. <see cref="DefaultValue"/>
-    /// is load-bearing here, not decorative: protobuf-net's default wire-format behavior omits a scalar
-    /// field whenever its value equals the CLR default (0 for <see cref="int"/>) — without this attribute a
-    /// legitimate slot 0 is indistinguishable from "never set" and silently reverts to -1 on the receiving
-    /// end, which is exactly backwards from this property's own doc comment.</summary>
+    /// <summary>Slot index within <see cref="TargetInventoryId"/>. Ignored except for Accept. Defaults to -1
+    /// (unresolved) so an absent value never aliases slot 0. <see cref="DefaultValue"/> is load-bearing:
+    /// protobuf-net omits a scalar equal to the CLR default (0), so without it a real slot 0 reads back as -1.</summary>
     [ProtoMember(4)]
     [DefaultValue(-1)]
     public int TargetSlotId { get; set; } = -1;
 
-    /// <summary>The accepting player's own New Task Insert preference (<c>ScribePlayerSettings.NewTaskInsert</c>)
-    /// — a client-local preference the server has no other way to see
-    /// (see <c>ScribeModSystem.MySettings</c>'s remarks: behavior preferences are never server state), sent
-    /// along so Accept-time placement can honor it rather than always appending to the bottom. Ignored for
-    /// every action other than Accept.</summary>
+    /// <summary>The accepting player's own New Task Insert preference (<c>ScribePlayerSettings.NewTaskInsert</c>),
+    /// a client-local preference the server cannot otherwise see, so Accept-time placement can honor it.
+    /// Ignored except for Accept.</summary>
     [ProtoMember(5)]
     public byte NewTaskInsert { get; set; }
 }

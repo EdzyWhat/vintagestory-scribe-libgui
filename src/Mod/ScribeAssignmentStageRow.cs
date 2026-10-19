@@ -15,14 +15,11 @@ using Vintagestory.API.Config;   // Lang
 namespace Scribe;
 
 /// <summary>
-/// One selectable row of a staged document on the Create Assignments tab. Reuses <see cref="ScribeReadRowData"/> as its data model and
-/// <see cref="ScribeReadRow.BuildItemContent"/>'s per-kind rendering shape (task text, or an item
-/// icon+name with a Tracker/Craft have-need counter) — but NOT <see cref="ScribeReadRow"/> itself: this is
-/// a picker surface, not an editable/completable one, so it drops the pin affordance, the "switch to
-/// editor" footer, cuneiform display, and the Done checkbox entirely, swapping in an independent Selected
-/// checkbox instead. Stateless: selection lives on the dialog (<see cref="GuiDialogScribeAssignmentDesk"/>)
-/// because the parent-cascades-to-subtasks rule needs to touch several rows' selection at once,
-/// which a self-contained per-row State couldn't do.
+/// One selectable row of a staged document on the Create Assignments tab. Reuses <see cref="ScribeReadRowData"/>
+/// and <see cref="ScribeReadRow.BuildItemContent"/>'s per-kind rendering shape, but not <see cref="ScribeReadRow"/>
+/// itself: this is a picker, so it drops the pin affordance, "switch to editor" footer, cuneiform display, and
+/// Done checkbox in favor of an independent Selected checkbox. Stateless: selection lives on the dialog
+/// (<see cref="GuiDialogScribeAssignmentDesk"/>) because the parent-cascades-to-subtasks rule touches several rows at once.
 /// </summary>
 internal sealed class ScribeAssignmentStageRow : StatelessWidget
 {
@@ -40,17 +37,14 @@ internal sealed class ScribeAssignmentStageRow : StatelessWidget
     public System.Action<System.Guid> OnToggleSelected { get; }
     public ScribeRowStyle Style { get; }
 
-    /// <summary>Mirrors <see cref="ScribeReadRow.BuildItemContent"/>'s Tracker/Link/Craft rendering
-    /// (icon + name, plus a have/need counter for the count-tracked kinds), minus the open-link gesture
-    /// and quest-progress line — neither applies to a picker row.</summary>
+    /// <summary>Mirrors <see cref="ScribeReadRow.BuildItemContent"/>'s Tracker/Link/Craft rendering, minus the
+    /// open-link gesture and quest-progress line.</summary>
     private Widget BuildItemContent(ColorScheme colors, ScribeRowStyle style)
     {
         float iconSize = ScribeRowConstants.ItemIconSize * (style.ControlSize / ScribeRowConstants.RowCheckboxSize);
         float lineHeight = ScribeRowControlNudge.TextLineHeight(style.FontSize);
-        // This row's leading-slot checkbox is a SELECTION control, not a completion toggle — unlike the
-        // other surfaces, that slot isn't available for the quest-marker icon here, so a Quest Link
-        // instead shows the quest-marker icon INLINE, replacing the generic book-glyph
-        // ScribeLinkIcon.Build would otherwise render.
+        // The leading checkbox is a selection control, so the quest-marker icon can't use that slot; a Quest
+        // Link shows it inline instead of the generic book glyph.
         bool isQuestLink = ScribeLinkTarget.IsQuest(Data.LinkTarget);
         float bandHeight = ScribeLinkIcon.VisualSize(iconSize, Data.LinkTarget);
         Vector4 linkColor = isQuestLink
@@ -68,7 +62,7 @@ internal sealed class ScribeAssignmentStageRow : StatelessWidget
             rowChildren.Add(icon);
             rowChildren.Add(nameLabel);
         }
-        else // Tracker or Craft parent: have/need counter on the left, then the item icon + name.
+        else // Tracker or Craft parent: have/need counter, then item icon + name.
         {
             bool satisfied = Data.CurrentQuantity >= Data.TargetQuantity;
             rowChildren.Add(ScribeCenterIfShort.InBand(
@@ -123,9 +117,8 @@ internal sealed class ScribeAssignmentStageRow : StatelessWidget
 
 /// <summary>
 /// The Create Assignments tab's staged-document content: a plain scrollable list of
-/// <see cref="ScribeAssignmentStageRow"/>s, or the empty state when nothing is staged. Unlike
-/// <see cref="ScribeReadContent"/> this is a picker surface with no live document to animate/collapse
-/// against, so it is a bare <see cref="StatelessWidget"/> — no animation registry, no ghost rows.
+/// <see cref="ScribeAssignmentStageRow"/>s, or the empty state when nothing is staged. A picker surface with
+/// no animation registry or ghost rows, unlike <see cref="ScribeReadContent"/>.
 /// </summary>
 internal sealed class ScribeAssignmentStageContent : StatelessWidget
 {
@@ -148,7 +141,7 @@ internal sealed class ScribeAssignmentStageContent : StatelessWidget
     public IReadOnlyList<ScribeReadRowData> Rows { get; }
     public ISet<System.Guid> SelectedTaskIds { get; }
     public System.Action<System.Guid> OnToggleSelected { get; }
-    /// <summary>Whether the Desk's own document has an eligible task to pull in — gates the empty-state's "pull from Desk" button below.</summary>
+    /// <summary>Whether the Desk's own document has an eligible task to pull in (gates the empty-state button).</summary>
     public bool CanPullFromDesk { get; }
     /// <summary>Enters the Desk's local Editor through the dialog-owned lock-aware path.</summary>
     public System.Action OnCreateTasks { get; }
@@ -161,8 +154,7 @@ internal sealed class ScribeAssignmentStageContent : StatelessWidget
         var colors = Theme.Of(context).ColorScheme;
         if (Rows.Count == 0)
         {
-            // The always-present Editor route precedes the conditional "Pull from Desk" action. The
-            // dialog owns both callbacks, keeping this empty-state widget free of view/lock concerns.
+            // The always-present Editor route precedes the conditional "Pull from Desk" action; the dialog owns both callbacks.
             var emptyChildren = new List<Widget>
             {
                 new Text(

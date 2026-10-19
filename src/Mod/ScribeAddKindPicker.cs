@@ -18,25 +18,18 @@ using Vintagestory.API.Config;   // Lang
 namespace Scribe;
 
 /// <summary>
-/// The editor footer's "add" control: a two-part SEGMENTED button — a primary
-/// button that adds the currently-selected kind (defaults to Task, so one click still adds a task) and a
-/// caret button that opens a floating drop-up menu of the available kinds (Task / Note, from
-/// <see cref="ScribeAddKinds.Live"/>). Picking a kind makes it the primary button's kind AND adds a block
-/// of that kind immediately.
+/// The editor footer's "add" control: a segmented button. The primary button adds the currently-selected
+/// kind (defaults to Task); the caret button opens a floating drop-up menu of the available kinds
+/// (<see cref="ScribeAddKinds.Live"/>). Picking a kind makes it the primary kind and adds a block of it.
 ///
-/// <para>The menu is a FLOATING overlay that grows UPWARD from the button, OVER the scroll body — the
-/// scroll area keeps its exact height and nothing reflows. This mirrors LibGUI's own <c>Dropdown</c>
-/// exactly: a <see cref="LayerLink"/> ties the on-screen button (a <see cref="CompositedTransformTarget"/>)
-/// to a <see cref="CompositedTransformFollower"/> inserted into the <see cref="Overlay"/>, with
-/// <c>showAbove: true</c> so the menu's bottom edge pins to the button's top edge. A full-screen barrier
-/// entry closes the menu on any outside tap. The floating approach avoids clipping the menu against the
-/// dialog's bottom edge (a downward menu would).</para>
+/// <para>The menu is a floating overlay growing upward over the scroll body, so nothing reflows and it is
+/// not clipped by the dialog's bottom edge. Mirrors LibGUI's <c>Dropdown</c>: a <see cref="LayerLink"/> ties
+/// the button (<see cref="CompositedTransformTarget"/>) to a follower in the <see cref="Overlay"/> with
+/// <c>showAbove: true</c>; a full-screen barrier entry closes the menu on any outside tap.</para>
 ///
-/// <para>State (selected kind + open/closed) lives on <see cref="ScribeAddKindPickerState"/>, which sits at
-/// a stable position in the footer, so it survives the dialog's positional reconcile (RebuildBody) — the
-/// remembered kind persists for the life of the open dialog and resets to Task on the next open (a fresh
-/// State). <see cref="State.Dispose"/> tears down
-/// any open overlay entries, exactly as <c>DropdownState</c> does.</para>
+/// <para>State lives on <see cref="ScribeAddKindPickerState"/> at a stable footer position, so it survives
+/// RebuildBody; the remembered kind resets to Task on the next dialog open. Dispose tears down any open
+/// overlay entries.</para>
 /// </summary>
 internal sealed class ScribeAddKindPicker : StatefulWidget
 {
@@ -61,31 +54,23 @@ internal sealed class ScribeAddKindPicker : StatefulWidget
     /// <summary>Add a block of the given kind (wired to <see cref="ScribeDialogBase.OnClickAdd"/>).</summary>
     public Action<ScribeAddKind> OnAdd { get; }
 
-    /// <summary>The installed quest mod's catalog. Empty hides
-    /// the drop-up's "Quest Link" tile entirely — this picker never shows an option that would do nothing.</summary>
+    /// <summary>The installed quest mod's catalog. Empty hides the "Quest Link" tile.</summary>
     public IReadOnlyList<ScribeQuestCatalogEntry> QuestCatalog { get; }
 
-    /// <summary>Add a quest Link for the chosen catalog entry (wired to
-    /// <see cref="ScribeDialogBase.OnClickAddQuestLink"/>). Null exactly when <see cref="QuestCatalog"/> is
-    /// empty.</summary>
+    /// <summary>Adds a quest Link for the chosen entry (wired to
+    /// <see cref="ScribeDialogBase.OnClickAddQuestLink"/>). Null exactly when <see cref="QuestCatalog"/> is empty.</summary>
     public Action<ScribeQuestCatalogEntry>? OnAddQuestLink { get; }
 
-    /// <summary>Whether a block of any kind may currently be added. When false (tablet/chalkboard at its
-    /// 10-entry cap), the primary button and every drop-up tile DIM but stay clickable so the tap still
-    /// reaches <see cref="ScribeDialogBase.OnClickAdd"/> and surfaces <c>NotifyTabletFull</c> (the same
-    /// <c>TriggerIngameError</c> path Enter-insert uses). Nulling <c>onTap</c> would swallow the click and
-    /// skip the notice. Uncapped tiers always pass true.</summary>
+    /// <summary>Whether a block may currently be added. When false (tablet/chalkboard at its entry cap) the
+    /// primary button and tiles DIM but stay clickable, so the tap still reaches
+    /// <see cref="ScribeDialogBase.OnClickAdd"/> and surfaces <c>NotifyTabletFull</c>; nulling <c>onTap</c>
+    /// would skip the notice.</summary>
     public bool AddTaskEnabled { get; }
 
-    /// <summary>Row style, threaded for the cuneiform-aware label rendering (tablet path) and its bundle.</summary>
     public ScribeRowStyle Style { get; }
 
-    /// <summary>The dialog's current illumination shade. The floating drop-up menu paints in the
-    /// <see cref="Overlay"/> layer, which sits OUTSIDE the dialog body's <see cref="ScribeGlobalTint"/> wrap,
-    /// so without this it would render at full brightness while the rest of the window is shaded. The menu
-    /// re-wraps its content in a <see cref="ScribeGlobalTint"/> built from this value so it matches the
-    /// window (snapshotted at open time; the picker rebuilds with a fresh shade on every <c>RebuildBody()</c>,
-    /// so a newly-opened menu is current).</summary>
+    /// <summary>The dialog's illumination shade. The overlay layer sits outside the dialog body's
+    /// <see cref="ScribeGlobalTint"/>, so the menu re-wraps its content with this value (snapshotted at open).</summary>
     public ScribeAmbientLightSampler.Shade CurrentShade { get; }
 
     public override State CreateState() => new ScribeAddKindPickerState();
@@ -93,27 +78,21 @@ internal sealed class ScribeAddKindPicker : StatefulWidget
 
 internal sealed class ScribeAddKindPickerState : State<ScribeAddKindPicker>
 {
-    // Links the on-screen segmented group (the CompositedTransformTarget) to the floating menu follower.
+    // Links the segmented group (target) to the floating menu follower.
     private readonly LayerLink _link = new();
     private OverlayEntry? _menuEntry;
     private OverlayEntry? _barrierEntry;
     private bool _isOpen;
 
-    // The kind the primary button performs and shows a label for. Defaults to Task (Live[0]) so one click
-    // still adds a task; remembers the last-picked kind for the life of this State (see the widget doc).
+    // The kind the primary button adds; defaults to Task (Live[0]) and remembers the last pick.
     private ScribeAddKind _selectedKind = ScribeAddKinds.Live[0];
 
-    // True while the SAME floating menu is showing the quest list instead of the kind tiles:
-    // tapping "Quest Link" swaps the menu's content in place
-    // rather than opening a second overlay, reusing every bit of the existing open/close/animate/barrier
-    // plumbing. Reset on Close() so reopening always starts at the kind list.
+    // True while the same floating menu shows the quest list instead of the kind tiles; reset on Close().
     private bool _questListOpen;
 
-    // A few px of air between the menu's bottom edge and the button's top edge.
     private const float MenuGap = 4f;
 
-    // Captured at Open() time so the quest-list swap (RebuildMenuContent) can rebuild the SAME follower
-    // without needing a fresh BuildContext/width from whichever tile's onTap fired.
+    // Captured at Open() so RebuildMenuContent can rebuild the same follower.
     private BuildContext? _menuContext;
     private float _menuWidth;
 
@@ -130,8 +109,7 @@ internal sealed class ScribeAddKindPickerState : State<ScribeAddKindPicker>
         var overlay = Overlay.Of(context);
         if (overlay == null) return;
 
-        // Match the floating menu's width to the group's on-screen width so it reads as an extension of
-        // the button (Dropdown reads Element.RenderObject.Size the same way at open time).
+        // Match the menu width to the group's on-screen width.
         float width = Element.RenderObject?.Size.X ?? 0f;
         _menuContext = context;
         _menuWidth = width;
@@ -139,8 +117,7 @@ internal sealed class ScribeAddKindPickerState : State<ScribeAddKindPicker>
         _barrierEntry = new OverlayEntry(BuildBarrier());
         _menuEntry = new OverlayEntry(BuildFollower(context, width));
 
-        // Barrier first so the menu paints on top of it (later entries paint later); the barrier catches
-        // any outside tap and closes.
+        // Barrier first so the menu paints on top of it.
         overlay.Insert(_barrierEntry);
         overlay.Insert(_menuEntry);
         SetState(() => _isOpen = true);
@@ -148,17 +125,13 @@ internal sealed class ScribeAddKindPickerState : State<ScribeAddKindPicker>
 
     private Widget BuildFollower(BuildContext context, float width) => new CompositedTransformFollower(
         _link,
-        // showAbove pins the follower's BOTTOM edge to the target's TOP edge; a negative Y offset lifts
-        // it a few px further up for a gap (see CompositedTransformFollower's doc example).
+        // showAbove pins the follower's bottom edge to the target's top edge; the negative Y adds a gap.
         offset: new Vector2(0, -MenuGap),
         child: BuildMenu(context, width),
         showAbove: true);
 
-    /// <summary>Swap the OPEN menu's content in place ("Quest
-    /// Link" tile → quest list, and back) without closing/reopening the overlay — <see cref="OverlayEntry"/>'s
-    /// <c>Widget</c> setter + <see cref="OverlayEntry.MarkNeedsBuild"/> replace the follower's subtree
-    /// directly, since a <see cref="SetState"/> on this State does not itself touch the separately-inserted
-    /// overlay tree.</summary>
+    /// <summary>Swaps the open menu's content in place (kind tiles and quest list). SetState on this State
+    /// does not touch the separately-inserted overlay tree, so the entry is rebuilt directly.</summary>
     private void RebuildMenuContent()
     {
         if (_menuEntry is null || _menuContext is null) return;
@@ -183,8 +156,7 @@ internal sealed class ScribeAddKindPickerState : State<ScribeAddKindPicker>
             onTap: _ => Close(),
             child: new Container(new BoxStyle { HitTestBehavior = HitTestBehavior.Opaque })));
 
-    /// <summary>Pick a kind from the drop-up: make it the primary button's kind, close the menu, and add a
-    /// block of that kind immediately.</summary>
+    /// <summary>Makes <paramref name="kind"/> the primary kind, closes the menu, and adds a block of it.</summary>
     private void PickKind(ScribeAddKind kind)
     {
         SetState(() => _selectedKind = kind);
@@ -192,36 +164,30 @@ internal sealed class ScribeAddKindPickerState : State<ScribeAddKindPicker>
         Widget.OnAdd(kind);
     }
 
-    /// <summary>Primary button: add the currently-selected kind, closing an open menu first.</summary>
+    /// <summary>Primary button: adds the selected kind, closing an open menu first.</summary>
     private void AddSelectedKind()
     {
         if (_isOpen) Close();
         Widget.OnAdd(_selectedKind);
     }
 
-    /// <summary>The "Quest Link" tile: swap the SAME open menu
-    /// to the quest list rather than adding anything — picking a quest is a second step, unlike every other
-    /// kind tile. Only reachable when <see cref="ScribeAddKindPicker.QuestCatalog"/> is non-empty (the tile
-    /// itself is omitted otherwise — see <see cref="BuildMenu"/>).</summary>
+    /// <summary>The "Quest Link" tile: swaps the open menu to the quest list (picking a quest is a second step).</summary>
     private void OpenQuestList()
     {
         SetState(() => _questListOpen = true);
         RebuildMenuContent();
     }
 
-    /// <summary>Pick a quest from the quest list: close the menu and add a quest Link for it. No
-    /// <see cref="_selectedKind"/> change — a quest Link isn't a repeatable primary-button kind (the whole
-    /// point of a second-step picker is that the primary button can't pre-select a specific quest).</summary>
+    /// <summary>Closes the menu and adds a quest Link. Leaves <see cref="_selectedKind"/> unchanged: a quest
+    /// Link can't be a repeatable primary-button kind.</summary>
     private void PickQuest(ScribeQuestCatalogEntry entry)
     {
         Close();
         Widget.OnAddQuestLink?.Invoke(entry);
     }
 
-    /// <summary>A label for a button/menu tile: cuneiform strokes on the single tablet cuneiform branch,
-    /// else the normal <see cref="Text"/>. Returned DIRECTLY with no
-    /// Center/Align wrapper (a Center/Align would balloon the button, as with the footer labels); both label widgets
-    /// self-size so the button hugs the label at either scale.</summary>
+    /// <summary>A label: cuneiform strokes on the tablet cuneiform branch, else <see cref="Text"/>. Returned
+    /// without a Center/Align wrapper (it would balloon the button); both self-size.</summary>
     private Widget BuildLabel(string label, TextStyle labelStyle)
     {
         if (Widget.Style.UseCuneiform && Widget.Style.CuneiformBundle is { } bundle)
@@ -237,10 +203,8 @@ internal sealed class ScribeAddKindPickerState : State<ScribeAddKindPicker>
         return new Text(label, labelStyle);
     }
 
-    /// <summary>The drop-up's default content: one tile per <see cref="ScribeAddKinds.Live"/> kind, plus a
-    /// trailing "Quest Link" tile when <see cref="ScribeAddKindPicker.QuestCatalog"/> is non-empty
-    /// — omitted entirely when vsquest isn't installed or its
-    /// catalog is empty, so this menu never shows an option that would do nothing.</summary>
+    /// <summary>One tile per <see cref="ScribeAddKinds.Live"/> kind, plus a "Quest Link" tile only when the
+    /// quest catalog is non-empty.</summary>
     private List<Widget> BuildKindTiles(TextStyle labelStyle, ButtonStyle tileButtonStyle, ColorScheme colors)
     {
         bool dim = !Widget.AddTaskEnabled;
@@ -264,10 +228,7 @@ internal sealed class ScribeAddKindPickerState : State<ScribeAddKindPicker>
         return tiles;
     }
 
-    /// <summary>The quest-list content swapped in when the "Quest Link" tile is picked: one tile per catalog entry's resolved title. No search/scroll — vsquest
-    /// catalogs are typically a handful to a few dozen entries; a very large third-party catalog would
-    /// overflow ungracefully. Never empty in
-    /// practice — the tile that reaches this is itself omitted when the catalog is empty.</summary>
+    /// <summary>One tile per catalog entry title. No search/scroll; a very large catalog would overflow.</summary>
     private List<Widget> BuildQuestTiles(TextStyle labelStyle, ButtonStyle tileButtonStyle)
     {
         var tiles = new List<Widget>();
@@ -287,9 +248,7 @@ internal sealed class ScribeAddKindPickerState : State<ScribeAddKindPicker>
         var colors = theme.ColorScheme;
         TextStyle labelStyle = new() { FontSize = 14, Color = colors.OnPrimary, FontFamily = ScribeTaskFont.ButtonFamily };
 
-        // Each kind is a full (rounded) Primary button — the drop-up reads as a small stack of the same
-        // "add" buttons growing up from the segmented control. On the cuneiform path the label runs taller,
-        // so trim the vertical padding to match the footer's readable-vs-cuneiform parity.
+        // Each kind is a full Primary button; the cuneiform label runs taller, so its vertical padding is trimmed.
         const float cuneiformLabelPadY = 6f;
         ButtonStyle tileButtonStyle = Widget.Style.UseCuneiform
             ? theme.ButtonStyle with { Padding = EdgeInsets.Symmetric(cuneiformLabelPadY, 20) }
@@ -299,13 +258,9 @@ internal sealed class ScribeAddKindPickerState : State<ScribeAddKindPicker>
             ? BuildQuestTiles(labelStyle, tileButtonStyle)
             : BuildKindTiles(labelStyle, tileButtonStyle, colors);
 
-        // Opaque panel, matching the theme's input/writing-surface tone (SurfaceHigh): the floating menu
-        // needs a solid backing so the stacked "add" buttons read as a distinct surface over the scroll
-        // content, not just a faint outline floating over whatever is behind it. The ScribeDropUpMenu
-        // wrapper plays the grow-up entry animation. ScribeGlobalTint re-applies the dialog's illumination
-        // shade: the menu lives in the Overlay layer, outside the dialog body's own ScribeGlobalTint wrap,
-        // so without this the menu would stay full-brightness while the rest of the window is shaded by
-        // light/dark exposure.
+        // Opaque SurfaceHigh panel so the stacked buttons read as a surface. ScribeDropUpMenu plays the
+        // grow-up animation; ScribeGlobalTint re-applies the shade because the Overlay layer sits outside the
+        // dialog body's tint wrap.
         var shade = Widget.CurrentShade;
         return new SizedBox(
             width: width,
@@ -336,34 +291,25 @@ internal sealed class ScribeAddKindPickerState : State<ScribeAddKindPicker>
         var colors = theme.ColorScheme;
         TextStyle labelStyle = new() { FontSize = 14, Color = colors.OnPrimary, FontFamily = ScribeTaskFont.ButtonFamily };
 
-        // Cuneiform label parity with the footer: the taller cuneiform label gets trimmed vertical
-        // padding; the readable path keeps the default theme padding.
+        // Cuneiform labels are taller, so they get trimmed vertical padding.
         const float cuneiformLabelPadY = 6f;
         EdgeInsets segPadding = Widget.Style.UseCuneiform
             ? EdgeInsets.Symmetric(cuneiformLabelPadY, 20)
             : theme.ButtonStyle.Padding;
-        // Single-side vertical padding (Symmetric stores top==bottom, so Vertical is the sum → halve it),
-        // reused for the narrower caret button.
+        // Single-side vertical padding (Vertical is the sum), reused for the caret button.
         float padV = Widget.Style.UseCuneiform ? cuneiformLabelPadY : theme.ButtonStyle.Padding.Vertical / 2f;
 
-        // Explicit group height (Dropdown-style, load-bearing). A childless divider Container and the
-        // Row's Stretch cross-alignment both size to the group's INCOMING height, and the footer hands the
-        // group a large loose height — so without an explicit bound the whole group balloons to fill the body
-        // (IntrinsicHeight can't help: Button wraps its label in a Container/RenderBox that reports ZERO
-        // intrinsic height, breaking the measurement chain). Setting Height here makes Container wrap the Row
-        // in a SizedBox(height), giving the Row — and thus the Stretch'd divider — a bounded height. The value
-        // is the label's content height + the button's vertical padding, matching a normal footer button; the
-        // primary label is Center'd inside so any slack is symmetric and the text never top-clips. On the
-        // cuneiform path the content height is exactly FontSize×LineHeightRatio (as the footer's icon-parity
-        // math uses); on the readable path we use a safe line-height estimate.
+        // Explicit group height is load-bearing: the divider Container and the Row's Stretch size to the
+        // INCOMING height, which the footer makes large, so the group would balloon. IntrinsicHeight can't
+        // help (Button's label wrapper reports zero intrinsic height). Value = label content height +
+        // vertical padding; the cuneiform content height is FontSize x LineHeightRatio, the readable path
+        // uses a safe 1.4 estimate.
         float labelContentHeight = Widget.Style.UseCuneiform
             ? labelStyle.FontSize * CuneiformMetrics.LineHeightRatio
             : labelStyle.FontSize * 1.4f;
         float groupHeight = labelContentHeight + segPadding.Vertical;
 
-        // Square-cornered Primary variant: the OUTER Container rounds the group's outer corners and clips,
-        // so the seam between the primary and caret buttons is a straight 1px Border divider — the two read
-        // as ONE segmented control, not two separate pills.
+        // Square-cornered Primary: the outer Container rounds and clips, so the seam is a straight 1px divider.
         ButtonStyle segmentStyle = theme.ButtonStyle with
         {
             Padding = segPadding,
@@ -376,22 +322,15 @@ internal sealed class ScribeAddKindPickerState : State<ScribeAddKindPicker>
             ? labelStyle with { Color = colors.OnPrimary with { W = 0.4f } }
             : labelStyle;
 
-        // Center the label inside the button so the explicit group height's slack (if any) sits symmetrically
-        // above/below the text rather than pinning it to the top (Padding aligns top-left). Both axes are
-        // bounded here — width by Expanded's flex share, height by the group's SizedBox — so Center is safe.
+        // Center the label so slack from the explicit height is symmetric. Both axes are bounded, so Center is safe.
         var primaryButton = new Button(
             child: new Center(child: BuildLabel(Lang.Get(_selectedKind.LabelLangKey), primaryLabelStyle)),
             style: segmentStyle,
             onTap: _ => AddSelectedKind());
 
-        // Caret: ▲ when closed (the menu will expand upward), ▼ when open (tap to collapse). The Row's
-        // Stretch (below) stretches this caret button to the group's height, which can exceed the glyph's own
-        // size — so the glyph is centered inside a FULLY-BOUNDED SizedBox (both axes tight) + Center, exactly
-        // the footer's IconButtonChild pattern. Both axes bounded is the whole trick: a Center/greedy widget
-        // that sees an UNBOUNDED axis balloons to the footer's full height.
-        //
-        // Transform.Translate nudges the glyph 3px DOWN within the button; it's paint-only (a translation
-        // matrix), so it shifts the drawn caret without changing the button's layout/hit box.
+        // Caret: up when closed, down when open. The Row's Stretch can make the button taller than the glyph,
+        // so the glyph is centered in a fully-bounded SizedBox (an unbounded axis would balloon to the footer's
+        // height). Transform.Translate nudges it 3px down, paint-only (no layout/hit-box change).
         const float caretGlyphSize = 14f;
         const float caretNudgeDown = 3f;
         var caretButton = new Button(
@@ -405,11 +344,8 @@ internal sealed class ScribeAddKindPickerState : State<ScribeAddKindPicker>
             style: caretStyle,
             onTap: _ => Toggle(context));
 
-        // Explicit Height (see groupHeight above) is the load-bearing bound: Container applies it by wrapping
-        // the Row in a SizedBox(height), so the Row's incoming MaxHeight is groupHeight rather than the
-        // footer's large loose height. That makes the Stretch cross-alignment fill the 1px divider and the
-        // caret to exactly groupHeight — not the whole body and not zero (a Row whose main child is Expanded
-        // reports ZERO intrinsic height, so IntrinsicHeight would collapse it).
+        // The explicit Height makes Container wrap the Row in a SizedBox, so the Row's MaxHeight is
+        // groupHeight and Stretch sizes the divider and caret to it (IntrinsicHeight would collapse to zero).
         var group = new Container(
             style: new BoxStyle
             {
@@ -424,7 +360,7 @@ internal sealed class ScribeAddKindPickerState : State<ScribeAddKindPicker>
                 children: new Widget[]
                 {
                     new Expanded(child: primaryButton),
-                    // Thin divider seam; fills the group height via the Row's Stretch cross-alignment.
+                    // Thin divider seam.
                     new Container(style: new BoxStyle { Color = colors.Border, Width = 1f }),
                     caretButton,
                 }));
@@ -440,9 +376,8 @@ internal sealed class ScribeAddKindPickerState : State<ScribeAddKindPicker>
 }
 
 /// <summary>
-/// Plays a scale-and-fade entry animation when the add-kind drop-up first mounts, growing UPWARD from the
-/// button's top edge. Identical to LibGUI's private <c>DropdownMenu</c> except the scale anchor is
-/// <see cref="Alignment.BottomCenter"/> (grow up) rather than TopCenter (grow down).
+/// Scale-and-fade entry animation for the drop-up, anchored at <see cref="Alignment.BottomCenter"/> so it
+/// grows upward. Otherwise identical to LibGUI's private <c>DropdownMenu</c> (anchored TopCenter).
 /// </summary>
 internal sealed class ScribeDropUpMenu : StatefulWidget
 {
