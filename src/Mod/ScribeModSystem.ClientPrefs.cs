@@ -15,10 +15,8 @@ namespace Scribe;
 
 public sealed partial class ScribeModSystem
 {
-    /// <summary>Toggle the single standalone Scribe settings window open/closed. Called from both the HUD
-    /// gear and the Lectern gear so there is exactly ONE settings surface; clicking
-    /// either gear a second time CLOSES it.
-    /// Lazily builds the dialog on first use and reuses it thereafter. Client-only.</summary>
+    /// <summary>Toggle the single standalone Scribe settings window (shared by the HUD gear and the Lectern gear;
+    /// a second click closes it). Lazily built and reused. Client-only.</summary>
     public void OpenSettings()
     {
         if (capi is null) return; // client-only
@@ -29,13 +27,10 @@ public sealed partial class ScribeModSystem
 
     // ── DEV gearworks live-tuning (.geartune) ──────────────────────────────────────────────────────
 
-    /// <summary>DEV: this player's live gearworks-layout tuning knobs (<see cref="ScribeGearTuning"/>).
-    /// Falls back to a fresh default instance if queried before load / on a server, so it is never null —
-    /// mirrors <see cref="MySettings"/>.</summary>
+    /// <summary>DEV: live gearworks-layout tuning knobs; never null (default instance before load / on a server).</summary>
     public ScribeGearTuning GearTuning => gearTuning ??= new ScribeGearTuning();
 
-    /// <summary>DEV: mutate the gearworks tuning, persist it, and raise <see cref="GearTuningChanged"/> so
-    /// an open Timer tab rebuilds live (mirrors <see cref="UpdateMySettings"/>). Client-only.</summary>
+    /// <summary>DEV: mutate + persist the gearworks tuning and raise <see cref="GearTuningChanged"/> so an open Timer tab rebuilds. Client-only.</summary>
     public void UpdateGearTuning(Action<ScribeGearTuning> mutate)
     {
         if (capi is null) return; // client-only
@@ -46,8 +41,7 @@ public sealed partial class ScribeModSystem
         GearTuningChanged?.Invoke();
     }
 
-    /// <summary>DEV: toggle the gearworks-tuning window open/closed (opened by the <c>.geartune</c>
-    /// command). Lazily builds + reuses the dialog, mirroring <see cref="OpenSettings"/>.</summary>
+    /// <summary>DEV: toggle the <c>.geartune</c> window. Lazily built and reused.</summary>
     public void OpenGearTuning()
     {
         if (capi is null) return; // client-only
@@ -56,9 +50,7 @@ public sealed partial class ScribeModSystem
         else gearTuningDialog.TryOpen();
     }
 
-    /// <summary>DEV: register the client-side <c>.geartune</c> command that opens the live gearworks-layout
-    /// tuning window. A client command (no privilege needed — it edits only client-local JSON), invoked with
-    /// the client dot-prefix.</summary>
+    /// <summary>DEV: register the client-side <c>.geartune</c> command (edits only client-local JSON, so no privilege).</summary>
     private void RegisterGearTuneCommand(ICoreClientAPI api)
     {
         api.ChatCommands.Create("geartune")
@@ -72,14 +64,11 @@ public sealed partial class ScribeModSystem
 
     // ── DEV block-box live-tuning (.boxtune) ────────────────────────────────────────────────────────
 
-    /// <summary>DEV: this player's live block-box tuning knobs (<see cref="ScribeBoxTuning"/>). Falls back
-    /// to a fresh default instance if queried before load / on a server, so it is never null — mirrors
-    /// <see cref="GearTuning"/>. The server-side fallback is load-bearing: a dedicated server never calls
-    /// <see cref="StartClientSide"/>, so it always resolves the untouched default box.</summary>
+    /// <summary>DEV: live block-box tuning knobs; never null. The server-side fallback is load-bearing: a dedicated
+    /// server never calls <see cref="StartClientSide"/>, so it always resolves the untouched default box.</summary>
     public ScribeBoxTuning BoxTuning => boxTuning ??= new ScribeBoxTuning();
 
-    /// <summary>DEV: mutate the box tuning, persist it, and raise <see cref="BoxTuningChanged"/> so an open
-    /// <c>.boxtune</c> window re-seeds its fields (mirrors <see cref="UpdateGearTuning"/>). Client-only.</summary>
+    /// <summary>DEV: mutate + persist the box tuning and raise <see cref="BoxTuningChanged"/> so an open <c>.boxtune</c> window re-seeds. Client-only.</summary>
     public void UpdateBoxTuning(Action<ScribeBoxTuning> mutate)
     {
         if (capi is null) return; // client-only
@@ -90,8 +79,7 @@ public sealed partial class ScribeModSystem
         BoxTuningChanged?.Invoke();
     }
 
-    /// <summary>DEV: toggle the box-tuning window open/closed (opened by the <c>.boxtune</c> command).
-    /// Lazily builds + reuses the dialog, mirroring <see cref="OpenGearTuning"/>.</summary>
+    /// <summary>DEV: toggle the <c>.boxtune</c> window. Lazily built and reused.</summary>
     public void OpenBoxTuning()
     {
         if (capi is null) return; // client-only
@@ -100,8 +88,7 @@ public sealed partial class ScribeModSystem
         else boxTuningDialog.TryOpen();
     }
 
-    /// <summary>DEV: register the client-side <c>.boxtune</c> command that opens the live block-box tuning
-    /// window, mirroring <see cref="RegisterGearTuneCommand"/>.</summary>
+    /// <summary>DEV: register the client-side <c>.boxtune</c> command.</summary>
     private void RegisterBoxTuneCommand(ICoreClientAPI api)
     {
         api.ChatCommands.Create("boxtune")
@@ -113,10 +100,8 @@ public sealed partial class ScribeModSystem
             });
     }
 
-    /// <summary>DEV: register the client-side <c>.scribelight</c> command — a one-shot readout of the ambient
-    /// illumination the GUI shade is derived from at the player's current position (raw light in, held light,
-    /// curve output). Used to calibrate <see cref="ScribeBrightnessCurve"/> anchors against real in-game values.
-    /// Client command, dot-prefix.</summary>
+    /// <summary>DEV: register the client-side <c>.scribelight</c> command, a one-shot readout of the ambient light the GUI shade
+    /// derives from at the player's position. Used to calibrate <see cref="ScribeBrightnessCurve"/> anchors.</summary>
     private void RegisterScribeLightCommand(ICoreClientAPI api)
     {
         api.ChatCommands.Create("scribelight")
@@ -126,11 +111,8 @@ public sealed partial class ScribeModSystem
                     ScribeAmbientLightSampler.Describe(api, MySettings)));
     }
 
-    /// <summary>DEV: register the client-side <c>.scribeprobe [code]</c> command — a one-shot dump of the
-    /// crafting-recipe variants the probe derives for the held item (or a supplied code): each matched recipe's
-    /// output page code, signature, counting ingredients, and notes. Used to confirm that variant identity
-    /// resolves distinctly, mirroring
-    /// <c>.scribelight</c>. Client command, dot-prefix; reads only the live registry (no state change).</summary>
+    /// <summary>DEV: register the client-side <c>.scribeprobe [code]</c> command, a one-shot dump of the crafting-recipe
+    /// variants the probe derives for the held item (or a supplied code). Reads only the live registry.</summary>
     private void RegisterScribeProbeCommand(ICoreClientAPI api)
     {
         api.ChatCommands.Create("scribeprobe")
@@ -147,9 +129,8 @@ public sealed partial class ScribeModSystem
             });
     }
 
-    /// <summary>DEV: register the client-side <c>.scribeguard</c> command — a one-shot readout of
-    /// <see cref="ScribeVanillaDialogGuard.IsAnyVanillaDialogOpen"/>, mirroring <c>.scribelight</c>/<c>.scribeprobe</c>. Client
-    /// command, dot-prefix; reads only the live dialog list (no state change).</summary>
+    /// <summary>DEV: register the client-side <c>.scribeguard</c> command, a one-shot readout of
+    /// <see cref="ScribeVanillaDialogGuard.IsAnyVanillaDialogOpen"/>.</summary>
     private void RegisterScribeGuardCommand(ICoreClientAPI api)
     {
         api.ChatCommands.Create("scribeguard")
@@ -159,29 +140,19 @@ public sealed partial class ScribeModSystem
                     $"[scribe] IsAnyVanillaDialogOpen: {ScribeVanillaDialogGuard.IsAnyVanillaDialogOpen(api)}"));
     }
 
-    /// <summary>Client-side: whether THIS player has pinned the given task — the optimistic overlay
-    /// (<see cref="optimisticPinOverlay"/>) if a pin/unpin for this task is still in flight, else the
-    /// server-pushed cache. The lectern GUI drives its resting pin tint / pin-glyph accent off this.
-    /// Returns false before the first push and with no in-flight optimism (a safe default — nothing shows
-    /// as pinned until the server confirms).</summary>
+    /// <summary>Client-side: whether THIS player has pinned the task: the optimistic overlay if a pin/unpin is in flight,
+    /// else the server-pushed cache. False until the server confirms.</summary>
     public bool IsPinnedForMe(Guid docId, Guid taskId)
         => optimisticPinOverlay.TryGetValue((docId, taskId), out var overlay)
             ? overlay is not null
             : myPins.Contains((docId, taskId));
 
     /// <summary>
-    /// Client-side: load (once) and return the decoded backdrop bitmap for a dialog backdrop, or
-    /// <c>null</c> if the asset is missing/unloadable. When the spec carries a <see cref="ScribeBackdropSpec.Tint"/>
-    /// the tint is baked into a cached tinted COPY (leaving the untinted source cached separately, so the
-    /// same PNG can back both a plain and a tinted spec). The decoded/derived bitmap is cached and shared
-    /// across every dialog open; a caller must NOT dispose it — all entries are disposed in <see cref="Dispose"/>.
-    ///
-    /// <para>Self-loads via <c>TryGet(loc, loadAsset: true)</c> + <see cref="SKBitmap.Decode(byte[])"/>,
-    /// mirroring <see cref="RegisterSvgIcon"/> (~:236): the naive <c>Image</c>/<c>SkiaAssetLoader.LoadBitmap</c>
-    /// path calls <c>TryGet(loc)</c> WITHOUT <c>loadAsset: true</c>, so its bytes are null after VS unloads
-    /// assets post-startup and the backdrop would silently vanish in normal play. The <c>null</c> result is
-    /// cached too, so an unloadable asset logs exactly one warning and repeat opens don't retry the failing
-    /// load. Returns null before <see cref="StartClientSide"/> (e.g. server side).</para>
+    /// Client-side: load (once) and return the decoded backdrop bitmap, or <c>null</c> if the asset is missing/unloadable
+    /// or on the server. A <see cref="ScribeBackdropSpec.Tint"/> is baked into a separately cached tinted copy. Cached and
+    /// shared across dialog opens; callers must NOT dispose it (<see cref="Dispose"/> does).
+    /// Self-loads via <c>TryGet(loc, loadAsset: true)</c> because a plain <c>TryGet</c> returns null bytes once VS unloads
+    /// assets post-startup. The <c>null</c> result is cached too, so an unloadable asset warns once.
     /// </summary>
     public SKBitmap? GetBackdropBitmap(ScribeBackdropSpec spec)
     {
@@ -197,53 +168,39 @@ public sealed partial class ScribeModSystem
         return bmp;
     }
 
-    /// <summary>The cache key for a spec's decoded bitmap (<see cref="GetBackdropBitmap"/>). Keys on both the
-    /// asset AND the tint so a plain and a tinted use of the same PNG stay distinct in the cache.</summary>
+    /// <summary>Cache key on both asset AND tint, so plain and tinted uses of one PNG stay distinct.</summary>
     private static string BackdropCacheKey(ScribeBackdropSpec spec)
         => spec.Tint is { } v
             ? $"{spec.Texture}|tint={v.X:F3},{v.Y:F3},{v.Z:F3},{v.W:F3}"
             : spec.Texture.ToString();
 
-    /// <summary>Client-side: load (once) and return a decoded GUI texture bitmap by asset location, or
-    /// <c>null</c> if the asset is missing/unloadable. Shares the same decode cache, one-warning-per-miss,
-    /// and <see cref="Dispose"/> cleanup as the dialog backdrops (<see cref="GetBackdropSource"/>) — a caller
-    /// must NOT dispose the returned bitmap. Used for in-GUI rasters that are drawn via a
-    /// <c>BoxStyle.Texture</c> Container (e.g. the Timer-tab gearworks), which — like the backdrops — need
-    /// the <c>loadAsset: true</c> self-load path to survive VS's post-startup asset unload. Returns null on a
-    /// pure server.</summary>
+    /// <summary>Client-side: load (once) and return a decoded GUI texture bitmap by asset location, or <c>null</c> if
+    /// missing/unloadable or on a pure server. Shares the backdrop cache and warning behavior; callers must NOT dispose it.</summary>
     public SKBitmap? GetGuiTextureBitmap(AssetLocation loc)
     {
         if (capi is null) return null; // client-only
         return GetBackdropSource(loc);
     }
 
-    /// <summary>Client-side: generate (once) and return the procedural Timer-tab escape wheel bitmap
-    /// (<see cref="ScribeGearTexture.GreatWheel"/>) — a many-toothed "great wheel" in the small cog's blocky,
-    /// uneven, negative-space style. Cached under a synthetic key in the same <c>backdropCache</c> so it is
-    /// built at most once and disposed with everything else in <see cref="Dispose"/>; a caller must NOT
-    /// dispose it. This is a placeholder; swapping to a real PNG is a one-line change at the gearworks call site. Returns null on a pure
-    /// server.</summary>
+    /// <summary>Client-side: generate (once) the procedural Timer-tab escape wheel bitmap (<see cref="ScribeGearTexture.GreatWheel"/>),
+    /// cached in <c>backdropCache</c> under a synthetic key. Callers must NOT dispose it. Null on a pure server.</summary>
     public SKBitmap? GetProceduralGreatWheel()
     {
         if (capi is null) return null; // client-only
         backdropCache ??= new Dictionary<string, SKBitmap?>();
-        // DEV .geartune: teeth + tooth-spacing are live-tunable, so key the cache on the (teeth, spacing) combo —
-        // each combo generates + caches once and is reused; changing a knob regenerates a fresh combo rather
-        // than mutating the shared bitmap.
+        // Teeth and spacing are live-tunable: key on the combo so a changed knob generates a fresh bitmap instead of mutating the shared one.
         int teeth   = (int)GearTuning.WheelTeeth;
         int spacing = (int)GearTuning.WheelToothSpacing;
         string key = $"__procedural:great-wheel:{teeth}:{spacing}";
         if (backdropCache.TryGetValue(key, out var cached)) return cached;
         var bmp = ScribeGearTexture.GreatWheel(teeth: teeth, toothSpacingRef: spacing);
-        // Immutable so Skia caches its GPU upload (same rationale as GetBackdropSource) — the wheel is drawn
-        // via a BoxStyle.Texture too, and each (teeth,spacing) combo is generated fresh, never mutated in place.
+        // Immutable so Skia caches the GPU upload (see GetBackdropSource).
         bmp?.SetImmutable();
         backdropCache[key] = bmp;
         return bmp;
     }
 
-    /// <summary>Load + decode the raw (untinted) backdrop PNG once, caching it under its plain asset key so
-    /// both a tinted and an untinted spec on the same PNG share a single decode. Warns once on a miss.</summary>
+    /// <summary>Load + decode the raw (untinted) backdrop PNG once, so tinted and untinted specs share one decode. Warns once on a miss.</summary>
     private SKBitmap? GetBackdropSource(AssetLocation loc)
     {
         backdropCache ??= new Dictionary<string, SKBitmap?>();
@@ -254,26 +211,19 @@ public sealed partial class ScribeModSystem
         SKBitmap? bmp = asset?.Data is not null ? SKBitmap.Decode(asset.Data) : null;
         if (bmp is null)
         {
-            // Cache the miss so this warns once, not per open/frame (the flat-placeholder path draws instead).
+            // Cache the miss so this warns once, not per open/frame.
             capi.Logger.Warning("[scribe] backdrop asset {0} not loadable ({1}); using placeholder color",
                 loc, asset is null ? "not found" : "Data null or undecodable");
         }
-        // Mark immutable so Skia can CACHE this bitmap's GPU texture upload and reuse it across draws/opens.
-        // ScribePixelArtBackdrop wraps it once as an SKImage and DrawImages it; on a GPU canvas Skia only
-        // caches the upload for an IMMUTABLE image source — a mutable one (SKBitmap.Decode returns mutable) is
-        // re-uploaded on every draw because the pixels could change. These backdrop bitmaps are cached and
-        // never mutated after decode, so immutability is correct and lets repeat opens reuse the resident
-        // texture. This is a caching win only; it is unrelated to the dialog-open "white flash"
-        // (see VSAPI-NOTES "White flash").
+        // Immutable so Skia caches the GPU texture upload: on a GPU canvas a mutable source (SKBitmap.Decode
+        // returns mutable) is re-uploaded on every draw. Unrelated to the dialog-open "white flash".
         bmp?.SetImmutable();
         backdropCache[key] = bmp;
         return bmp;
     }
 
-    /// <summary>Return a NEW bitmap that is <paramref name="source"/> multiplied by <paramref name="tint"/>,
-    /// via an <c>SKColorFilter.CreateBlendMode(..., Modulate)</c> — the same tint primitive LibGUI's icon
-    /// renderer uses (<c>RenderIcon</c>). Baked once at load and cached, so the per-frame draw stays the
-    /// plain stretch-to-fill texture path (no LibGUI change; <c>BoxStyle</c> has no tint of its own).</summary>
+    /// <summary>Return a NEW bitmap of <paramref name="source"/> multiplied by <paramref name="tint"/> (Modulate color filter,
+    /// as LibGUI's icon renderer does). Baked once at load so the per-frame draw stays a plain texture path.</summary>
     private static SKBitmap BakeTint(SKBitmap source, Vector4 tint)
     {
         var tinted = new SKBitmap(source.Width, source.Height, source.ColorType, source.AlphaType);
@@ -285,28 +235,20 @@ public sealed partial class ScribeModSystem
                 SKBlendMode.Modulate),
         };
         canvas.DrawBitmap(source, 0, 0, paint);
-        // Immutable for the same reason as the decoded source (see GetBackdropSource): lets Skia cache this
-        // baked bitmap's GPU upload so the tinted-tablet backdrops don't cold-re-upload on every open.
+        // Immutable for the same reason as the decoded source (see GetBackdropSource).
         tinted.SetImmutable();
         return tinted;
     }
 
-    /// <summary>Asset location of the committed cuneiform glyph-geometry bundle, produced by
-    /// <c>glyph-forge/tools/build_glyphs_bundle.py</c>. Filed under <c>textures/</c> because VS only scans
-    /// its fixed <c>AssetCategory</c> folders — there is no "fonts"/"glyphs" category (see
-    /// <see cref="RegisterSvgIcon"/>). This is stroke GEOMETRY, not a TTF, so it does NOT go through
-    /// <c>FontRegistry</c>.</summary>
+    /// <summary>Asset location of the cuneiform glyph-geometry bundle (from <c>glyph-forge/tools/build_glyphs_bundle.py</c>).
+    /// Under <c>textures/</c> because VS has no fonts/glyphs asset category. Stroke geometry, not a TTF, so it bypasses <c>FontRegistry</c>.</summary>
     private static readonly AssetLocation CuneiformBundleLocation =
         new("scribe", "textures/fonts/cuneiform-glyphs-1.json");
 
     /// <summary>
-    /// Client-side: load (once) and return the parsed cuneiform <see cref="Scribe.Core.Cuneiform.GlyphBundle"/>,
-    /// or <c>null</c> if the asset is missing/unparseable. Mirrors <see cref="GetBackdropBitmap"/>: it
-    /// self-loads via <c>TryGet(loc, loadAsset: true)</c> so the bytes survive VS's post-startup asset
-    /// unload (a plain <c>TryGet</c> nulls <c>.Data</c>), then parses the raw JSON string in Core. The parsed
-    /// model is cached and shared across every widget; a <c>null</c> result is cached too (guarded by
-    /// <see cref="cuneiformBundleLoaded"/>) so an unparseable asset warns exactly once. Returns null before
-    /// <see cref="StartClientSide"/> (e.g. server side).
+    /// Client-side: load (once) and return the parsed cuneiform <see cref="Scribe.Core.Cuneiform.GlyphBundle"/>, or <c>null</c>
+    /// if missing/unparseable or on the server. Self-loads with <c>loadAsset: true</c> (see <see cref="GetBackdropBitmap"/>);
+    /// a <c>null</c> result is cached via <see cref="cuneiformBundleLoaded"/> so it warns once.
     /// </summary>
     public Scribe.Core.Cuneiform.GlyphBundle? GetCuneiformBundle()
     {
@@ -337,23 +279,18 @@ public sealed partial class ScribeModSystem
         return cuneiformBundle;
     }
 
-    /// <summary>Client-side: THIS player's HUD/pin preferences (client-local; defaults until
-    /// <see cref="StartClientSide"/> loads the config). The HUD reads these directly. Falls back to a
-    /// fresh default instance if queried before load (e.g. server side), so it is never null.</summary>
+    /// <summary>Client-side: THIS player's HUD/pin preferences; never null (defaults before load / on a server).</summary>
     public ScribePlayerSettings MySettings => mySettings ??= new ScribePlayerSettings();
 
-    /// <summary>Author-facing visual-tuning knobs (client-local; defaults until <see cref="StartClientSide"/>
-    /// loads the config). Falls back to a fresh default instance if queried before load, so it is never null.</summary>
+    /// <summary>Author-facing visual-tuning knobs (client-local); never null.</summary>
     public ScribeVisualTuning VisualTuning => visualTuning ??= new ScribeVisualTuning();
 
-    /// <summary>The shared ambient-particle emitter, built once in <see cref="StartClientSide"/> from
-    /// <see cref="VisualTuning"/>. Falls back to a fresh instance (default tuning) if queried before load.</summary>
+    /// <summary>The shared ambient-particle emitter, built once in <see cref="StartClientSide"/> from <see cref="VisualTuning"/>.</summary>
     public ScribeAssignmentParticleEmitter ParticleEmitter =>
         particleEmitter ??= new ScribeAssignmentParticleEmitter(VisualTuning);
 
-    /// <summary>Client-side: mutate this player's preferences and persist them to the client-local JSON
-    /// config. The HUD/lectern refresh off <see cref="MyPinsChanged"/>, which this fires so an open HUD
-    /// re-reads the changed preference (e.g. a collapse toggle) with no network round-trip.</summary>
+    /// <summary>Client-side: mutate + persist this player's preferences, then fire <see cref="MyPinsChanged"/> so an open HUD
+    /// re-reads them with no network round-trip.</summary>
     public void UpdateMySettings(Action<ScribePlayerSettings> mutate)
     {
         if (capi is null) return; // client-only
@@ -364,32 +301,22 @@ public sealed partial class ScribeModSystem
         MyPinsChanged?.Invoke();
     }
 
-    /// <summary>Client-side: the UI sound player a Scribe dialog should install on its <c>BuildOwner</c>
-    /// for THIS player's current <see cref="ScribePlayerSettings.MuteUiSounds"/> preference
-    /// — the shared no-op <see cref="SilentSoundPlayer"/> when muted, else the
-    /// stock LibGUI <see cref="SoundPlayer"/>. The silent player is stateless, so one shared instance is
-    /// lazily built and reused across dialogs/rebuilds. Called from each Scribe dialog's ctor and its
-    /// settings-change rebuild hook, so a live toggle re-installs the right player without a reopen.</summary>
+    /// <summary>Client-side: the UI sound player a dialog installs on its <c>BuildOwner</c>: the shared stateless
+    /// <see cref="SilentSoundPlayer"/> when <see cref="ScribePlayerSettings.MuteUiSounds"/>, else the stock <see cref="SoundPlayer"/>.
+    /// Called from each dialog's ctor and settings-change rebuild hook so a live toggle takes effect without a reopen.</summary>
     public ISoundPlayer GetUiSoundPlayer(ICoreClientAPI capi)
         => MySettings.MuteUiSounds
             ? silentSoundPlayer ??= new SilentSoundPlayer(capi)
             : new SoundPlayer(capi);
 
-    /// <summary>Client-side: THIS player's full pin list to DISPLAY (empty until the first push), in
-    /// display order, each carrying its <c>LastKnownText</c>/<c>LastKnownDone</c> snapshot. This is the
-    /// authoritative server-pushed set with any in-flight optimistic pin/unpin
-    /// (<see cref="optimisticPinOverlay"/>) already applied — every consumer (HUD, Pin Tab, dialog rows)
-    /// reads through here, so they all see an optimistic change identically and at once. Callers must not
-    /// mutate the returned list.</summary>
+    /// <summary>Client-side: THIS player's pin list to DISPLAY, in display order (empty until the first push): the server-pushed
+    /// set with in-flight optimistic changes applied, so every consumer sees them identically. Callers must not mutate it.</summary>
     public IReadOnlyList<ScribePinnedRef> MyPins => displayPinList;
 
-    /// <summary>Client-side: record an optimistic pin/unpin ahead of the server round-trip, so
-    /// <see cref="MyPins"/>/<see cref="IsPinnedForMe"/> reflect it immediately for every consumer rather than
-    /// waiting for the authoritative push (see <see cref="optimisticPinOverlay"/>'s remarks on why this
-    /// matters). Pinning (<paramref name="snapshotIfPinned"/> non-null) is placed into the display list via
-    /// <see cref="ScribePinOrdering.PlaceNewPin"/> — the SAME rule the server applies — using
-    /// <paramref name="source"/> (the document the task lives in, for pinned-parent clustering) and the
-    /// player's Pin Insert <paramref name="insertEdge"/>. Unpinning just hides the existing entry.</summary>
+    /// <summary>Client-side: record an optimistic pin/unpin ahead of the server round-trip so <see cref="MyPins"/>/<see cref="IsPinnedForMe"/>
+    /// reflect it immediately. Pinning (<paramref name="snapshotIfPinned"/> non-null) is placed via <see cref="ScribePinOrdering.PlaceNewPin"/>,
+    /// the same rule the server applies, using <paramref name="source"/> (for pinned-parent clustering) and <paramref name="insertEdge"/>.
+    /// Unpinning just hides the existing entry.</summary>
     public void SetOptimisticPin(Guid docId, Guid taskId, ScribePinnedRef? snapshotIfPinned,
         ScribeDocument? source, ScribePinInsert insertEdge)
     {
@@ -403,8 +330,7 @@ public sealed partial class ScribeModSystem
         MyPinsChanged?.Invoke();
     }
 
-    /// <summary>Recompute <see cref="displayPinList"/> from <see cref="myPinList"/> with
-    /// <see cref="optimisticPinOverlay"/> applied. Cheap no-op copy when there is no in-flight optimism.</summary>
+    /// <summary>Recompute <see cref="displayPinList"/> from <see cref="myPinList"/> with the optimistic overlay applied.</summary>
     private void RebuildDisplayPinList()
     {
         if (optimisticPinOverlay.Count == 0)
@@ -416,9 +342,7 @@ public sealed partial class ScribeModSystem
         var list = new List<ScribePinnedRef>(myPinList);
         list.RemoveAll(p => optimisticPinOverlay.ContainsKey((p.OwnerDocId, p.TaskId)));
 
-        // Replay adds in the order they happened (not dictionary order) so a parent-then-child pinned in
-        // quick succession while both are still unconfirmed clusters correctly — PlaceNewPin needs to see
-        // the parent already placed to attach the child under it.
+        // Replay in original order (not dictionary order): PlaceNewPin must see a parent placed before attaching its child.
         foreach (var key in optimisticPinOrder)
         {
             if (optimisticPinOverlay[key] is not { } snapshot) continue; // an optimistic remove — already dropped above
@@ -429,10 +353,7 @@ public sealed partial class ScribeModSystem
         displayPinList = list;
     }
 
-    /// <summary>Drop each optimistic entry the authoritative push now agrees with (the server has the pin
-    /// iff we optimistically wanted it pinned), leaving only genuinely still-in-flight requests. Called from
-    /// <see cref="OnClientReceivedPinnedSet"/> before <see cref="RebuildDisplayPinList"/> re-derives the
-    /// display list from the fresh <see cref="myPinList"/>.</summary>
+    /// <summary>Drop each optimistic entry the authoritative push now agrees with, leaving only still-in-flight requests.</summary>
     private void ReconcileOptimisticPins()
     {
         if (optimisticPinOverlay.Count == 0) return;

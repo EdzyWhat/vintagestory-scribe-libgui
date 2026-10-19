@@ -11,29 +11,21 @@ using Vintagestory.API.Server;
 namespace Scribe;
 
 /// <summary>
-/// Physical assignment delivery: the Hybrid range check round-trip, and the Task Notice's
-/// own Accept/Decline handling. Kept as its own partial rather than folded into
-/// <c>ScribeModSystem.Assignment.cs</c> because a Task Notice creates its assignment record itself, at
-/// Accept time — it never goes through <see cref="ScribeAssignmentStore.TryCreate"/> or
-/// <c>OnServerReceivedSendAssignmentBatch</c> at all.
+/// Physical assignment delivery: the Hybrid range check round-trip and the Task Notice's own Accept/Decline handling.
+/// A Task Notice creates its assignment record at Accept time, so it never goes through
+/// <see cref="ScribeAssignmentStore.TryCreate"/> or <c>OnServerReceivedSendAssignmentBatch</c>.
 /// </summary>
 public sealed partial class ScribeModSystem
 {
-    /// <summary>Savegame key for the persisted last-known-position store (<see cref="ScribePlayerLocationStore"/>).</summary>
+    /// <summary>Savegame key for the persisted last-known-position store.</summary>
     private const string PlayerLocationStoreSaveKey = "scribe:playerlocations:v1";
 
-    /// <summary>Server-side last-known-position store, used by the Hybrid range check to reach an
-    /// offline target (Core's range-check function needs SOME position for them). Null on a pure client.</summary>
+    /// <summary>Server-side last-known-position store, so the Hybrid range check can reach an offline target. Null on a pure client.</summary>
     private ScribePlayerLocationStore? playerLocationStore;
 
-    /// <summary>In-memory, transient count of outstanding sealed Task Notices addressed to each recipient
-    /// UID — incremented once per notice sealed
-    /// (<see cref="SendBatchViaNotice"/>), decremented once per notice consumed
-    /// (<see cref="OnServerReceivedTaskNoticeAction"/>'s Accept/Decline). Deliberately NOT persisted: it is
-    /// only a cheap "does this player have anything to scan for at all" gate for the proximity heartbeat —
-    /// losing it across a server restart just means the ambient signal goes quiet until the next notice is
-    /// sealed, never a loss of the notice item itself (which the player's own inventory/a container already
-    /// persists like any other item).</summary>
+    /// <summary>Transient count of outstanding sealed Task Notices per recipient UID (+1 per <see cref="SendBatchViaNotice"/>,
+    /// -1 per Accept/Decline). Deliberately NOT persisted: it only gates the proximity heartbeat, and losing it on restart just
+    /// silences the ambient signal until the next notice is sealed.</summary>
     private readonly Dictionary<string, int> outstandingNoticeCountByTargetUid = new();
 
     private void AdjustOutstandingNoticeCount(string targetUid, int delta)
@@ -43,17 +35,12 @@ public sealed partial class ScribeModSystem
         else outstandingNoticeCountByTargetUid[targetUid] = next;
     }
 
-    /// <summary>Test-support accessor for <see cref="outstandingNoticeCountByTargetUid"/>
-    /// — mirrors the <see cref="AssignmentStore"/>/
-    /// <see cref="PinStore"/> precedent of exposing otherwise-private server state for the integration
-    /// suite to assert against directly.</summary>
+    /// <summary>Test-support accessor for <see cref="outstandingNoticeCountByTargetUid"/>.</summary>
     public int OutstandingNoticeCount(string targetPlayerUid) =>
         outstandingNoticeCountByTargetUid.GetValueOrDefault(targetPlayerUid);
 
-    /// <summary>Client → server: "is this target in range of my Assignment Desk?" (Hybrid mode). Resolves
-    /// the target's position from their live entity if online, or their last-known position if not; a
-    /// target this server has NEVER seen (no last-known position at all) reports out-of-range, since there
-    /// is nothing to check against — the safer default for a Hybrid server.</summary>
+    /// <summary>Client → server: is this target in range of my Assignment Desk? Uses the live entity position if online,
+    /// else the last-known position; a never-seen target reports out-of-range.</summary>
     private void OnServerReceivedDeliveryRangeCheckRequest(IServerPlayer fromPlayer, ScribeDeliveryRangeCheckRequestMessage message)
     {
         if (sapi is null) return;
@@ -84,18 +71,14 @@ public sealed partial class ScribeModSystem
         }, fromPlayer);
     }
 
-    /// <summary>Raised on the client whenever a range-check reply arrives, so the Create Assignments tab
-    /// can pre-select the delivery toggle for the currently selected target. Carries the reply directly
-    /// (including its echoed <see cref="ScribeDeliveryRangeCheckReplyMessage.TargetPlayerUid"/>) so a stale
-    /// reply for a since-superseded target selection is recognizable and ignorable by the subscriber.</summary>
+    /// <summary>Raised on the client when a range-check reply arrives. Carries the echoed target UID so a stale reply
+    /// for a superseded selection can be ignored.</summary>
     public event Action<ScribeDeliveryRangeCheckReplyMessage>? DeliveryRangeCheckReplied;
 
     private void OnClientReceivedDeliveryRangeCheckReply(ScribeDeliveryRangeCheckReplyMessage message)
         => DeliveryRangeCheckReplied?.Invoke(message);
 
-    /// <summary>Client → server: request a Hybrid range check for the desk at <paramref name="deskPos"/>
-    /// against <paramref name="targetPlayerUid"/> No-op on a
-    /// pure server/off the client.</summary>
+    /// <summary>Client → server: request a Hybrid range check for the desk at <paramref name="deskPos"/> against <paramref name="targetPlayerUid"/>. No-op off the client.</summary>
     public void RequestDeliveryRangeCheck(Vintagestory.API.MathTools.BlockPos deskPos, string targetPlayerUid)
     {
         capi?.Network.GetChannel(NetworkChannelName).SendPacket(new ScribeDeliveryRangeCheckRequestMessage
@@ -107,9 +90,8 @@ public sealed partial class ScribeModSystem
         });
     }
 
-    /// <summary>Client → server: Accept or Decline a held, sealed Task Notice. Send helper for <see cref="GuiDialogTaskNotice"/> — mirrors
-    /// <c>ScribeDialogBase.SendAssignmentAction</c>'s shape but addresses the notice by its own held-slot
-    /// identity (an unaccepted notice has no AssignmentId yet).</summary>
+    /// <summary>Client → server: Accept or Decline a held, sealed Task Notice, addressed by its held-slot identity
+    /// (an unaccepted notice has no AssignmentId yet).</summary>
     internal void SendTaskNoticeAction(ItemSlot slot, ScribeAssignmentAction action, ScribeAcceptCandidate? target)
     {
         capi?.Network.GetChannel(NetworkChannelName).SendPacket(new ScribeTaskNoticeActionMessage
@@ -123,9 +105,8 @@ public sealed partial class ScribeModSystem
         });
     }
 
-    /// <summary>Resolves a Task Notice action packet's held-slot identity to the exact slot, requiring it
-    /// to still hold an <see cref="ItemScribeTaskNotice"/> — a stale packet for an item the player no
-    /// longer holds (already consumed, dropped, etc.) resolves to null and the action is a no-op.</summary>
+    /// <summary>Resolves a Task Notice action packet's slot identity, requiring it to still hold an <see cref="ItemScribeTaskNotice"/>;
+    /// a stale packet resolves to null and the action is a no-op.</summary>
     private static ItemSlot? ResolveTaskNoticeSlot(IServerPlayer fromPlayer, string? inventoryId, int slotId)
     {
         ItemSlot? slot = null;
@@ -138,23 +119,15 @@ public sealed partial class ScribeModSystem
         return slot?.Itemstack?.Collectible is ItemScribeTaskNotice ? slot : null;
     }
 
-    /// <summary>Client → server: Accept or Decline a sealed Task Notice. Thin network shell — see
-    /// <see cref="ApplyTaskNoticeAction"/> for the actual logic, which this delegates to.</summary>
+    /// <summary>Client → server: Accept or Decline a sealed Task Notice. Delegates to <see cref="ApplyTaskNoticeAction"/>.</summary>
     private void OnServerReceivedTaskNoticeAction(IServerPlayer fromPlayer, ScribeTaskNoticeActionMessage message)
         => ApplyTaskNoticeAction(fromPlayer, message);
 
-    /// <summary>Accept or Decline a sealed Task Notice. Each row's <see cref="ScribeAssignmentStore"/> record already exists from send time
-    /// (<see cref="ScribeAssignmentStore.TryCreateSent"/>) — holding a sealed notice IS physical receipt,
-    /// so this first ensures every row has transitioned out of <see cref="ScribeAssignmentState.Sent"/> via
-    /// <see cref="ScribeAssignmentStore.TryMarkReceived"/> (a no-op if the proximity heartbeat already
-    /// caught up — see <see cref="OnTaskNoticeProximityTick"/>), then applies Accept/Decline through the
-    /// SAME <see cref="ScribeAssignmentStore.TryApplyAction"/> path a local-inbox assignment uses; no new
-    /// record is created. Accept then places each row onto the resolved target document,
-    /// mirroring <c>TryPlaceAcceptedAssignment</c>'s own placement shape.
-    ///
-    /// <para>Public — matches the <see cref="ScribeModSystem.PinOperations"/>-file precedent
-    /// (<c>SetPinForPlayer</c>/<c>CompleteTaskForPlayer</c>) of a domain-named method the network handler
-    /// delegates to and the integration suite drives directly.</para></summary>
+    /// <summary>Accept or Decline a sealed Task Notice. Each row's store record already exists from send time; holding the
+    /// notice IS physical receipt, so every row is first moved out of <see cref="ScribeAssignmentState.Sent"/> via
+    /// <see cref="ScribeAssignmentStore.TryMarkReceived"/>, then Accept/Decline goes through the same
+    /// <see cref="ScribeAssignmentStore.TryApplyAction"/> path as a local-inbox assignment. Accept then places each row onto the
+    /// resolved target document. Public so the integration suite can drive it directly.</summary>
     public void ApplyTaskNoticeAction(IServerPlayer fromPlayer, ScribeTaskNoticeActionMessage message)
     {
         if (sapi is null || assignmentStore is null) return;
@@ -168,8 +141,7 @@ public sealed partial class ScribeModSystem
             return;
         }
 
-        // A physical item can change hands, but the assignment it carries is still addressed to a
-        // specific player. Defensive: every row from a genuine send always carries an Assignment.
+        // The assignment is addressed to a specific player even if the item changed hands. Defensive: every genuine row carries an Assignment.
         if (noticeDoc.Blocks.Any(b => b.Assignment is null))
         {
             Trace("tasknotice-action from {0}: notice row missing its assignment — ignored", fromPlayer.PlayerName);
@@ -178,17 +150,14 @@ public sealed partial class ScribeModSystem
 
         string date = NotebookHost.FormatDate(sapi);
         double timestamp = sapi.World.Calendar.TotalDays;
-        // Holding the sealed notice at all already proves physical receipt — ensure every row's store
-        // record is out of Sent regardless of whether the proximity heartbeat's own inventory scan has
-        // caught up yet (its per-chunk-crossing gate can lag a same-chunk pickup-then-immediate-Accept).
+        // Holding the notice proves receipt; do not rely on the proximity heartbeat, whose chunk-crossing gate can lag a same-chunk pickup-then-Accept.
         foreach (var block in noticeDoc.Blocks)
             assignmentStore.TryMarkReceived(block.TaskId, date, timestamp);
 
         var action = (ScribeAssignmentAction)message.Action;
         if (action == ScribeAssignmentAction.Decline)
         {
-            // Unlike Accept, Decline is not redirectable — only the addressed recipient may decline a
-            // notice that isn't theirs.
+            // Unlike Accept, Decline is not redirectable: only the addressed recipient may decline.
             if (noticeDoc.Blocks.Any(b => b.Assignment!.TargetPlayerUid != fromPlayer.PlayerUID))
             {
                 Trace("tasknotice-action from {0}: notice is not addressed to them — ignored", fromPlayer.PlayerName);
@@ -209,8 +178,7 @@ public sealed partial class ScribeModSystem
             AdjustOutstandingNoticeCount(fromPlayer.PlayerUID, -1);
             Trace("tasknotice-action from {0}: declined and consumed a {1}-row notice", fromPlayer.PlayerName, noticeDoc.Blocks.Count);
 
-            // Passive resync only (no notification, toast, or highlight) — the
-            // Assigner's next Sent History view simply reflects Declined, exactly like a local-inbox decline.
+            // Passive resync only (no notification), like a local-inbox decline.
             PushAssignmentsTo(fromPlayer);
             foreach (var assignerUid in declineAssignerUids)
                 if (sapi.World.PlayerByUid(assignerUid) is IServerPlayer assigner) PushAssignmentsTo(assigner);
@@ -243,14 +211,11 @@ public sealed partial class ScribeModSystem
             var sourceAssignment = block.Assignment!;
             assignerUids.Add(sourceAssignment.AssignerUid);
 
-            // A non-recipient holder confirmed the redirect warning client-side before this
-            // packet was sent — redirect the store record's target to them now, so the Accept below
-            // legally resolves them as Assignee instead of being rejected as an uninvolved player.
+            // A non-recipient holder confirmed the redirect warning client-side; redirect the record's target to them so Accept resolves them as Assignee.
             if (sourceAssignment.TargetPlayerUid != fromPlayer.PlayerUID)
                 assignmentStore.TryRedirectTarget(block.TaskId, fromPlayer.PlayerUID, date, timestamp);
 
-            // The record already exists (Unaccepted, from the TryMarkReceived pass above) — transition it
-            // through the same actor-validated path a local-inbox Accept uses.
+            // The record already exists (Unaccepted); transition it through the same path as a local-inbox Accept.
             if (!assignmentStore.TryApplyAction(block.TaskId, fromPlayer.PlayerUID, ScribeAssignmentAction.Accept))
             {
                 Trace("tasknotice-action from {0}: row {1} rejected (illegal transition or unknown id) — skipped", fromPlayer.PlayerName, block.TaskId);
@@ -291,12 +256,7 @@ public sealed partial class ScribeModSystem
         }, fromPlayer);
     }
 
-    /// <summary>Persists a disconnecting player's last known position (Core 1.5) — the Hybrid range
-    /// check's only way to place an offline target, since the server otherwise has no live entity
-    /// position for them at all. Mirrors the Sign block's <c>ToTreeAttributes</c>/<c>MarkDirty</c>
-    /// persistence pattern in spirit (a value captured on a lifecycle event, held until explicitly
-    /// re-saved) even though the actual storage is <see cref="ScribePlayerLocationStore"/>'s own savegame
-    /// key rather than a block entity's tree.</summary>
+    /// <summary>Persists a disconnecting player's last known position, the Hybrid range check's only way to place an offline target.</summary>
     private void OnScribePlayerDisconnect(IServerPlayer player)
     {
         if (playerLocationStore is null || player.Entity is null) return;
@@ -304,22 +264,15 @@ public sealed partial class ScribeModSystem
         playerLocationStore.SetLastKnown(player.PlayerUID, new ScribeWorldPosition(pos.X, pos.Y, pos.Z));
     }
 
-    /// <summary>Per-player chunk coordinate at the time of that player's last proximity scan
-    /// — the scan below is skipped whenever a player's
-    /// current chunk still matches this, so a stationary player costs nothing between chunk crossings.</summary>
+    /// <summary>Per-player chunk coordinate at the last proximity scan; the nearby scan is skipped while it is unchanged.</summary>
     private readonly Dictionary<string, Vec3i> lastScannedChunkByPlayerUid = new();
 
     /// <summary>How far (blocks) the proximity scan looks for a matching Task Notice.</summary>
     private const double NoticeScanRadius = 12.0;
 
-    /// <summary>The <c>OnHistoryScanTick</c>-style heartbeat for Task Notice proximity discovery
-    /// AND Sent → Received detection: for every online player with at least one outstanding sealed notice addressed to them
-    /// (the cheap <see cref="outstandingNoticeCountByTargetUid"/> gate), first checks their OWN inventory
-    /// for a carried notice (cheap slot iteration, run every tick — not gated by the chunk-boundary check
-    /// below, which exists only to bound the more expensive nearby-scan), then — gated by the chunk-boundary
-    /// movement check — scans nearby dropped items and block-entity containers for a matching
-    /// stack and pings that one client to spawn the ambient discovery effect. Registered alongside
-    /// <c>OnHistoryScanTick</c> in <c>StartServerSide</c>.</summary>
+    /// <summary>Heartbeat for Task Notice proximity discovery and Sent → Received detection. For each online player with an
+    /// outstanding notice: checks their own inventory every tick, then, gated by a chunk-boundary movement check (to bound the
+    /// costlier scan), scans nearby dropped items and containers and pings that client. Registered in <c>StartServerSide</c>.</summary>
     private void OnTaskNoticeProximityTick(float _)
     {
         if (sapi is null || outstandingNoticeCountByTargetUid.Count == 0) return;
@@ -353,18 +306,9 @@ public sealed partial class ScribeModSystem
         }
     }
 
-    /// <summary>Own-inventory half of Sent → Received detection: scans
-    /// <paramref name="player"/>'s own hotbar + backpack (the same carried-only inventories
-    /// <see cref="ScribeModSystem.EnumerateCarriedSlots"/> already defines for the Accept-placement picker)
-    /// for a sealed Task Notice addressed to them, and calls <see cref="ScribeAssignmentStore.TryMarkReceived"/>
-    /// for every row it carries — a no-op for any row not currently in the Sent state, so re-running this
-    /// every tick for a player who still has the notice carried is harmless. Pushes a fresh Inbox sync only
-    /// if anything actually transitioned, sparing an idle re-sync on every tick.
-    ///
-    /// <para>Public — the same "network-driven, but also directly integration-suite-drivable" seam as
-    /// <see cref="SendAssignmentBatch"/>/<see cref="ApplyTaskNoticeAction"/>: a test stands in for the
-    /// proximity heartbeat's own-inventory scan by moving a notice into a player's inventory and calling
-    /// this directly, rather than waiting on <see cref="OnTaskNoticeProximityTick"/>'s real tick cadence.</para></summary>
+    /// <summary>Own-inventory half of Sent → Received detection: scans the player's carried slots (<see cref="ScribeModSystem.EnumerateCarriedSlots"/>)
+    /// for a notice addressed to them and calls <see cref="ScribeAssignmentStore.TryMarkReceived"/> per row (idempotent). Pushes an
+    /// Inbox sync only if something transitioned. Public so tests can call it instead of waiting on the tick.</summary>
     public void MarkReceivedForCarriedNotices(IServerPlayer player)
     {
         string date = NotebookHost.FormatDate(sapi!);
@@ -384,18 +328,12 @@ public sealed partial class ScribeModSystem
         if (anyReceived) PushAssignmentsTo(player);
     }
 
-    /// <summary>Locate-only entry point used by the discovery ping: the nearby (dropped +
-    /// container) half of the shared traversal below, taking a match predicate so this same
-    /// scan also backs the proactive-consume path with an exact-<c>TaskId</c> predicate.</summary>
+    /// <summary>Locate-only entry point for the discovery ping: the nearby (dropped + container) scan with a match predicate.</summary>
     private Vec3d? FindAddressedNoticePosition(Vec3d center, System.Func<ScribeDocument, bool> predicate)
         => FindOrConsumeNearbyNotice(center, predicate, consume: false, out _);
 
-    /// <summary>Proactive-consume half of the shared traversal: searches <paramref name="targetPlayer"/>'s own carried slots first (a notice they're literally
-    /// holding — the discovery ping never needs this half, since <see cref="MarkReceivedForCarriedNotices"/>
-    /// already covers a carried notice's own state transition), then falls back to the same nearby
-    /// dropped-item/container scan <see cref="FindAddressedNoticePosition"/> uses for the ping — but with
-    /// the terminal action changed from "return this position" to "clear/despawn the match." Returns
-    /// whether anything was actually removed.</summary>
+    /// <summary>Proactive-consume: searches the player's carried slots first, then falls back to the nearby scan used by the ping,
+    /// but clears/despawns the match. Returns whether anything was removed.</summary>
     private bool TryConsumeAddressedNotice(IServerPlayer targetPlayer, System.Func<ScribeDocument, bool> predicate)
     {
         if (targetPlayer.Entity is null) return false;
@@ -412,16 +350,10 @@ public sealed partial class ScribeModSystem
         return removed;
     }
 
-    /// <summary>The scan itself, taking a match predicate and an optional consume side effect: dropped/thrown notices via
-    /// <see cref="IWorldAccessor.GetEntitiesAround"/>, then notices sitting inside any block entity exposing
-    /// an <see cref="IBlockEntityContainer"/> inventory, walked chunk-by-chunk
-    /// (<see cref="IWorldChunk.BlockEntities"/>) across the scan radius's bounding box — a generic at-rest
-    /// scan with no coupling to any specific container type. Returns the first match's world
-    /// position, or null. When <paramref name="consume"/> is true, that match is removed in place (a
-    /// dropped <see cref="EntityItem"/> is despawned via <c>Die(EnumDespawnReason.Removed)</c>, the same way
-    /// a normal item pickup removes it; a container slot is cleared via
-    /// <c>slot.Itemstack = null; slot.MarkDirty()</c>) and <paramref name="removed"/> reports whether
-    /// anything was actually removed.</summary>
+    /// <summary>The shared scan: dropped item entities, then notices inside any block entity with an <see cref="IBlockEntityContainer"/>
+    /// inventory, walked chunk-by-chunk over the scan radius. Returns the first match's position, or null. When
+    /// <paramref name="consume"/> is true the match is removed (item entity despawned, container slot cleared) and
+    /// <paramref name="removed"/> reports it.</summary>
     private Vec3d? FindOrConsumeNearbyNotice(Vec3d center, System.Func<ScribeDocument, bool> predicate, bool consume,
         out bool removed)
     {
@@ -488,18 +420,12 @@ public sealed partial class ScribeModSystem
             && ScribeDocumentAttributes.TryReadFrom(stack, out var doc) && doc is not null
             && predicate(doc);
 
-    /// <summary>Proactive Task Notice consumption for the generic assignment-action path: after an Accept/Decline/Cancel/Discard transition succeeds
-    /// through <see cref="ScribeModSystem.ApplyAssignmentAction"/> rather than the notice's own
-    /// dialog, best-effort locates and consumes any sealed Task Notice still carrying <paramref
-    /// name="taskId"/>, anchored on <paramref name="targetPlayerUid"/> (the Assignee — the only party who
-    /// could ever be physically carrying it, regardless of which party triggered the transition) and
-    /// scoped to the exact same carried+nearby search the discovery ping already uses. A no-op if that
-    /// player is offline (no live position to scan around, matching the proximity signal's own online-only
-    /// bound).
+    /// <summary>Proactive Task Notice consumption after an Accept/Decline/Cancel/Discard goes through
+    /// <see cref="ScribeModSystem.ApplyAssignmentAction"/> rather than the notice's dialog: best-effort consumes a sealed notice
+    /// carrying <paramref name="taskId"/>, searching around <paramref name="targetPlayerUid"/> (the Assignee, the only party who
+    /// could carry it). No-op if that player is offline.
     ///
-    /// <para><b>Multi-row gating</b>: a sealed notice carrying more than one
-    /// row is only actually removed once EVERY row it carries has itself resolved out of Sent/Unaccepted —
-    /// otherwise it's still a live carrier for an unresolved row and must stay put.</para></summary>
+    /// <para>A multi-row notice is removed only once EVERY row has left Sent/Unaccepted; otherwise it still carries an unresolved row.</para></summary>
     private void ConsumeMatchingTaskNotice(Guid taskId, string targetPlayerUid)
     {
         if (sapi is null || assignmentStore is null) return;
@@ -515,9 +441,7 @@ public sealed partial class ScribeModSystem
             AdjustOutstandingNoticeCount(targetPlayerUid, -1);
     }
 
-    /// <summary>Server → client: spawns the existing ambient discovery effect at the found notice's
-    /// position, client-local to the one player this ping was addressed to. Reuses
-    /// <see cref="ScribeAssignmentParticleEmitter"/>'s Vec3d-centered overload.</summary>
+    /// <summary>Server → client: spawns the ambient discovery effect at the found notice's position, for the addressed player only.</summary>
     private void OnClientReceivedTaskNoticeProximityPing(ScribeTaskNoticeProximityPingMessage message)
     {
         if (capi is null) return;
