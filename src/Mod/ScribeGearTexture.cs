@@ -8,8 +8,7 @@ namespace Scribe;
 /// gear in the spirit of the small brown placeholder cog — <b>blocky</b> (flat-topped rectangular teeth,
 /// a small quantized palette), <b>unevenly coloured</b> (per-element shade jitter), and full of
 /// <b>negative space</b> (open sectors between the spokes, a bored-out hub) rather than a solid disc.
-/// This is a FIRST-PASS placeholder authored to be judged in-game (author request to "look into
-/// procedurally generating the big gear … keep the small gear's visual style"); tune the knobs below or
+/// This is a placeholder meant to be judged in-game; tune the knobs below or
 /// swap it for hand-drawn art — nothing else in the gearworks depends on how the bitmap is produced.
 ///
 /// <para>Deterministic: seeded with a fixed value so the wheel is identical every launch (no
@@ -21,16 +20,16 @@ internal static class ScribeGearTexture
 {
     /// <summary>Tooth count of the generated great wheel. Kept as a public constant so the gearworks widget
     /// can set its <c>EscapeTeeth</c> step to the SAME value (one tick advances exactly one tooth). Many small
-    /// teeth (vs. the first pass's 26 large ones) so they read as proportional to the small gear's teeth and
-    /// mesh cleanly (task 5.5). Final tuned value 32, with teeth sized as if 38 for more space BETWEEN them
-    /// (baked from .geartune 2026-08-11) — see <see cref="ToothSizeReferenceTeeth"/>. This is the default the
+    /// teeth so they read as proportional to the small gear's teeth and
+    /// mesh cleanly. The value is 32, with teeth sized as if 38 for more space BETWEEN them
+    /// — see <see cref="ToothSizeReferenceTeeth"/>. This is the default the
     /// live .geartune knob (<c>WheelTeeth</c>) also starts from and overrides at runtime.</summary>
     public const int Teeth = 32;
 
     /// <summary>Reference tooth count that fixes each tooth's ABSOLUTE angular width, decoupled from the actual
     /// <see cref="Teeth"/> count. The tooth half-angle is computed from THIS rather than from <c>teeth</c>, so
     /// lowering the real tooth count only widens the GAPS between teeth — the teeth themselves stay sized as if
-    /// the wheel had this many (final tuned value: 32 teeth, spacing as if 38). Set equal to <see cref="Teeth"/>
+    /// the wheel had this many (32 teeth, spacing as if 38). Set equal to <see cref="Teeth"/>
     /// to go back to count-proportional teeth.</summary>
     private const int ToothSizeReferenceTeeth = 38;
 
@@ -51,9 +50,8 @@ internal static class ScribeGearTexture
 
         float cx = size / 2f, cy = size / 2f;
         float rRoot  = size * 0.42f;           // tooth roots / rim outer edge
-        // Tooth height reduced 30% from the previous pass (task 6.2): was tip 0.48 (length 0.06 over the root);
-        // 0.06 × 0.70 = 0.042, so the tip now sits at rRoot + 0.042 = 0.462. Shorter, stubbier teeth.
-        float rOuter = size * 0.462f;          // tooth tips (0.30 shorter than the 0.48 pass)
+        // Tooth length over the root is 0.042 of size, so the tip sits at rRoot + 0.042 = 0.462. Short, stubby teeth.
+        float rOuter = size * 0.462f;          // tooth tips
         float rRimIn = size * 0.34f;           // rim inner edge (spokes start here)
         float rHub   = size * 0.16f;           // hub outer edge (spokes end here)
         float rBore  = size * 0.055f;          // central bore (transparent)
@@ -62,14 +60,10 @@ internal static class ScribeGearTexture
         // System.Random is fine here (this is app code, not a workflow script's forbidden RNG).
         var rng = new Random(0x5CB1E);
 
-        // Metallic gray-steel palette SAMPLED from the small gear PNG (task 5.10 — dominant shades ≈
+        // Metallic gray-steel palette sampled from the small gear PNG (dominant shades ≈
         // #605050/#606050/#505040/#706060), quantized to a few flat steps so the fill reads chunky, not
         // gradient. Distinctly steel (not brown, not teal) — the wheel is a plain regulator, not a temporal
-        // gear. Keeps per-element variation via the random pick.
-        // Green cast pulled out (author: "a little too green"): each color's GREEN channel is moved halfway
-        // down toward its BLUE channel, so G no longer rides above B (the source of the yellow-green tint)
-        // without darkening or hue-shifting the warm steel tone. Colors where G already equalled B are
-        // unchanged. Was: 605050 / 606050 / 505040 / 706060 / 504040 / 707060.
+        // gear. Per-element variation comes from the random pick.
         SKColor[] palette =
         {
             new(0x60, 0x50, 0x50), new(0x60, 0x58, 0x50), new(0x50, 0x48, 0x40),
@@ -77,12 +71,12 @@ internal static class ScribeGearTexture
         };
         SKColor Shade() => palette[rng.Next(palette.Length)];
 
-        // Flat filled shapes for teeth/spokes — no outlines on THOSE (task 5.3: they read as drawn-on lines).
+        // Flat filled shapes for teeth/spokes — no outlines on THOSE (outlines read as drawn-on lines).
         using var fill = new SKPaint { IsAntialias = true, Style = SKPaintStyle.Fill };
 
         // A single solid stroke, a shade darker than the fill palette, drawn ONLY on the CIRCULAR portions
-        // (rim outer/inner edge + hub) — NOT teeth or spokes (task 6.6). Defines the round structure without
-        // the "drawn-on line" look that the teeth outlines had.
+        // (rim outer/inner edge + hub) — NOT teeth or spokes. Defines the round structure without
+        // the "drawn-on line" look that tooth outlines would have.
         using var edge = new SKPaint
         {
             IsAntialias = true,
@@ -93,13 +87,12 @@ internal static class ScribeGearTexture
 
         // ── Teeth: flat-topped RECTANGULAR blocks around the rim (blocky, each its own shade). The width is
         //    pinned to the spacing-reference count, NOT the live `teeth`, so lowering `teeth` only WIDENS the
-        //    gaps and keeps each tooth the same absolute size (author request). The tooth is a true rectangle
+        //    gaps and keeps each tooth the same absolute size. The tooth is a true rectangle
         //    (PARALLEL sides square to its bisector), not a radial trapezoid — a trapezoid's sides converge on
         //    the center so its flat-chord top meets them at slightly-ACUTE outer corners; parallel sides give
-        //    clean 90° outer corners (author request). ──
+        //    clean 90° outer corners. ──
         float toothHalfAngle = (MathF.PI / toothSpacingRef) * 0.52f;   // gaps = the rest → negative space
-        // Linear half-width of the tooth block, matched to the old chord width at the root so counts/spacing
-        // read the same as before (chord = 2·r·sin(halfAngle)).
+        // Linear half-width of the tooth block: the chord width at the root (chord = 2·r·sin(halfAngle)).
         float toothHalfWidth = rRoot * MathF.Sin(toothHalfAngle);
         for (int i = 0; i < teeth; i++)
         {
@@ -142,7 +135,7 @@ internal static class ScribeGearTexture
             canvas.DrawPath(hub, fill);
         }
 
-        // ── Stroke the CIRCULAR edges only (task 6.6): rim outer (root) + rim inner + hub outer. Teeth and
+        // ── Stroke the CIRCULAR edges only: rim outer (root) + rim inner + hub outer. Teeth and
         //    spokes stay strokeless. Drawn last so the outlines sit on top of the fills. ──
         canvas.DrawCircle(cx, cy, rRoot,  edge);   // rim outer edge (where teeth meet the rim)
         canvas.DrawCircle(cx, cy, rRimIn, edge);   // rim inner edge

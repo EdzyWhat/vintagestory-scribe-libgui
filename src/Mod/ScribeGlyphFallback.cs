@@ -1,10 +1,9 @@
-// Per-glyph font fallback for the Unicode arrows in the editable field
-// (add-arrow-substitution-and-cuneiform-glyphs).
+// Per-glyph font fallback for the Unicode arrows in the editable field.
 //
 // The typed-arrow substitution stores real U+2192 (→) / U+2190 (←) in the buffer. Several of the
 // bundled task fonts are SUBSET builds that carry no arrow glyph — verified: Noto Sans, Noto Serif and
 // La Belle Aurore lack ←/→ (Scapholene and Caudex have them); the "Default" ("" → system) family depends
-// on the OS. In the READ view this is already handled: LibGUI's Text widget draws through
+// on the OS. The READ view handles this already: LibGUI's Text widget draws through
 // CanvasDrawExtensions.DrawText, which shapes via TextShaper/FontRunSplitter and substitutes a fallback
 // typeface per missing glyph. But the EDITOR field paints through PaintingContext.DrawText, which calls
 // the raw SkiaSharp Canvas.DrawText with a single SKFont and does NO fallback — so a missing arrow renders
@@ -15,7 +14,7 @@
 // Only the two arrow code points are ever redirected, and only when the active font actually lacks them,
 // so any font that DOES carry arrows keeps drawing them natively (matching the read view). When a line
 // needs no redirect — the overwhelmingly common case — Draw/Measure take a single-run fast path that is
-// byte-for-byte identical to calling PaintingContext.DrawText / TextLayoutHelper.MeasureText directly.
+// equivalent to calling PaintingContext.DrawText / TextLayoutHelper.MeasureText directly.
 
 using System.Collections.Generic;
 using System.Text;
@@ -93,8 +92,8 @@ internal static class ScribeGlyphFallback
 
         SKTypeface? primary = TextLayoutHelper.GetFont(fontFamily, 1f, weight).Typeface;
         SKTypeface? fallback = FontRegistry.GetCustomTypeface(FallbackFamily, FontWeight.Normal);
-        // No usable fallback (family not registered), or the active font already covers arrows — nothing to
-        // do; let the caller draw/measure the whole string in one call.
+        // No usable typeface or fallback (family not registered): let the caller draw/measure the whole
+        // string in one call.
         if (primary == null || fallback == null)
         {
             return false;

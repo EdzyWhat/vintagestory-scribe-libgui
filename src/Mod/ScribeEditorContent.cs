@@ -28,7 +28,7 @@ namespace Scribe;
 
 /// <summary>A value snapshot of one editable block plus its index. The live text lives in the dialog's
 /// scratch document (the field writes through on every keystroke); this is only the seed for building the
-/// row. <see cref="Kind"/> distinguishes Task / Text / Tracker / Link (add-tracker-link-tasks Group 5): a
+/// row. <see cref="Kind"/> distinguishes Task / Text / Tracker / Link: a
 /// Tracker row swaps its text field for an item icon + name + <see cref="TargetQuantity"/> stepper, and a
 /// Link row shows the icon + name of its <see cref="LinkTarget"/>. The icon/name are resolved by the dialog
 /// and passed in as <see cref="DisplayStack"/>/<see cref="DisplayName"/> so this row widget stays API-free.</summary>
@@ -46,13 +46,13 @@ internal readonly record struct ScribeEditRowData(
     public bool IsCraft => Kind == ScribeBlockKind.Craft;
     public bool IsQuestObjective => Kind == ScribeBlockKind.QuestObjective;
     /// <summary>Kinds that render as an item icon + name (their own Text is empty): Tracker, Link, the
-    /// Craft parent (which shows its recipe output — add-crafting-tasks 9.1), and a QuestObjective (item-
-    /// backed or a generic-icon label fallback — no stepper, since <see cref="IsCarriedCountTracked"/>
-    /// stays false for it — add-progression-framework-quest-objective-subtasks 7.3).</summary>
+    /// Craft parent (which shows its recipe output), and a QuestObjective (item-backed or a
+    /// generic-icon label fallback — no stepper, since <see cref="IsCarriedCountTracked"/> stays false
+    /// for it).</summary>
     public bool IsItemKind => IsTracker || IsLink || IsCraft || IsQuestObjective;
     /// <summary>Kinds whose row carries a live have/need counter + inline target stepper: Tracker and the
-    /// Craft parent (both count the viewer's carried inventory — add-crafting-tasks 9.2). Deliberately
-    /// excludes QuestObjective — its numbers are watcher-driven, not player-editable (design.md Non-Goals).
+    /// Craft parent (both count the viewer's carried inventory). Deliberately
+    /// excludes QuestObjective — its numbers are watcher-driven, not player-editable.
     /// Mirrors <see cref="ScribeBlock.IsCarriedCountTracked"/>.</summary>
     public bool IsCarriedCountTracked => IsTracker || IsCraft;
     /// <summary>Task, Tracker, Link, and Craft all carry a Done flag, so they get a completion checkbox;
@@ -67,8 +67,8 @@ internal readonly record struct ScribeEditRowData(
 }
 
 /// <summary>
-/// A static, non-interactive snapshot of a deleted editor row, shown while it collapses out of the list
-/// (scribe-list-collapse). The row's scratch block and focus node are already gone, so this renders a
+/// A static, non-interactive snapshot of a deleted editor row, shown while it collapses out of the list.
+/// The row's scratch block and focus node are already gone, so this renders a
 /// FROZEN copy — the same [grip-spacer][checkbox][text] column an editor row uses (so it aligns and
 /// collapses seamlessly), but with no editable field, no gestures, and no delete/pin/drag controls. It is
 /// never focused and never mutates anything; the <see cref="ScribeRowSizeAnimation"/> wrapping it animates its
@@ -100,7 +100,7 @@ internal sealed class ScribeFrozenEditorRow : StatelessWidget
         var children = new List<Widget>
         {
             // Grip-column spacer (invisible, uninteractable), matching the editor row's far-left grip (same
-            // GripInsets, §10.4) so the ghost's columns line up with its neighbors as it collapses.
+            // GripInsets) so the ghost's columns line up with its neighbors as it collapses.
             new Padding(
                 ScribeRowControlNudge.GripInsets(style, data.IsItemKind, data.LinkTarget,
                     data.IsStaticVsQuestObjective, data.DisplayStack),
@@ -112,7 +112,7 @@ internal sealed class ScribeFrozenEditorRow : StatelessWidget
         {
             // A frozen (disabled) checkbox reflecting the row's last done-state — no onChanged, so it can't
             // be toggled while it collapses. Task, Tracker, and Link all carry a Done flag (Completable).
-            // Tick color routes through the row style's CheckTickColor seam (§11) so it matches the live rows.
+            // Tick color routes through the row style's CheckTickColor seam so it matches the live rows.
             children.Add(new Padding(
                 EdgeInsets.Only(top: ScribeRowControlNudge.CheckboxAndGripTop(
                     style, data.IsItemKind, data.LinkTarget,
@@ -159,7 +159,7 @@ internal sealed class ScribeFrozenEditorRow : StatelessWidget
 
 /// <summary>
 /// The editor view's content tree. Unlike the read view it uses a NON-virtualized
-/// <see cref="SingleChildScrollView"/> + <see cref="Column"/> of ALL rows (design D2): LibGUI's
+/// <see cref="SingleChildScrollView"/> + <see cref="Column"/> of ALL rows: LibGUI's
 /// <see cref="ListView"/> unmounts off-screen rows, which would destroy an off-screen row's focus
 /// node and drop focus/caret when a focused row grows past the viewport. Keeping every row mounted
 /// lets the dialog coordinate cross-row focus (Enter/Shift+Tab) and keep a growing focused row in
@@ -256,21 +256,18 @@ internal sealed class ScribeEditorContent : StatefulWidget
     public Action<int> OnCommitAndAdvance { get; }
     public Action<int> OnCommitAndRetreat { get; }
     public Action<int> OnInsertTaskBelow { get; }
-    /// <summary>A row's field genuinely lost focus (add-empty-task-lifecycle): the dialog removes the row
+    /// <summary>A row's field genuinely lost focus: the dialog removes the row
     /// if it is an empty task. See <see cref="ScribeDialogBase.OnRowBlurred"/>.</summary>
     public Action<int> OnRowBlurred { get; }
-    /// <summary>A row hit its per-kind character cap while typing/pasting (add-note-kind-picker §8): the
+    /// <summary>A row hit its per-kind character cap while typing/pasting: the
     /// dialog surfaces a transient "limited to N characters" notice. See
     /// <see cref="ScribeDialogBase.OnRowMaxLengthReached"/>.</summary>
     public Action<int> OnMaxLengthReached { get; }
-    /// <summary>A row's caret moved by keyboard nav (no text change) — the dialog follows it into view
-    /// (scroll-follow-caret-in-editor issue #1). See <see cref="ScribeDialogBase.NotifyCaretMoved"/>.</summary>
+    /// <summary>A row's caret moved by keyboard nav (no text change) — the dialog follows it into view. See <see cref="ScribeDialogBase.NotifyCaretMoved"/>.</summary>
     public Action<int> OnCaretMoved { get; }
-    /// <summary>A row was focused by a mouse click — the dialog suppresses scroll-into-view for it
-    /// (scroll-follow-caret-in-editor issue #3). See <see cref="ScribeDialogBase.NotifyPointerFocus"/>.</summary>
+    /// <summary>A row was focused by a mouse click — the dialog suppresses scroll-into-view for it. See <see cref="ScribeDialogBase.NotifyPointerFocus"/>.</summary>
     public Action<int> OnPointerFocus { get; }
-    /// <summary>Cmd/Ctrl+Up in a row — the dialog jumps focus to the first row, caret at its start
-    /// (scroll-follow-caret-in-editor Cmd/Ctrl row-nav). See <see cref="ScribeDialogBase.EditorJumpToFirstRow"/>.</summary>
+    /// <summary>Cmd/Ctrl+Up in a row — the dialog jumps focus to the first row, caret at its start. See <see cref="ScribeDialogBase.EditorJumpToFirstRow"/>.</summary>
     public Action<int> OnJumpToFirstRow { get; }
     /// <summary>Cmd/Ctrl+Down in a row — the dialog jumps focus to the last row, caret at its end. See
     /// <see cref="ScribeDialogBase.EditorJumpToLastRow"/>.</summary>
@@ -278,25 +275,25 @@ internal sealed class ScribeEditorContent : StatefulWidget
     public Action<int> OnToggleTask { get; }
     public Action<int> OnDeleteBlock { get; }
     public Action<int> OnTogglePinned { get; }
-    /// <summary>A single tap (not a press-hold-drag) on a row's grip toggles its subtask depth 0↔1
-    /// (task-subtasks 5.3). The grip's <see cref="GestureDetector"/> fires this only on a genuine click —
+    /// <summary>A single tap (not a press-hold-drag) on a row's grip toggles its subtask depth 0↔1.
+    /// The grip's <see cref="GestureDetector"/> fires this only on a genuine click —
     /// the dispatcher suppresses the tap during a drag — so reordering is unaffected. See
     /// <see cref="ScribeDialogBase.OnGripTap"/>.</summary>
     public Action<int> OnGripTap { get; }
     /// <summary>Reorder a block from one index to another (drag drop). See
     /// <see cref="ScribeEditorContentState"/> for the drag mechanics.</summary>
     public Action<int, int> OnReorderBlock { get; }
-    /// <summary>A Tracker row's inline +/- stepper changed its target quantity: (blockIndex, newTarget)
-    /// (add-tracker-link-tasks 5.2). The dialog writes it into the scratch document; the normal editor flush
+    /// <summary>A Tracker row's inline +/- stepper changed its target quantity: (blockIndex, newTarget).
+    /// The dialog writes it into the scratch document; the normal editor flush
     /// persists it (the codec already serializes TargetQuantity, so no dedicated packet). See
     /// <see cref="ScribeDialogBase.SetEditorTrackerTargetQuantity"/>.</summary>
     public Action<int, int> OnTrackerQuantityChanged { get; }
-    /// <summary>Add a block of the chosen kind (add-note-kind-picker D2). The footer's segmented picker calls
+    /// <summary>Add a block of the chosen kind. The footer's segmented picker calls
     /// this with its current primary kind (defaults to Task) on a primary click, or with the picked kind from
     /// the inline list. See <see cref="ScribeDialogBase.OnClickAdd"/>.</summary>
     public Action<ScribeAddKind> OnAdd { get; }
-    /// <summary>The installed quest mod's catalog, for the footer add-kind picker's "Quest Link" option
-    /// (add-assignment-and-quest-support 10.1/10.2). Empty hides the option entirely — see
+    /// <summary>The installed quest mod's catalog, for the footer add-kind picker's "Quest Link" option.
+    /// Empty hides the option entirely — see
     /// <see cref="ScribeDialogBase.QuestCatalogForPicker"/>.</summary>
     public IReadOnlyList<ScribeQuestCatalogEntry> QuestCatalog { get; }
     /// <summary>Add a quest Link for the chosen catalog entry. See
@@ -304,30 +301,29 @@ internal sealed class ScribeEditorContent : StatefulWidget
     public Action<ScribeQuestCatalogEntry> OnAddQuestLink { get; }
     /// <summary>Whether the footer's add control may add another block. Default true (uncapped tiers —
     /// Lectern, Notebook — always). Finite tiers (tablet, chalkboard) pass false once the document holds
-    /// 10 entries of any kind (scribe-document-policy), which DIMS the primary button and every drop-up
+    /// 10 entries of any kind, which DIMS the primary button and every drop-up
     /// tile. The buttons stay clickable so the tap reaches <see cref="ScribeDialogBase.OnClickAdd"/> and
-    /// surfaces the cap notice (refine-chalkboard §12.9).</summary>
+    /// surfaces the cap notice.</summary>
     public bool AddTaskEnabled { get; }
     public Action OnSwitchToRead { get; }
     /// <summary>Whether the footer shows the "Done editing" (switch-to-read) button. Default true for the
     /// tabbed dialogs (Lectern/Notebook), which have a Read view to switch to. The always-edit tablet
-    /// (add-tablet-dialog) passes false: it has no Read view, so leaving editor mode would null the scratch
+    /// passes false: it has no Read view, so leaving editor mode would null the scratch
     /// and there would be nowhere to land — the button is simply omitted there.</summary>
     public bool ShowSwitchToRead { get; }
-    /// <summary>The dialog's current illumination shade (add-note-kind-picker + respect-local-illumination):
+    /// <summary>The dialog's current illumination shade:
     /// threaded so the footer's add-kind picker can tint its FLOATING drop-up menu to match the window. The
     /// menu paints in the Overlay layer, which sits OUTSIDE the dialog body's <see cref="ScribeGlobalTint"/>
-    /// wrap, so it would otherwise render at full brightness while the rest of the dialog is shaded (the bug
-    /// the user reported). The picker re-wraps its menu content in its own <see cref="ScribeGlobalTint"/>
+    /// wrap, so it would otherwise render at full brightness while the rest of the dialog is shaded. The picker re-wraps its menu content in its own <see cref="ScribeGlobalTint"/>
     /// using this value. Refreshed on every <c>RebuildBody()</c>, so a newly-opened menu uses the current
     /// shade.</summary>
     public ScribeAmbientLightSampler.Shade CurrentShade { get; }
-    /// <summary>Open the "Scribe Editor Features" handbook page (v1-release-checklist 9.5). Wired from the
+    /// <summary>Open the "Scribe Editor Features" handbook page. Wired from the
     /// dialog (which holds the client API); this widget stays free of the VS API. See
     /// <see cref="ScribeDialogBase.OpenEditorReferenceHandbook"/>.</summary>
     public Action OnOpenEditorReference { get; }
     /// <summary>Open Scribe Settings from a footer gear button, mirroring <see cref="OnOpenEditorReference"/>.
-    /// Non-null only for the tablet (add-tablet-cuneiform-chrome): the always-edit tablet has no Settings tab
+    /// Non-null only for the tablet: the always-edit tablet has no Settings tab
     /// in a nav column, so its footer carries a gear beside the ⓘ info button. The tabbed dialogs pass null
     /// (they reach Settings through their nav column) and the gear is omitted.</summary>
     public Action? OnOpenSettings { get; }
@@ -342,27 +338,26 @@ internal sealed class ScribeEditorContent : StatefulWidget
     public ScrollController ScrollController { get; }
     /// <summary>Host-owned collapse controllers for the editor's row list (keyed by TaskId), so a collapse
     /// resumes across the dialog's rebuild remounts. Passed into <see cref="ScribeAnimatedList"/>, which
-    /// diffs the row set and animates departures against it (extract-animated-task-list §6.1 / D0). Lives on
+    /// diffs the row set and animates departures against it. Lives on
     /// the dialog so <c>OnRenderGUI</c> can read <c>AnyAnimating</c> to drive the scroll-pin + hover latch.</summary>
     public ScribeAnimationRegistry CollapseRegistry { get; }
     /// <summary>Fired (deferred, safe) when a departing row's collapse completes and the list has shrunk, so
     /// the dialog can re-clamp the scroll extent — the same settle hook the Read view and Pin Tab use
-    /// (<see cref="ScribeAnimatedList.OnDepartureSettled"/>). The container retires the ghost itself; the
-    /// dialog no longer owns departing-row bookkeeping.</summary>
+    /// (<see cref="ScribeAnimatedList.OnDepartureSettled"/>). The container retires the ghost itself.</summary>
     public Action OnDepartureSettled { get; }
     public string HintLangKey { get; }
     /// <summary>Optional click-to-open-Handbook dispatch for an item row's (Link/Tracker/Craft) name label,
-    /// keyed by TaskId (enable-tablet-row-links). Non-null ONLY on a surface that opts its editor rows into
+    /// keyed by TaskId. Non-null ONLY on a surface that opts its editor rows into
     /// link activation (the tablet, which has no read view — see <see cref="ScribeDialogBase.EditorRowsOpenLinks"/>).
     /// Null on every other surface, so their editor names stay plain editable regions and render byte-identical.</summary>
     public System.Action<Guid>? OnOpenLink { get; }
     /// <summary>Whether this surface renders the shared Row 2 subtitle / tab header at all
-    /// (unify-tab-header-layout) — false only for the Tablet, which keeps its own pared-down title-bar
+    /// — false only for the Tablet, which keeps its own pared-down title-bar
     /// chrome instead. When false, <see cref="ScribeTabHeader.Build"/> is never called and the durable
     /// divider it would have drawn is omitted too.</summary>
     public bool SupportsTabHeader { get; }
     /// <summary>Whether <see cref="ScribeTabHeader.Build"/> renders its Row 2 subtitle line, read from
-    /// <c>modSystem.VisualTuning.ShowSubtitleRow</c> (add-subtitle-row-configkit-toggle). Has no effect
+    /// <c>modSystem.VisualTuning.ShowSubtitleRow</c>. Has no effect
     /// when <see cref="SupportsTabHeader"/> is false (the Tablet, which never calls into
     /// <see cref="ScribeTabHeader.Build"/> at all).</summary>
     public bool ShowSubtitleRow { get; }
@@ -452,12 +447,10 @@ internal sealed class ScribeEditorContentState : State<ScribeEditorContent>
         var colors = Theme.Of(context).ColorScheme;
         TextStyle buttonTextStyle = new() { FontSize = 14, Color = colors.OnPrimary, FontFamily = ScribeTaskFont.ButtonFamily };
 
-        // Route the editor's rows through ScribeAnimatedList (D0 / extract-animated-task-list §6.1), exactly
-        // as the Read view and Pin Tab already do. The container diffs the TaskId-keyed set frame-to-frame:
-        // a row the dialog deleted from scratch lands here as a now-absent id and the container collapses it
-        // out (rows below sliding up) from a frozen ghost, then self-cleans — replacing the dialog's former
-        // hand-wired DepartingRows / OnEditorRowCollapsed / needsEditorCollapseCleanup machinery. The
-        // container abstracts MOTION only: it decides row ORDER (live rows + collapsing ghosts at their old
+        // Rows go through ScribeAnimatedList, as in the Read view and Pin Tab. The container diffs the
+        // TaskId-keyed set frame-to-frame: a row the dialog deleted from scratch lands here as a now-absent
+        // id and the container collapses it out (rows below sliding up) from a frozen ghost, then
+        // self-cleans. The container abstracts MOTION only: it decides row ORDER (live rows + collapsing ghosts at their old
         // slots) and hands that list to OUR layoutBuilder, which keeps the editor's own
         // Scrollbar > SingleChildScrollView > Column shape. Immediate policy (the editor delete is an
         // affirmative tap — no undo window, matching read/pin).
@@ -466,12 +459,12 @@ internal sealed class ScribeEditorContentState : State<ScribeEditorContent>
         // to freeze in place (its field/checkbox/drag gestures would stay live mid-collapse and its focus
         // node is gone once the scratch block leaves), so the container animates the snapshot instead of the
         // live child. Drag-reorder state stays in THIS State (dragFromIndex/dragOverIndex) and is baked into
-        // each live row here, so the container stays content-agnostic (its D6).
+        // each live row here, so the container stays content-agnostic.
         //
-        // same-depth-reorder: the drop-target arrow is a direct rendering of the same validity check
-        // ReorderEditorBlock's commit uses, so it can't promise a drop the commit then refuses. Excluding
-        // the dragged row's own cluster (not just cross-depth rows) matches "the arrow only appears where
-        // dropping would actually reorder something" — dropping on your own children is already a no-op.
+        // The drop-target arrow is a direct rendering of the same validity check
+        // ReorderEditorBlock's commit uses, so it can't promise a drop the commit then refuses. The dragged
+        // row's own cluster is excluded (not just cross-depth rows) so the arrow only appears where
+        // dropping would actually reorder something — dropping on your own children is a no-op.
         List<int>? dragDepths = null;
         (int ClusterStart, int ClusterEnd) dragCluster = default;
         if (dragFromIndex is { } dragFrom)
@@ -525,14 +518,11 @@ internal sealed class ScribeEditorContentState : State<ScribeEditorContent>
                     assignedStampBitmap: Widget.AssignedStampBitmap,
                     externalStampBitmap: Widget.ExternalStampBitmap,
                     currentShade: Widget.CurrentShade,
-                    // Stable per-row identity (reconcile-animating-surfaces §3.2): keyed by the block's
-                    // TaskId, NOT its list index. Under the in-place reconcile a RebuildBody() drives
-                    // (RebuildBody → BodyState.Build → this Build re-runs → MultiChildElement.Update walks
-                    // the rows POSITIONALLY), a Guid key lets an unshifted slot's row be REUSED — its
-                    // ScribeMultilineField State, hence caret + unsaved buffer, survives the repaint. An
-                    // int index keyed every slot to its position, so any structural change looked like a
-                    // brand-new widget at that slot and remounted the field (dropping the caret). LibGUI's
-                    // reconciler is positional (no keyed reordering), so this preserves identity only where
+                    // Stable per-row identity: keyed by the block's TaskId, NOT its list index. Under the
+                    // in-place reconcile a RebuildBody() drives (RebuildBody → BodyState.Build → this Build
+                    // re-runs → MultiChildElement.Update walks the rows POSITIONALLY), a Guid key lets an
+                    // unshifted slot's row be REUSED — its ScribeMultilineField State, hence caret + unsaved
+                    // buffer, survives the repaint. LibGUI's reconciler is positional (no keyed reordering), so this preserves identity only where
                     // the slot is unchanged — the container's departing ghost holds the deleted slot, keeping
                     // rows below in place; a delete/insert ABOVE the focused row still shifts + remounts it
                     // (the accepted positional caveat — text survives via the scratch write-through).
@@ -540,19 +530,18 @@ internal sealed class ScribeEditorContentState : State<ScribeEditorContent>
                 Ghost: new ScribeFrozenEditorRow(b, Widget.Style, Widget.AssignedStampBitmap, Widget.ExternalStampBitmap)))
             .ToList();
 
-        // Wrapped in a Scrollbar so a tall editor list shows a draggable track (task 8.15). AutoHide off
-        // (see read view): permanently visible, matching the native GUI, and avoids the rebuild-driven fade
-        // flicker (task 5.7). The empty-state hint check moves INTO the layoutBuilder (mirroring read/pin):
-        // checking rows.Count == 0 here (not Widget.Blocks.Count outside) keeps the hint from popping in
-        // before the LAST removed row has finished collapsing — so deleting the final row now animates its
-        // collapse before the hint appears, consistent with every other surface.
+        // Wrapped in a Scrollbar so a tall editor list shows a draggable track. AutoHide off (see read
+        // view): permanently visible, matching the native GUI, and avoids the rebuild-driven fade flicker.
+        // The empty-state hint check lives INSIDE the layoutBuilder (mirroring read/pin): checking
+        // rows.Count == 0 there (not Widget.Blocks.Count outside) keeps the hint from popping in before
+        // the LAST removed row has finished collapsing.
         Widget scrollBody = new ScribeAnimatedList(
             items: items,
             registry: Widget.CollapseRegistry,
             policy: ScribeListRemovalPolicy.Immediate,
             onDepartureSettled: Widget.OnDepartureSettled,
             // Every appearance (add / insert-below / quick-add, and any peer insert) slides in through the
-            // container via one uniform motion (animate-row-insertion): the content translates into place +
+            // container via one uniform motion: the content translates into place +
             // fades, holding the row at FULL height in its slot the whole time — so even the auto-focused new
             // row keeps its caret visible and its clicks exact from the first frame. The entry motion lives
             // ENTIRELY in the container; the editor only supplies the row set.
@@ -564,10 +553,9 @@ internal sealed class ScribeEditorContentState : State<ScribeEditorContent>
                     new TextStyle { Color = colors.OnSurfaceVariant, SoftWrap = true, Align = TextAlignment.Center }))
                 : new Scrollbar(
                     controller: Widget.ScrollController,
-                    // 8-unit top padding lives INSIDE the scroll region (unify-tab-header-layout §7,
-                    // doubled from 4 per 2026-09-09 playtest feedback) so the durable divider above sits
-                    // flush against the viewport and this breathing room scrolls away with the content,
-                    // instead of the old fixed gap outside the scroll region. Skipped on the Tablet (no
+                    // 8-unit top padding lives INSIDE the scroll region so the durable divider above sits
+                    // flush against the viewport and this breathing room scrolls away with the content.
+                    // Skipped on the Tablet (no
                     // header, so no divider to sit flush against).
                     child: new SingleChildScrollView(
                         controller: Widget.ScrollController,
@@ -582,13 +570,12 @@ internal sealed class ScribeEditorContentState : State<ScribeEditorContent>
                 { AutoHide = false });
 
         // Root the tab subtree in the player's Task Text Font + window-scaled base size, so the empty
-        // hint and the frozen collapsing-ghost rows inherit them (adopt-libgui-31-improvements). The live
+        // hint and the frozen collapsing-ghost rows inherit them. The live
         // editable rows use ScribeMultilineField, a custom RenderBox that does NOT read DefaultTextStyle,
         // so it keeps its own explicit fontFamily/fontSize (a deliberate survivor). The footer buttons
         // keep their explicit Caudex button font.
-        // Shared Row 2 subtitle + durable divider (unify-tab-header-layout 2.2) — the Editor view has no
-        // Row 3 controls of its own, so the divider follows directly after the subtitle. Replaces the old
-        // uniform Column(spacing: 8) gap. The Tablet renders neither (design.md Non-Goals; its own
+        // Shared Row 2 subtitle + durable divider — the Editor view has no Row 3 controls of its own, so
+        // the divider follows directly after the subtitle. The Tablet renders neither (its own
         // title-bar chrome is the whole header), so the call is skipped entirely rather than passed empty.
         var bodyChildren = new List<Widget>();
         if (Widget.SupportsTabHeader)
@@ -601,9 +588,9 @@ internal sealed class ScribeEditorContentState : State<ScribeEditorContent>
         // reflows when it opens.
         bodyChildren.Add(new Expanded(child: scrollBody));
 
-        // Top inset reduced from 10 to 4 (2026-09-08 playtest feedback: 6px less gap between the title bar
-        // and the Row 2 subtitle); left/right/bottom stay 10 like every other tab. The Tablet has no Row 2
-        // to close the gap against, so it keeps the original full 10 top inset.
+        // Top inset is 4 to tighten the gap between the title bar and the Row 2 subtitle; left/right/bottom
+        // are 10 like every other tab. The Tablet has no Row 2 to close the gap against, so it keeps a
+        // full 10 top inset.
         return ScribeTextDefaults.Wrap(Widget.Style.TaskFontFamily, Widget.Style.FontSize, new Padding(
             EdgeInsets.Ltrb(10, Widget.SupportsTabHeader ? 4 : 10, 10, 10),
             child: new Column(
@@ -626,8 +613,8 @@ internal sealed class ScribeEditorContentState : State<ScribeEditorContent>
                 }).ToList())));
     }
 
-    /// <summary>A footer button's label: cuneiform strokes under the single tablet cuneiform branch
-    /// (add-tablet-cuneiform-chrome task 5.4), else the normal <see cref="Text"/>. Both share the branch the
+    /// <summary>A footer button's label: cuneiform strokes under the single tablet cuneiform branch,
+    /// else the normal <see cref="Text"/>. Both share the branch the
     /// rows and title already use (<see cref="ScribeRowStyle.UseCuneiform"/> + bundle threaded from the
     /// tablet), so disabling cuneiform reverts every surface — labels included — in one place. The em size
     /// tracks the label's font size so a cuneiform label reads at the same scale as the readable one; ink is
@@ -638,7 +625,7 @@ internal sealed class ScribeEditorContentState : State<ScribeEditorContent>
     /// wrapper — exactly like the normal <see cref="Text"/> label and the sibling ⓘ/gear glyphs below. A Center
     /// is a <c>RenderPositionedBox</c> that takes the parent's full <c>MaxHeight</c> when finite; inside the
     /// "Add task" <see cref="Expanded"/> (whose max height is the entire scroll column) that balloons the whole
-    /// button to fill the central region — the 2026-08-02 playtest regression this fixes. Both label widgets
+    /// button to fill the central region. Both label widgets
     /// self-size to their content, so the button hugs the label at either scale.</para></summary>
     private Widget BuildButtonLabel(string label, TextStyle labelStyle)
     {
@@ -649,7 +636,7 @@ internal sealed class ScribeEditorContentState : State<ScribeEditorContent>
                 fontSizeEm: labelStyle.FontSize,
                 inkColor: labelStyle.Color,
                 bundle: bundle,
-                // No glow on button labels (add-tablet-clay-type-themes 8.2): the halo muddies the label
+                // No glow on button labels: the halo muddies the label
                 // against the solid Primary-filled button rather than lifting it. The rows/title keep the
                 // per-material glow; only the footer labels render crisp.
                 glow: default,
@@ -663,25 +650,24 @@ internal sealed class ScribeEditorContentState : State<ScribeEditorContent>
     /// false) since it has no Read view to switch to; the tabbed dialogs keep it.</summary>
     private Widget[] BuildFooterButtons(TextStyle buttonTextStyle, ColorScheme colors, BuildContext context)
     {
-        // On the cuneiform path the label is a ratio-boosted CuneiformText (D7), which renders taller than
+        // On the cuneiform path the label is a ratio-boosted CuneiformText, which renders taller than
         // the equivalent TTF label; trim the labelled buttons' vertical padding ~8px (Symmetric vertical
         // 10 → 6) so the taller glyph doesn't inflate the footer button height past its readable-text form.
         // Cuneiform-only: the normal path keeps the default theme padding so the Lectern/Notebook footers
-        // are byte-identical (task 8.4).
+        // are unchanged.
         const float cuneiformLabelPadY = 6f;
         ButtonStyle? labelButtonStyle = Widget.Style.UseCuneiform
             ? Theme.Of(context).ButtonStyle with { Padding = EdgeInsets.Symmetric(cuneiformLabelPadY, 20) }
             : null;
 
-        // Height parity for the trailing icon (ⓘ / gear) buttons (2026-08-03 feedback: "same height as the
-        // taller 'add task' button"). On the cuneiform path the Add-task label is a CuneiformText whose
+        // Height parity for the trailing icon (ⓘ / gear) buttons with the taller 'add task' button. On the cuneiform path the Add-task label is a CuneiformText whose
         // CONTENT height is exactly FontSize × LineHeightRatio (see CuneiformTextRender.PerformLayout), and
         // its button adds cuneiformLabelPadY top+bottom. To match, we force each icon button's content box to
         // that same content height via a FULLY-BOUNDED SizedBox (both axes tight → the inner Center cannot
-        // grow on EITHER axis — the balloon regression only happens with an unbounded axis) and give it the
+        // grow on EITHER axis — a Center balloons only on an unbounded axis) and give it the
         // same vertical padding, so total heights are equal by construction regardless of the glyph's natural
         // size. On the normal (readable) path we keep the original bare 17f glyph + All(7), so the
-        // Lectern/Notebook footers stay byte-identical (task 8.4).
+        // Lectern/Notebook footers are unchanged.
         const float iconGlyphSize = 17f;
         float? iconContentHeight = Widget.Style.UseCuneiform
             ? buttonTextStyle.FontSize * CuneiformMetrics.LineHeightRatio
@@ -704,7 +690,7 @@ internal sealed class ScribeEditorContentState : State<ScribeEditorContent>
 
         var buttons = new List<Widget>
         {
-            // The add control (add-note-kind-picker D1): a segmented button — a primary "Add <kind>" button
+            // The add control: a segmented button — a primary "Add <kind>" button
             // (defaults to Task, so one click still adds a task) plus a caret that opens a floating drop-up
             // of the kinds (Task / Note). Self-contained (ScribeAddKindPicker owns its selected-kind + open
             // state and its overlay), so it builds its own cuneiform-aware labels + segment styles from
@@ -715,7 +701,7 @@ internal sealed class ScribeEditorContentState : State<ScribeEditorContent>
                 addTaskEnabled: Widget.AddTaskEnabled,
                 style: Widget.Style,
                 // The drop-up menu paints in the Overlay, outside the dialog's ScribeGlobalTint wrap, so the
-                // picker re-tints it to match the window (add-note-kind-picker tint fix).
+                // picker re-tints it to match the window.
                 currentShade: Widget.CurrentShade,
                 questCatalog: Widget.QuestCatalog,
                 onAddQuestLink: Widget.OnAddQuestLink)),
@@ -737,20 +723,19 @@ internal sealed class ScribeEditorContentState : State<ScribeEditorContent>
                             // glyph, set directly (like the siblings' Text — NO Center wrapper, which would
                             // greedily expand the non-Expanded button to fill the dialog) in the button font
                             // color (OnPrimary). Clicking opens the "Scribe Editor Features" handbook page; the
-                            // hover tooltip labels it (v1-release-checklist 9.5 — discoverability of Tab/Shift+Tab
+                            // hover tooltip labels it (discoverability of Tab/Shift+Tab
                             // row nav). Inline tooltip (not the private WithTooltip helper in ScribeDialogBase),
                             // matching ScribePinnedContent's inline tooltip using the tab theme's OnBackground.
                             ScribeGlobalTint.ShadedTooltip(
                                 child: new Button(
                                     // 17f glyph, centered in a height-locked square box on the cuneiform path
                                     // (see IconButtonChild / iconButtonStyle above) so this matches the taller
-                                    // Add-task cuneiform label; on the normal path it's the bare glyph + All(7),
-                                    // byte-identical to before.
+                                    // Add-task cuneiform label; on the normal path it's the bare glyph + All(7).
                                     child: IconButtonChild("scribeinfo"),
                                     style: iconButtonStyle,
                                     onTap: _ => Widget.OnOpenEditorReference()),
                                 // Shade the whole tooltip — bubble + text — to match the body in low light
-                                // (refine-scribe-hover-tooltips D2 + bug-1); same reduced hover strength as the
+                                // same reduced hover strength as the
                                 // shared WithTooltip helper.
                                 content: new Padding(
                                     EdgeInsets.All(6),
@@ -763,7 +748,7 @@ internal sealed class ScribeEditorContentState : State<ScribeEditorContent>
                                 baseTheme: Theme.Of(context),
                                 shade: Widget.CurrentShade));
 
-        // Settings gear — tablet only (add-tablet-cuneiform-chrome). The always-edit tablet has no nav
+        // Settings gear — tablet only. The always-edit tablet has no nav
         // column to reach Settings through, so a gear sits just right of the ⓘ info button, styled
         // identically (same non-Expanded Primary Button, tight All(7) padding, 17f OnPrimary glyph). Omitted
         // when OnOpenSettings is null (the tabbed dialogs, which reach Settings via their nav column).
@@ -792,7 +777,7 @@ internal sealed class ScribeEditorContentState : State<ScribeEditorContent>
 
 /// <summary>
 /// One editor row: a task checkbox (optimistic self-stateful flip) + the editable multi-line field.
-/// Keyed by block index (design D2/D4). The field's focus node is owned by the dialog (passed in) so
+/// The field's focus node is owned by the dialog (passed in) so
 /// the dialog can move focus across rows; the field writes its text through to the dialog's scratch
 /// document via <see cref="ScribeMultilineField.OnChanged"/>.
 /// </summary>
@@ -876,7 +861,7 @@ internal sealed class ScribeEditRow : StatefulWidget
     public bool IsDragSource { get; }
     /// <summary>True while ANY grip-drag is in progress (this row may be neither source nor target).
     /// A non-participating row hides its grip glyph so the list declutters down to just the ◀ source
-    /// and ▶ drop-target rows (replace-drag-wash-with-grip-arrows).</summary>
+    /// and ▶ drop-target rows.</summary>
     public bool DragActive { get; }
     public Action<int, string> OnTextChanged { get; }
     public Action<int> OnCommitAndAdvance { get; }
@@ -899,8 +884,7 @@ internal sealed class ScribeEditRow : StatefulWidget
     public Action<int> OnToggleTask { get; }
     public Action<int> OnDelete { get; }
     public Action<int> OnTogglePinned { get; }
-    /// <summary>A Tracker row's inline +/- stepper changed its target quantity: (blockIndex, newTarget)
-    /// (add-tracker-link-tasks 5.2).</summary>
+    /// <summary>A Tracker row's inline +/- stepper changed its target quantity: (blockIndex, newTarget).</summary>
     public Action<int, int> OnTrackerQuantityChanged { get; }
     public Action<int> OnDragStart { get; }
     public Action<int> OnDragOver { get; }
@@ -909,7 +893,7 @@ internal sealed class ScribeEditRow : StatefulWidget
     /// tap after a cancelled drag still nests.</summary>
     public Action OnGripPress { get; }
     public Action<int> OnGripTap { get; }
-    /// <summary>Non-null only on the tablet (enable-tablet-row-links): clicking a Link/Tracker/Craft row's
+    /// <summary>Non-null only on the tablet: clicking a Link/Tracker/Craft row's
     /// name label opens the item's Handbook page, keyed by TaskId. Null elsewhere, so the label stays a plain
     /// (non-clickable) region and non-tablet editor rows render exactly as before.</summary>
     public System.Action<Guid>? OnOpenLink { get; }
@@ -930,7 +914,7 @@ internal sealed class ScribeEditRow : StatefulWidget
 internal sealed class ScribeEditRowState : State<ScribeEditRow>
 {
     private bool done;
-    /// <summary>Pointer position at grip-press, used to start a drag only after movement (D11).</summary>
+    /// <summary>Pointer position at grip-press, used to start a drag only after movement.</summary>
     private float gripPressX, gripPressY;
     /// <summary>True once this row's grip crossed the drag threshold this press (lost on remount;
     /// <see cref="ScribeEditRow.IsDragSource"/> covers the post-remount case).</summary>
@@ -940,7 +924,7 @@ internal sealed class ScribeEditRowState : State<ScribeEditRow>
     /// <summary>Pixels of movement before a grip press becomes a reorder drag rather than a nest tap.</summary>
     private const float GripDragThreshold = 5f;
     /// <summary>True while the pointer is over this row: the delete and (task-only) pin controls are
-    /// hidden until then (lectern-gui-shell "Row icons are hover-conditional"). Tracked with a
+    /// hidden until then. Tracked with a
     /// row-level <see cref="MouseRegion"/>; hit-testing is innermost-first and enter/exit propagate up
     /// the hierarchy, so this region does NOT steal click-to-focus from the inner field, and during a
     /// grip-drag capture the dispatcher keeps firing enter/exit on the row under the cursor — the same
@@ -953,7 +937,7 @@ internal sealed class ScribeEditRowState : State<ScribeEditRow>
         base.InitState();
         done = Widget.Data.Done;
         // Repaint the row's Container when its field gains/loses focus, so the cuneiform (tablet) path can
-        // show a border + background on focus (add-tablet-cuneiform-chrome task 5.1). The field owns its
+        // show a border + background on focus. The field owns its
         // own repaint on focus, but that only rebuilds the field subtree — the enclosing row Container
         // needs its own listener to react. The focus node is dialog-owned (shared with the field); a
         // ChangeNotifier accepts multiple listeners, so this coexists with the dialog's OnRowFocusChanged.
@@ -968,7 +952,7 @@ internal sealed class ScribeEditRowState : State<ScribeEditRow>
     /// into scratch (<see cref="ScribeDialogBase.RefreshReadView"/>, editor-mode branch) this row is REUSED
     /// and <see cref="InitState"/>'s seed would otherwise stay stale, leaving the checkbox out of date. Gate
     /// on the authoritative value actually CHANGING so a pure chrome reconcile doesn't stomp an in-flight
-    /// optimistic tick the player just made locally (sync-editor-view-on-external-completion).</summary>
+    /// optimistic tick the player just made locally.</summary>
     public override void UpdateWidget(ScribeEditRow oldWidget)
     {
         base.UpdateWidget(oldWidget);
@@ -990,21 +974,21 @@ internal sealed class ScribeEditRowState : State<ScribeEditRow>
 
     /// <summary>The editor content of a Tracker/Link row: the referenced item's icon + name in place of the
     /// text field (the block's own Text is empty by design), and — for a Tracker — an inline +/- stepper that
-    /// edits its <see cref="ScribeBlock.TargetQuantity"/> (add-tracker-link-tasks 5.2). The stepper is an
+    /// edits its <see cref="ScribeBlock.TargetQuantity"/>. The stepper is an
     /// uncontrolled <see cref="ScribeNumericField"/> seeded from the current target: the editor reconciles rows
     /// in place (UpdateWidget, not remount) and the target's ONLY editor-side mutation IS this stepper, so it
     /// stays consistent without a ValueKey remount (which would drop focus on every step). The count engine
     /// changes a Tracker's CurrentQuantity in the READ view, never its target here. A Link edits nothing inline
-    /// — it's just the icon + name; its target page is opened from the read view (5.3). The icon/name are the
+    /// — it's just the icon + name; its target page is opened from the read view. The icon/name are the
     /// dialog-resolved snapshot on the row data, so this stays capi-free.</summary>
     private Widget BuildItemEditorContent(ColorScheme colors, ScribeRowStyle style, int index)
     {
         float iconSize = ScribeRowConstants.ItemIconSize
             * (style.ControlSize / ScribeRowConstants.RowCheckboxSize);
         float lineHeight = ScribeRowControlNudge.TextLineHeight(style.FontSize);
-        // A Quest Link's icon renders in the row's leading slot instead (quest-link-icon-and-color), so this
-        // inline slot has no icon for it and the name's band height falls back to ItemNameLineHeight
-        // (cuneiform-aware on the tablet — task 8.3b: the plain Latin lineHeight left the icon riding high).
+        // A Quest Link's icon renders in the row's leading slot instead, so this inline slot has no icon
+        // for it and the name's band height falls back to ItemNameLineHeight (cuneiform-aware on the
+        // tablet).
         bool isQuestLink = ScribeLinkTarget.IsQuest(Widget.Data.LinkTarget);
         float iconVisual = ScribeRowControlNudge.ItemVisualBandHeight(
             style, Widget.Data.LinkTarget, Widget.Data.IsStaticVsQuestObjective, Widget.Data.DisplayStack);
@@ -1014,9 +998,9 @@ internal sealed class ScribeEditRowState : State<ScribeEditRow>
 
         if (Widget.Data.IsCarriedCountTracked)
         {
-            // Inline target-quantity stepper, placed at the LEFT of the row (feedback 6.3): the row's
-            // hover-revealed delete/pin buttons float over the RIGHT edge, so a right-hand stepper sat
-            // UNDER them and was unreachable (which also made the pin untappable — feedback 6.9).
+            // Inline target-quantity stepper, placed at the LEFT of the row: the row's
+            // hover-revealed delete/pin buttons float over the RIGHT edge, so a right-hand stepper would sit
+            // UNDER them and be unreachable.
             // Height is ControlSize×1.15 (a hair taller than the checkbox); width is that height×2.
             // No translate on the stepper — Tracker/Craft keep the field in its layout box. Centered in
             // the icon band when the name is one line; stays at the top when the name wraps.
@@ -1040,11 +1024,11 @@ internal sealed class ScribeEditRowState : State<ScribeEditRow>
                 bandHeight));
         }
 
-        // Guide-page book glyph tinted with the link accent (feedback 7.11d) — Primary on light surfaces, or
+        // Guide-page book glyph tinted with the link accent — Primary on light surfaces, or
         // the row's override where Primary is illegible on a dark surface (Chalkboard slate; see
-        // ScribeRowStyle.LinkColor). Row-height-neutral (7.11e/7.11f); the item icon ignores the color. The
-        // Tracker's stepper still drives this editor row's height by design. A Quest Link's icon already
-        // renders in the row's leading slot (quest-link-icon-and-color) — no second icon here.
+        // ScribeRowStyle.LinkColor). Row-height-neutral; the item icon ignores the color. The
+        // Tracker's stepper still drives this editor row's height. A Quest Link's icon already
+        // renders in the row's leading slot — no second icon here.
         Vector4 linkColor = Widget.Data.IsStaticVsQuestObjective
             ? colors.OnSurface
             : isQuestLink
@@ -1062,12 +1046,12 @@ internal sealed class ScribeEditRowState : State<ScribeEditRow>
         }
 
         // The item name is a hyperlink ONLY where the surface opts its editor rows into link activation (the
-        // tablet — enable-tablet-row-links, which has no read view). Wrap it in the same GestureDetector shape the
+        // tablet, which has no read view). Wrap it in the same GestureDetector shape the
         // read row uses (ScribeReadContent.cs:362) and render it in the link accent so it reads as tappable, matching
         // the read view. The sibling ScribeNumericField (the Tracker/Craft +/- stepper added above) is a separate
         // widget, so the number stays an INDEPENDENT hit region that keeps editing the target quantity — clicking the
         // number reaches the field, clicking the name reaches this gesture. When OnOpenLink is null (every non-tablet
-        // editor), the label is a plain OnSurface region and this row renders byte-identical to before. Only item-kind
+        // editor), the label is a plain OnSurface region. Only item-kind
         // rows (Link/Tracker/Craft) reach this method, so a plain Task/Note's editable text is never wrapped.
         bool canOpen = !Widget.Data.IsStaticVsQuestObjective || Widget.Data.DisplayStack is not null;
         Widget nameLabel = Widget.OnOpenLink is { } openLink && canOpen
@@ -1078,11 +1062,10 @@ internal sealed class ScribeEditRowState : State<ScribeEditRow>
         rowChildren.Add(new Expanded(child: ScribeCenterIfShort.Name(nameLabel, style, bandHeight)));
 
         // No left FieldPadX: a Task row's field BOX starts immediately after the checkbox gap, and the
-        // Tracker stepper must line up with that edge (playtest: FieldPadX indented the numeric box).
+        // Tracker stepper must line up with that edge.
         // Keep the right inset so wrapped names don't run into the hover pin/delete.
-        // A Link/Quest-Link row has no stepper, so that rationale doesn't apply to it -- give it back
-        // the SAME 4px left inset the Read/Pinned views already use for every item row (2026-09-06
-        // playtest: the editor's Link icon sat visibly closer to the checkbox than the read view's).
+        // A Link/Quest-Link row has no stepper, so it gets the SAME 4px left inset the Read/Pinned
+        // views use for every item row.
         float leftInset = Widget.Data.IsCarriedCountTracked ? 0f : 4f;
         return new Padding(
             EdgeInsets.Only(left: leftInset, right: style.FieldPadX),
@@ -1101,17 +1084,16 @@ internal sealed class ScribeEditRowState : State<ScribeEditRow>
 
         var children = new List<Widget>();
 
-        // Grip on the FAR LEFT of the row (2026-07-24 feedback). Always present (not hover-gated): it
+        // Grip on the FAR LEFT of the row. Always present (not hover-gated): it
         // stays mounted so a drag it started can't lose the dispatcher's pointer capture mid-move.
         // onPress/onMove-hover(row)/onRelease drive the reorder. Nudged down to center on a one-line
         // input (see ScribeRowControlNudge); the top margin sits OUTSIDE the GestureDetector so the
         // drag hit-target still covers the visible glyph. The negative right inset cancels the Row's
         // CheckboxTextGap that would otherwise sit between the grip and the checkbox, so the grip's
-        // trailing margin is 0 and the text column reclaims that width (§10.4). See ScribeRowGripInsets.
+        // trailing margin is 0 and the text column reclaims that width. See ScribeRowGripInsets.
         //
-        // The grip glyph is state-driven during a drag (replace-drag-wash-with-grip-arrows): the drag
-        // feedback lives on this glyph now, not on the row background — the darkened-Primary drop-target
-        // wash collided visually with the strengthened Secondary pinned tint. Source (grabbed) row → ◀
+        // The grip glyph is state-driven during a drag: the drag feedback lives on this glyph, not on the
+        // row background, which would collide with the pinned tint. Source (grabbed) row → ◀
         // (muted OnSurfaceVariant); the prospective drop row under the cursor → ▶ (accent Primary); any
         // OTHER row while a drag is in progress → a same-size empty box (glyph hidden) so the list
         // declutters to just the ◀/▶ pair while the grip column width is unchanged (no mid-drag reflow).
@@ -1161,7 +1143,7 @@ internal sealed class ScribeEditRowState : State<ScribeEditRow>
                 onTap: _ => Widget.OnGripTap(index),
                 child: gripGlyph)));
 
-        // Source-row "lifted / in-hand" dim (replace-drag-wash-with-grip-arrows): while THIS row is the one
+        // Source-row "lifted / in-hand" dim: while THIS row is the one
         // being dragged, its CONTENT (checkbox + text) paints at ~half opacity so the row reads as picked up.
         // The dim is applied per-child, NOT to the whole row — the grip column stays full opacity so the ◀
         // source arrow keeps its ink (the arrow IS the "you grabbed this" signal; dimming it would defeat it).
@@ -1169,7 +1151,7 @@ internal sealed class ScribeEditRowState : State<ScribeEditRow>
         float contentOpacity = Widget.IsDragSource ? 0.5f : 1f;
 
         // Task, Tracker, and Link all carry a Done flag (Completable), so all three show a completion
-        // checkbox; only a freeform Text section doesn't (add-tracker-link-tasks Group 5).
+        // checkbox; only a freeform Text section doesn't.
         if (Widget.Data.Completable)
         {
             children.Add(new Opacity(contentOpacity, child: new Padding(
@@ -1177,7 +1159,7 @@ internal sealed class ScribeEditRowState : State<ScribeEditRow>
                     style, Widget.Data.IsItemKind, Widget.Data.LinkTarget,
                     Widget.Data.IsStaticVsQuestObjective, Widget.Data.DisplayStack)),
                 // A Quest Link's checkbox is misleading (toggling it doesn't affect the quest), so its slot
-                // renders the quest-marker icon instead (quest-link-icon-and-color).
+                // renders the quest-marker icon instead.
                 child: ScribeRowControlNudge.BuildLeadingControl(
                     context, style, Widget.Data.LinkTarget, done,
                     _ =>
@@ -1194,7 +1176,7 @@ internal sealed class ScribeEditRowState : State<ScribeEditRow>
                 context: context, currentShade: Widget.CurrentShade,
                 assignerName: Widget.Data.AssignerName, assignedDate: Widget.Data.AssignedDate, acceptedDate: Widget.Data.AcceptedDate));
 
-        // External-mod hover-info marker (add-external-mod-task-api) — independent of the assignment
+        // External-mod hover-info marker — independent of the assignment
         // marker above; both can appear side by side on the same row.
         if (!string.IsNullOrEmpty(Widget.Data.ExtraInfo))
             children.Add(ScribeExternalInfoIcon.Build(style, colors.OnSurfaceVariant, Widget.Data.IsItemKind, Widget.ExternalStampBitmap,
@@ -1202,7 +1184,7 @@ internal sealed class ScribeEditRowState : State<ScribeEditRow>
 
         // A Tracker/Link row has no editable text field — its content is the referenced item's icon + name,
         // and a Tracker additionally carries an inline +/- stepper for its target quantity
-        // (add-tracker-link-tasks 5.2/5.3). The block's own Text is empty by design; the item is resolved by
+        // The block's own Text is empty by design; the item is resolved by
         // the dialog and passed in on the row data, so this stays capi-free. Dimmed with the same
         // contentOpacity as a text row so a drag reads identically.
         if (Widget.Data.IsItemKind)
@@ -1213,7 +1195,7 @@ internal sealed class ScribeEditRowState : State<ScribeEditRow>
         else
         {
 
-        // Ghost hint only on TASK rows (add-empty-task-lifecycle D6b) — a text section is legitimately
+        // Ghost hint only on TASK rows — a text section is legitimately
         // empty and needs no "New task…" prompt. Painted dimmed while the field is empty; not committed.
         string placeholder = Widget.Data.IsTask ? Lang.Get("scribe:scribe-gui-newtask-placeholder") : "";
 
@@ -1230,13 +1212,13 @@ internal sealed class ScribeEditRowState : State<ScribeEditRow>
             // author disliked (ScribeRowStyle.InputFocusBorderColor, seeded from the dialog seam).
             focusBorderColor: style.InputFocusBorderColor,
             autoFocus: Widget.AutoFocus,
-            // Tablet-only: render/edit this row as live cuneiform strokes (add-tablet-cuneiform-chrome).
+            // Tablet-only: render/edit this row as live cuneiform strokes.
             // Both flags are off for the Lectern/Notebook rows and for the disable-cuneiform fallback, so
             // those surfaces stay on the normal editable renderer.
             useCuneiform: style.UseCuneiform,
             cuneiformBundle: style.CuneiformBundle,
             cuneiformJitter: style.UseCuneiform ? style.CuneiformJitter : 0f,
-            // Whole-character tilt (tune-tablet-jitter-add-rotation), tablet path only. Shares the per-row
+            // Whole-character tilt, tablet path only. Shares the per-row
             // TaskId seed with the jitter, but its SeedFor omits the stroke ordinal so every stroke of a
             // character tilts as one rigid unit (independent stream from the jitter's per-stroke wobble).
             cuneiformRotation: style.UseCuneiform ? style.CuneiformRotation : 0f,
@@ -1248,7 +1230,7 @@ internal sealed class ScribeEditRowState : State<ScribeEditRow>
             cuneiformStrokeWeightScale: style.UseCuneiform ? style.CuneiformStrokeWeightScale : 1f,
             // Each kind is held to its own maxlength as a live affordance: Task rows to the soft task cap,
             // Note rows to the larger freeform cap. The codec clips both on read regardless, so this is the
-            // UX half of the same limit (RELEASE.md A1). Hitting the cap fires OnMaxLengthReached below so the
+            // UX half of the same limit. Hitting the cap fires OnMaxLengthReached below so the
             // dialog can explain it.
             maxLength: Widget.Data.IsTask ? ScribeDocumentCodec.MaxTaskTextLength : ScribeDocumentCodec.MaxTextLength,
             onChanged: text => Widget.OnTextChanged(index, text),
@@ -1263,9 +1245,9 @@ internal sealed class ScribeEditRowState : State<ScribeEditRow>
             onJumpToLastRow: () => Widget.OnJumpToLastRow(index)))));
         }
 
-        // Row body: [grip][checkbox][text]. Delete/pin no longer reserve columns here — they float on
+        // Row body: [grip][checkbox][text]. Delete/pin do not reserve columns — they float on
         // top of the row (see below), so the text can use the full width. A Depth-1 subtask adds a left
-        // inset so it reads as nested under its parent (task-subtasks 5.1); depth-0 rows are unchanged.
+        // inset so it reads as nested under its parent.
         float subtaskIndent = Widget.Data.Depth > 0 ? style.SubtaskIndent : 0f;
         Widget rowBody = new Padding(
             EdgeInsets.Only(
@@ -1283,17 +1265,15 @@ internal sealed class ScribeEditRowState : State<ScribeEditRow>
         // transparent Vector4.Zero) — see the structural-stability note below — so toggling the fill is a
         // cheap property update, not a widget-type swap.
         //
-        // Drag feedback is NO LONGER a row-background wash (replace-drag-wash-with-grip-arrows): the old
-        // source/drop-target washes (brightened/darkened Primary) collided with the strengthened Secondary
-        // pinned tint, so drag signalling moved entirely onto the grip glyph (◀/▶ above) plus a source-row
-        // opacity dim (below). The Container now carries ONLY the resting pinned tint, leaving nothing on
-        // the row background that could collide with the pinned wash during a drag.
+        // Drag feedback is not a row-background wash (it would collide with the pinned tint): it lives on
+        // the grip glyph (◀/▶ above) plus a source-row opacity dim (below). The Container carries ONLY
+        // the resting pinned tint.
         //
         // Focus chrome is NOT drawn here either — on the cuneiform (tablet) path the focused input draws its
         // own SurfaceHigh+Primary box scoped to the input element (see ScribeMultilineField's cuneiform
         // render widget), matching the normal Lectern/Notebook path. That keeps a focused input on a PINNED
         // row distinct from the pinned wash — a small bordered input inside the row tint, two shapes, not one
-        // ambiguous whole-row fill (scope-focus-affordance-to-input, playtest fail f640f9ab). The Container
+        // ambiguous whole-row fill. The Container
         // is still ALWAYS present with transparent defaults so the widget type never swaps and the field's
         // live caret/text survive the repaint.
         Vector4 rowFill = Widget.Data.Pinned
@@ -1311,19 +1291,18 @@ internal sealed class ScribeEditRowState : State<ScribeEditRow>
             },
             child: rowBody);
 
-        // Delete + pin float on the RIGHT of the row as real buttons (2026-07-24 feedback), shown only
+        // Delete + pin float on the RIGHT of the row as real buttons, shown only
         // on hover. A Stack sizes to the non-positioned rowBody and lays the Positioned buttons on top,
         // so they overlay the text's right edge without reserving a column or reflowing it. Pin is
         // task-only. Right-anchored, pin left of delete.
         //
-        // STRUCTURAL STABILITY (fixes the hover-reverts-in-progress-text bug): the row is ALWAYS a
+        // STRUCTURAL STABILITY (hover must not revert in-progress text): the row is ALWAYS a
         // Stack whose index-0 child is ALWAYS this Container(rowBody), regardless of hover/pin/drop
         // state. LibGUI reconciles by (type + key + position): if hover instead swapped the MouseRegion's
         // child between a bare `rowBody` and a `Stack` (different types), the reconciler would unmount the
         // whole subtree — including the row's ScribeMultilineField, destroying its State and the live
         // caret/text-in-progress, then remount a fresh field re-seeded from the STALE Data.Text snapshot
-        // (the field writes through on each keystroke but never triggers an editor rebuild). That made
-        // moving the mouse over a row appear to revert unsaved edits. Keeping index 0 identical lets the
+        // (the field writes through on each keystroke but never triggers an editor rebuild). Keeping index 0 identical lets the
         // field UPDATE in place; only the trailing Positioned buttons mount/unmount on hover.
         var stackChildren = new List<Widget> { rowBody };
         if (hovered)
@@ -1333,9 +1312,9 @@ internal sealed class ScribeEditRowState : State<ScribeEditRow>
             // Actual drawn box width of a button (ScribeRowButton shrinks its chrome by BoxShrink); used
             // to space the pin against the delete's real edge, not its nominal column.
             float boxW = btn - ScribeRowButton.BoxShrink;
-            // Right inset: resting gap +1px (2026-07-24 feedback). Top is the COMPUTED centering offset
-            // (see ScribeRowControlNudge.FloatingButtonTop), which now vertically centers the button box
-            // on the one-line input at any font scale rather than the old font-15 constant.
+            // Right inset: resting gap +1px. Top is the COMPUTED centering offset
+            // (see ScribeRowControlNudge.FloatingButtonTop), which vertically centers the button box
+            // on the one-line input at any font scale.
             float btnRight = gap + 1f;
             float btnTop = ScribeRowControlNudge.FloatingButtonTop(style, Widget.Data.IsItemKind);
             // delete: right-most; pin: to its left (every kind, including notes).
@@ -1355,7 +1334,7 @@ internal sealed class ScribeEditRowState : State<ScribeEditRow>
                     iconColor: Widget.Data.Pinned ? colors.Primary : colors.OnSurfaceVariant,
                     size: btn,
                     onTap: () => Widget.OnTogglePinned(index),
-                    iconScale: 1.15f))); // pin glyph +15% (§10.2)
+                    iconScale: 1.15f))); // pin glyph +15%
         }
 
         Widget row = new Stack(stackChildren);
@@ -1375,7 +1354,7 @@ internal sealed class ScribeEditRowState : State<ScribeEditRow>
 }
 
 // ============================================================================
-// Pin Tab content (scribe-pin-editor)
+// Pin Tab content
 // ============================================================================
 
 /// <summary>A value snapshot of one Pin Tab row: the pin's stable identity, its displayed done-state, and
