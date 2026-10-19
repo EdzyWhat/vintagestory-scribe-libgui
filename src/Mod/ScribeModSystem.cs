@@ -68,13 +68,13 @@ public sealed partial class ScribeModSystem : ModSystem
     /// <summary>Client-local JSON holding the author-facing visual-tuning knobs
     /// (<see cref="ScribeVisualTuning"/>) for the ambient light sampler and unseen-assignment particle
     /// effect — optionally editable via a config-library mod's GUI reading the shared
-    /// <c>configlib-patches.json</c> manifest (add-configkit-visual-tuning). Not a player preference file.</summary>
+    /// <c>configlib-patches.json</c> manifest. Not a player preference file.</summary>
     public const string VisualTuningConfigFileName = "scribe-visual-tuning.json";
 
     private ICoreClientAPI? capi;
     private ICoreServerAPI? sapi;
 
-    /// <summary>Client-side shared no-op UI sound player (scribe-mute-ui-sounds), lazily built on first
+    /// <summary>Client-side shared no-op UI sound player, lazily built on first
     /// use while the mute preference is on and reused across dialogs (it's stateless). See
     /// <see cref="GetUiSoundPlayer"/>.</summary>
     private SilentSoundPlayer? silentSoundPlayer;
@@ -85,8 +85,7 @@ public sealed partial class ScribeModSystem : ModSystem
     /// <summary>Server-side player-to-player assignment store. Null on a pure client.</summary>
     private ScribeAssignmentStore? assignmentStore;
 
-    /// <summary>Server-side per-player quest-decision ledger. Null on a pure client
-    /// (fix-quest-prompt-persistence-and-auto-pin).</summary>
+    /// <summary>Server-side per-player quest-decision ledger. Null on a pure client.</summary>
     private ScribeQuestDecisionStore? questDecisionStore;
 
     /// <summary>Client-side cache of THIS player's own synced quest-decision ledger, populated by the
@@ -169,16 +168,15 @@ public sealed partial class ScribeModSystem : ModSystem
     public IReadOnlyList<ScribeBlock> MyReceivedAssignments => myReceivedAssignments;
 
     /// <summary>Whether this player currently has at least one received assignment they haven't opened
-    /// the Inbox to see yet (design.md Decision 4's <c>Seen</c> flag) — the shared trigger condition for
-    /// both the ambient particle indicator (§8.4) and the Inbox nav-button shimmer (§8.5). Re-evaluated on
+    /// the Inbox to see yet (the <c>Seen</c> flag) — the shared trigger condition for
+    /// both the ambient particle indicator and the Inbox nav-button shimmer. Re-evaluated on
     /// every read rather than cached, since <see cref="myReceivedAssignments"/> only changes on a resync
     /// push (infrequent relative to how often this is polled).</summary>
     public bool HasUnseenAssignment => myReceivedAssignments.Any(b => b.Assignment is { Seen: false });
 
     /// <summary>Whether this player has at least one unseen assignment that ALSO hasn't already been
-    /// delivered as a physical Task Notice item into their inventory (fix-offline-assignment-send-
-    /// validation) — the narrower trigger for the world-space ambient block particle (§8.4) only. Unlike
-    /// <see cref="HasUnseenAssignment"/> (which stays untouched for the Inbox nav-button shimmer, §8.5),
+    /// delivered as a physical Task Notice item into their inventory — the narrower trigger for the world-space ambient block particle only. Unlike
+    /// <see cref="HasUnseenAssignment"/> (which drives the Inbox nav-button shimmer),
     /// this excludes a notice-delivered assignment once <see cref="ScribeAssignment.ReceivedDate"/> is
     /// stamped — the player already has an in-hand signal for it and doesn't need the block particle too.
     /// Delegates to <see cref="ScribeAssignment.NeedsAmbientParticle"/> so the actual predicate is
@@ -190,7 +188,7 @@ public sealed partial class ScribeModSystem : ModSystem
     /// Assignment Desk/Inbox dialog can repaint its rows.</summary>
     public event Action? MyAssignmentsChanged;
 
-    /// <summary>Rebindable hotkey code that toggles the pinned-task HUD's collapse state (design D6).
+    /// <summary>Rebindable hotkey code that toggles the pinned-task HUD's collapse state.
     /// Registered client-side; its handler flips the HUD's client-local collapse preference.</summary>
     public const string HudHotkeyCode = "scribepinhud";
 
@@ -199,16 +197,16 @@ public sealed partial class ScribeModSystem : ModSystem
     /// own event/tick lifetime, disposed in <see cref="Dispose"/>.</summary>
     private HudScribePins? pinHud;
 
-    /// <summary>The center-screen quest-accept-prompt modal (rework-quest-accept-notification-styles) —
+    /// <summary>The center-screen quest-accept-prompt modal —
     /// the <see cref="Scribe.Core.ScribeQuestAcceptPolicy.PromptPopup"/> presentation style, an
     /// alternative to <see cref="pinHud"/>'s banner. Constructed once in <see cref="StartClientSide"/>
     /// (null on a pure server); it self-manages its own open/close, mirroring <see cref="pinHud"/>.
     /// Disposed in <see cref="Dispose"/>.</summary>
     private GuiDialogScribeQuestPrompt? questPromptModal;
 
-    /// <summary>The single standalone Scribe settings window (scribe-themed-toggle).
-    /// There is now ONE settings surface, opened via <see cref="OpenSettings"/> from BOTH the HUD gear and
-    /// the Lectern gear (the former in-Lectern settings view was removed). Lazily constructed on first
+    /// <summary>The single standalone Scribe settings window.
+    /// It is the ONE settings surface, opened via <see cref="OpenSettings"/> from BOTH the HUD gear and
+    /// the Lectern gear. Lazily constructed on first
     /// open and reused across opens (so it keeps its scroll/focus state); disposed in
     /// <see cref="Dispose"/>. Null until first opened, and on a pure server.</summary>
     private ScribeSettingsDialog? settingsDialog;
@@ -302,8 +300,8 @@ public sealed partial class ScribeModSystem : ModSystem
     /// <summary>Client → server: notify that the player just opened the notebook with this DocId, so
     /// the server can record their one-time PickedUp history entry (see
     /// <see cref="OnServerReceivedNotebookOpened"/>). Carries the opened item's slot identity so the
-    /// server records the entry on the exact opened book, not the active-hand item (add-tracker-link-tasks
-    /// 7.16). No-op off the client. Called by every Scribe item's open path.</summary>
+    /// server records the entry on the exact opened book, not the active-hand item.
+    /// No-op off the client. Called by every Scribe item's open path.</summary>
     public void NotifyServerNotebookOpened(Guid docId, ItemSlot slot)
     {
         capi?.Network.GetChannel(NetworkChannelName).SendPacket(new ScribeNotebookOpenedMessage
@@ -334,14 +332,13 @@ public sealed partial class ScribeModSystem : ModSystem
     /// seconds at 250ms for accuracy; this only synchronizes the repaint.</summary>
     public event Action? TimerDisplayTick;
 
-    /// <summary>Raised on the client whenever the standalone settings window opens or closes
-    /// (add-active-tab-nav-colors). The settings window is a separate dialog, not a lectern view, so an
+    /// <summary>Raised on the client whenever the standalone settings window opens or closes. The settings window is a separate dialog, not a lectern view, so an
     /// open lectern subscribes to this and rebuilds to recolor its Settings nav button live — regardless
     /// of which gear (lectern or HUD) toggled the window. Fired from the dialog's own open/close lifecycle
     /// so every close route (gear re-toggle, X button, Escape) notifies.</summary>
     public event Action? SettingsVisibilityChanged;
 
-    /// <summary>True while the standalone settings window is currently open (add-active-tab-nav-colors).
+    /// <summary>True while the standalone settings window is currently open.
     /// The lectern reads this at build time to decide whether its Settings nav button shows its active
     /// color. Safe on a pure server (the dialog is null there → false).</summary>
     public bool IsSettingsOpen => settingsDialog?.IsOpened() == true;
@@ -369,8 +366,7 @@ public sealed partial class ScribeModSystem : ModSystem
         api.RegisterBlockEntityClass("ScribeLectern", typeof(BlockEntityScribeLectern));
         api.RegisterBlockClass("BlockScriptorium", typeof(BlockScriptorium));
         api.RegisterBlockEntityClass("Scriptorium", typeof(BlockEntityScriptorium));
-        // The Assignment Desk and standalone Inbox blocks (add-assignment-and-quest-support §5/§6):
-        // placeholder shapes/backdrop for now, real content lands with the Assignment/Inbox tab UI.
+        // The Assignment Desk and standalone Inbox blocks.
         api.RegisterBlockClass("BlockAssignmentDesk", typeof(BlockAssignmentDesk));
         api.RegisterBlockEntityClass("AssignmentDesk", typeof(BlockEntityAssignmentDesk));
         api.RegisterBlockClass("BlockInbox", typeof(BlockInbox));
@@ -386,9 +382,7 @@ public sealed partial class ScribeModSystem : ModSystem
 
         // All message types must be registered in this same order on both sides. The original four
         // read/edit/lock messages come first (order frozen); the identity-addressed pin layer is
-        // APPENDED after them. ScribeToggleTaskMessage (the old position-addressed read-view toggle)
-        // was retired in favor of ScribeCompleteTaskMessage — do not re-add it. The Pin Tab's edit/
-        // delete/reorder messages (scribe-pin-editor) are APPENDED strictly after the existing ones —
+        // APPENDED after them, and the Pin Tab's edit/delete/reorder messages strictly after those —
         // never inserted mid-list — so the wire packet ids of the shipped messages are unchanged.
         api.Network.RegisterChannel(NetworkChannelName)
             .RegisterMessageType<ScribeEditDocumentMessage>()
@@ -444,8 +438,7 @@ public sealed partial class ScribeModSystem : ModSystem
         // HarfBuzz native-load isolation (Linux) now lives in the standalone ScribeHarfBuzzLoadFix
         // ModSystem — see that file for why it must NOT be a ScribeModSystem partial: a low
         // ExecuteOrder here would preempt `gui`'s own StartClientSide (which extracts/registers its
-        // bundled native libraries), breaking font shaping on EVERY platform, not just Linux. That
-        // regression is exactly what happened when this used to be inlined here at ExecuteOrder -1000.
+        // bundled native libraries), breaking font shaping on EVERY platform, not just Linux.
         base.StartClientSide(api);
         capi = api;
 
@@ -473,8 +466,8 @@ public sealed partial class ScribeModSystem : ModSystem
         RegisterCustomIcons(api);
         RegisterCustomFonts(api);
 
-        // Client-side Handbook postfix: injects the "Add to Scribe" links onto each item's Handbook page
-        // (add-tracker-link-tasks 3.1). Client-only — the Handbook is a client GUI — and unpatched in Dispose.
+        // Client-side Handbook postfix: injects the "Add to Scribe" links onto each item's Handbook page.
+        // Client-only — the Handbook is a client GUI — and unpatched in Dispose.
         StartHandbookPatch();
 
         api.Network.GetChannel(NetworkChannelName)
@@ -495,13 +488,13 @@ public sealed partial class ScribeModSystem : ModSystem
         // it stays closed until there is ≥1 pin. It owns its own subscription + tick; we dispose it.
         pinHud = new HudScribePins(api, this);
 
-        // The center-modal quest-accept-prompt presentation style (rework-quest-accept-notification-styles),
+        // The center-modal quest-accept-prompt presentation style,
         // constructed unconditionally like pinHud — it self-manages its own open/close off the pending
         // prompt set + Quest Accept Policy + the vanilla-dialog guard, so it must exist even while nothing
         // is currently pending.
         questPromptModal = new GuiDialogScribeQuestPrompt(api, this);
 
-        // Quest soft auto-detect (Layer 2, add-assignment-and-quest-support §11): a no-op tick listener
+        // Quest soft auto-detect (Layer 2): a no-op tick listener
         // when vsquest isn't installed (ScribeQuestWatcher checks IsAvailable itself each tick).
         StartQuestWatcher(api);
 
@@ -510,7 +503,7 @@ public sealed partial class ScribeModSystem : ModSystem
         // is one authoritative second-boundary rather than two out-of-phase 250ms listeners.
         timerDisplayTickId = api.World.RegisterGameTickListener(_ => TimerDisplayTick?.Invoke(), 1000);
 
-        // Rebindable collapse/expand hotkey (design D6). GUIOrOtherControls so it fires even while a
+        // Rebindable collapse/expand hotkey. GUIOrOtherControls so it fires even while a
         // dialog is open; default P, no modifiers. The HUD flips its client-local collapse preference.
         api.Input.RegisterHotKey(HudHotkeyCode, Lang.Get("scribe:hotkey-scribepinhud"), GlKeys.P,
             HotkeyType.GUIOrOtherControls);
@@ -607,13 +600,12 @@ public sealed partial class ScribeModSystem : ModSystem
         // Last-known-position capture for the Hybrid range check's offline-target case (Core 1.5).
         api.Event.PlayerDisconnect += OnScribePlayerDisconnect;
 
-        // History chronicle hooks. OnHistoryScanTick (formerly storm-only OnStormTick, widened from 5s
-        // to 10s) now also refreshes the carried-document snapshot and flushes queued Death entries —
-        // see fix-death-history-inventory-race design.md.
+        // History chronicle hooks. OnHistoryScanTick (10s) refreshes the carried-document snapshot
+        // and flushes queued Death entries.
         api.Event.OnEntityDeath += OnEntityDeath;
         api.World.RegisterGameTickListener(OnHistoryScanTick, 10000);
 
-        // Task Notice proximity discovery heartbeat (task-notice-proximity-signal tasks.md 5.1),
+        // Task Notice proximity discovery heartbeat,
         // mirroring OnHistoryScanTick's own idiom/interval.
         api.World.RegisterGameTickListener(OnTaskNoticeProximityTick, 5000);
 
@@ -628,9 +620,8 @@ public sealed partial class ScribeModSystem : ModSystem
 
     /// <summary>
     /// Server-side diagnostic log for the pin/complete round-trip, prefixed <c>[scribe]</c> at
-    /// Notification level so a playtester can read the whole complete-vs-unpin flow back from the server
-    /// log without a debug build. Scaffolding for the 7.8 part-d investigation (read-view completion not
-    /// landing server-side); once that's confirmed fixed these can be dropped to VerboseDebug or removed.
+    /// Notification level so the whole complete-vs-unpin flow can be read back from the server
+    /// log without a debug build. Diagnostic scaffolding that can be dropped to VerboseDebug or removed.
     /// </summary>
     private void Trace(string format, params object?[] args)
     {

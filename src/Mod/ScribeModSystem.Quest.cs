@@ -10,15 +10,15 @@ namespace Scribe;
 
 /// <summary>One pending Quest Accept/Completion notification awaiting the player's decision under
 /// <see cref="ScribeQuestAcceptPolicy.PromptHud"/>/<see cref="ScribeQuestAcceptPolicy.PromptPopup"/>/
-/// <see cref="ScribeQuestCompletionPolicy.Prompt"/> (add-assignment-and-quest-support §11.2/§11.4).
+/// <see cref="ScribeQuestCompletionPolicy.Prompt"/>.
 /// Rendered as a small banner on the pinned-task HUD (<c>HudPinsContent</c>) or, for a
 /// <see cref="ScribeQuestAcceptPolicy.PromptPopup"/> accept-prompt, a center-screen modal
-/// (<c>GuiDialogScribeQuestPrompt</c>) — both offer Accept/Dismiss + a Settings shortcut
-/// (rework-quest-accept-notification-styles). <see cref="IsCompletion"/>
+/// (<c>GuiDialogScribeQuestPrompt</c>) — both offer Accept/Dismiss + a Settings shortcut.
+/// <see cref="IsCompletion"/>
 /// distinguishes an accept-prompt (accepting creates a Quest Link) from a completion-prompt (accepting
 /// marks the already-linked task done) so the HUD can word the banner correctly; both resolve through
 /// <see cref="ScribeModSystem.AcceptQuestPrompt"/>. <see cref="Source"/> records which backend detected
-/// this (add-progression-framework-quest-support Decision 1) so a same-code collision between backends is
+/// this so a same-code collision between backends is
 /// never ambiguous.</summary>
 public readonly record struct ScribeQuestPrompt(string Source, string QuestCode, string Title, bool IsCompletion);
 
@@ -39,10 +39,10 @@ public sealed partial class ScribeModSystem
     /// which the watcher will re-raise on its next scan if the underlying quest state is unchanged).</summary>
     public IReadOnlyList<ScribeQuestPrompt> PendingQuestPrompts => pendingQuestPrompts;
 
-    /// <summary>Pre-formatted live progress text for a quest Link row (§11.3), or null when unavailable —
+    /// <summary>Pre-formatted live progress text for a quest Link row, or null when unavailable —
     /// neither backend installed, its state never read this session, or the quest isn't in this world's
-    /// catalog. Dispatches strictly by <paramref name="source"/> (the Link's own recorded backend —
-    /// add-progression-framework-quest-support: "A Quest Link's backend is explicit, never inferred") —
+    /// catalog. Dispatches strictly by <paramref name="source"/> (the Link's own recorded backend;
+    /// a Quest Link's backend is explicit, never inferred) —
     /// never tries the other backend even if <paramref name="questCode"/> happens to collide. Read by
     /// <see cref="ScribeDialogBase.Layout"/> when building a read/editor row.</summary>
     public string? TryGetQuestProgressText(string source, string questCode)
@@ -61,8 +61,8 @@ public sealed partial class ScribeModSystem
 
     /// <summary>Progression Framework's catalog objective definitions for a cataloged quest (Decision 4),
     /// exposed for the manual Quest Link picker (<c>OnClickAddQuestLink</c>) and the accept-time auto-link
-    /// send (<see cref="SendAutoLinkQuest"/>) to seed a Quest Link's QuestObjective children
-    /// (add-progression-framework-quest-objective-subtasks 5.3). False when the watcher hasn't started, PF
+    /// send (<see cref="SendAutoLinkQuest"/>) to seed a Quest Link's QuestObjective children.
+    /// False when the watcher hasn't started, PF
     /// isn't installed, or the quest code isn't cataloged.</summary>
     internal bool TryGetPfObjectiveDefs(string questCode, out IReadOnlyList<ScribePfObjectiveDef> objectives)
     {
@@ -82,7 +82,7 @@ public sealed partial class ScribeModSystem
     private static readonly Dictionary<string, int> EmptyPfProgress = new(StringComparer.Ordinal);
 
     /// <summary>Whether the player has been observed to start (accept or complete) the given quest code this
-    /// session, per whichever backend it belongs to (filter-quest-link-picker) — exposed for the manual Quest
+    /// session, per whichever backend it belongs to — exposed for the manual Quest
     /// Link picker to filter its candidate list down to quests actually engaged with. False whenever the
     /// watcher hasn't started (neither backend installed).</summary>
     internal bool HasStartedQuest(string questCode) => questWatcher?.HasStarted(questCode) ?? false;
@@ -91,7 +91,7 @@ public sealed partial class ScribeModSystem
         => questWatcher = new ScribeQuestWatcher(api, OnQuestAccepted, OnQuestCompleted);
 
     /// <summary>Client-side handler for the server's push of this player's own synced quest-decision
-    /// ledger (fix-quest-prompt-persistence-and-auto-pin). Replaces the cached set wholesale — the server
+    /// ledger. Replaces the cached set wholesale — the server
     /// always sends the player's complete ledger, never a delta.</summary>
     private void OnClientReceivedQuestDecisionSet(ScribeQuestDecisionSetMessage message)
     {
@@ -122,10 +122,9 @@ public sealed partial class ScribeModSystem
     /// notification — Scribe watching quest state at all is not obvious, so every policy gets one — then
     /// branches on <see cref="ScribePlayerSettings.QuestAcceptPolicy"/>: Always sends the auto-link request
     /// immediately UNLESS 2+ eligible destinations are carried, in which case it falls back to a Prompt-style
-    /// queue instead of silently guessing among them (Decision 3's alternative-considered resolution —
-    /// add-progression-framework-quest-support); Never does nothing further; PromptHud/PromptPopup both
+    /// queue instead of silently guessing among them; Never does nothing further; PromptHud/PromptPopup both
     /// queue the prompt instead of acting — which of the two presentation styles renders it is decided at
-    /// render time, not here (rework-quest-accept-notification-styles).</summary>
+    /// render time, not here.</summary>
     private void OnQuestAccepted(ScribeQuestCatalogEntry quest, bool freshTransition)
     {
         if (capi is null) return;
@@ -154,7 +153,7 @@ public sealed partial class ScribeModSystem
                 capi.ShowChatMessage(Lang.Get("scribe:scribe-quest-accepted-never", quest.Title));
                 break;
             default: // PromptHud / PromptPopup — queuing is identical; the render style is chosen at
-                     // HUD/modal render time (rework-quest-accept-notification-styles), not here.
+                     // HUD/modal render time, not here.
                 capi.ShowChatMessage(Lang.Get("scribe:scribe-quest-accepted-prompt", quest.Title));
                 QueuePrompt(new ScribeQuestPrompt(quest.Source, quest.QuestCode, quest.Title, IsCompletion: false));
                 break;
@@ -162,7 +161,7 @@ public sealed partial class ScribeModSystem
     }
 
     /// <summary>A quest was just detected as completed. First consults the player's synced quest-decision
-    /// ledger for this exact completion-prompt (fix-quest-prompt-persistence-and-auto-pin) — Decision 4's
+    /// ledger for this exact completion-prompt — the
     /// reset-clear does not apply to completion-prompts (no equivalent fresh-transition signal exists), so
     /// once decided it stays suppressed for the life of the ledger entry. Otherwise, only an ALREADY-PINNED
     /// Quest Link for this exact (source, quest code) counts as "linked" (mirrors the HUD Tracker engine's
@@ -243,7 +242,7 @@ public sealed partial class ScribeModSystem
     /// prompted quest, then dismiss it. <paramref name="candidate"/> is the destination the HUD resolved
     /// via <see cref="ComputeQuestAcceptCandidates"/> (the sole eligible one, or the player's picker choice
     /// among 2+) — ignored for a completion-prompt, which has no destination to choose (the task is
-    /// already linked). Null falls back to server-side resolution (task 6.1's backward-compatibility path).</summary>
+    /// already linked). Null falls back to server-side resolution.</summary>
     internal void AcceptQuestPrompt(ScribeQuestPrompt prompt, ScribeAcceptCandidate? candidate = null)
     {
         if (prompt.IsCompletion)
@@ -297,10 +296,9 @@ public sealed partial class ScribeModSystem
         });
     }
 
-    /// <summary>Sends the auto-link request, naming the resolved destination (assignment-state-machine's
-    /// placement requirement, extended to Quest auto-link — Decision 3). <paramref name="candidate"/> null
-    /// is the defensive/legacy path: the server falls back to <c>FindNotebookInInventory</c> (task 6.4),
-    /// matching this message's pre-picker behavior. For a Progression Framework quest, also attaches the
+    /// <summary>Sends the auto-link request, naming the resolved destination (the same
+    /// placement requirement as assignments). <paramref name="candidate"/> null
+    /// is the defensive/legacy path: the server falls back to <c>FindNotebookInInventory</c>. For a Progression Framework quest, also attaches the
     /// watcher's cached catalog objective defs (+ whatever live progress it has cached) so the server can
     /// seed the new Quest Link's QuestObjective children immediately after adding it. VS Quest entries
     /// attach the one-shot static criteria snapshot from their catalog; Progression Framework entries
@@ -363,7 +361,7 @@ public sealed partial class ScribeModSystem
     /// and RE-VALIDATES it (writeable, has capacity) exactly like <c>TryPlaceAcceptedAssignment</c> does —
     /// never trusts the client's choice as proof of eligibility. Falls back to
     /// <see cref="FindNotebookInInventory"/> only when no target was sent, or the sent one didn't resolve
-    /// to something writeable (task 6.4's defensive compatibility path for a legacy/absent target). Is
+    /// to something writeable (the defensive path for a legacy/absent target). Is
     /// authoritative for whether the Link is actually added: silently no-ops with no player-visible error
     /// if the player carries no Scribe document, has no capacity, or already has a Link for this exact
     /// (source, quest code). That last check is what makes repeat detection (e.g. across a relog)
