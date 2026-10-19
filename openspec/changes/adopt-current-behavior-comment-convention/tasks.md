@@ -6,7 +6,7 @@
 
 ## 2. Batch plan
 
-- [ ] 2.1 Generate the batch list (about 15-20 batches of ~2.5k lines for `src/Mod`, `HudScribePins.cs` alone, `src/Core` as one, `tests/` as one), keeping related partial classes together; verify every tracked `.cs` file under `src/` and `tests/` appears in exactly one batch
+- [x] 2.1 Generate the batch list (about 15-20 batches of ~2.5k lines for `src/Mod`, `HudScribePins.cs` alone, `src/Core` as one, `tests/` as one), keeping related partial classes together; verify every tracked `.cs` file under `src/` and `tests/` appears in exactly one batch
 - [ ] 2.2 Write the agent brief containing the trim rubric from design.md and the report format (<=15 lines); verify it by running it on one small file and checking the report and IL result
 
 ## 3. Sweep

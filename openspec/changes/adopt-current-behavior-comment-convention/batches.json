@@ -1,0 +1,455 @@
+[
+ {
+  "id": "hud-pins",
+  "files": [
+   "src/Mod/HudScribePins.cs"
+  ],
+  "lines": 2345
+ },
+ {
+  "id": "mod-01",
+  "files": [
+   "src/Mod/AssemblyInfo.cs",
+   "src/Mod/AssignmentDisplay.cs",
+   "src/Mod/BlockAssignmentDesk.cs",
+   "src/Mod/BlockEntityAssignmentDesk.cs",
+   "src/Mod/BlockEntityInbox.cs",
+   "src/Mod/BlockEntityScribeChalkboard.cs",
+   "src/Mod/BlockEntityScribeLectern.cs",
+   "src/Mod/BlockEntityScribeWritingStation.cs",
+   "src/Mod/BlockEntityScriptorium.cs",
+   "src/Mod/BlockInbox.cs",
+   "src/Mod/BlockScribeChalkboard.cs",
+   "src/Mod/BlockScribeLectern.cs",
+   "src/Mod/BlockScribeWritingStation.cs",
+   "src/Mod/BlockScriptorium.cs",
+   "src/Mod/CarryOnBridge.cs",
+   "src/Mod/CuneiformGlow.cs"
+  ],
+  "lines": 2426
+ },
+ {
+  "id": "mod-02",
+  "files": [
+   "src/Mod/CuneiformText.cs",
+   "src/Mod/GuiDialogClockmakerNotebook.cs",
+   "src/Mod/GuiDialogScribeAssignmentDesk.cs",
+   "src/Mod/GuiDialogScribeChalkboard.cs"
+  ],
+  "lines": 2479
+ },
+ {
+  "id": "mod-03",
+  "files": [
+   "src/Mod/GuiDialogScribeInbox.cs",
+   "src/Mod/GuiDialogScribeLecternLibGui.cs",
+   "src/Mod/GuiDialogScribeNotebook.cs",
+   "src/Mod/GuiDialogScribeQuestPrompt.cs",
+   "src/Mod/GuiDialogScribeScriptorium.cs",
+   "src/Mod/GuiDialogScribeTablet.cs"
+  ],
+  "lines": 2560
+ },
+ {
+  "id": "mod-04",
+  "files": [
+   "src/Mod/GuiDialogTaskNotice.cs",
+   "src/Mod/GuiDialogTaskNoticeRedirectConfirm.cs",
+   "src/Mod/HistoryDisplay.cs",
+   "src/Mod/IHistoryRecordable.cs",
+   "src/Mod/IScribeDocumentHost.cs",
+   "src/Mod/IScribeDocumentItem.cs",
+   "src/Mod/ItemClockmakerNotebook.cs",
+   "src/Mod/ItemScribeNotebook.cs",
+   "src/Mod/ItemScribeTablet.cs",
+   "src/Mod/ItemScribeTaskNotice.cs",
+   "src/Mod/ItemSlotScribeDocument.cs",
+   "src/Mod/ItemSlotTaskNotice.cs",
+   "src/Mod/NotebookHost.cs",
+   "src/Mod/ScribeAcceptCandidates.cs",
+   "src/Mod/ScribeAccessMode.cs",
+   "src/Mod/ScribeAddHistoryEntryMessage.cs",
+   "src/Mod/ScribeAddKind.cs"
+  ],
+  "lines": 2486
+ },
+ {
+  "id": "mod-05",
+  "files": [
+   "src/Mod/ScribeAddKindPicker.cs",
+   "src/Mod/ScribeAlarmSound.cs",
+   "src/Mod/ScribeAmbientLightSampler.cs",
+   "src/Mod/ScribeAnimatedList.cs",
+   "src/Mod/ScribeAssignmentActionMessage.cs",
+   "src/Mod/ScribeAssignmentFormContent.cs",
+   "src/Mod/ScribeAssignmentParticleEmitter.cs",
+   "src/Mod/ScribeAssignmentStageRow.cs",
+   "src/Mod/ScribeAssignmentSyncMessage.cs",
+   "src/Mod/ScribeAutoLinkQuestMessage.cs",
+   "src/Mod/ScribeBackdrop.cs"
+  ],
+  "lines": 2595
+ },
+ {
+  "id": "mod-06",
+  "files": [
+   "src/Mod/ScribeBackdropPaintReset.cs",
+   "src/Mod/ScribeBoxTuning.cs",
+   "src/Mod/ScribeBoxTuningDialog.cs",
+   "src/Mod/ScribeBoxTuningTarget.cs",
+   "src/Mod/ScribeCompleteTaskMessage.cs",
+   "src/Mod/ScribeCraftRecipeProbe.cs",
+   "src/Mod/ScribeCuneiformField.cs",
+   "src/Mod/ScribeCuneiformTitleField.cs",
+   "src/Mod/ScribeDeleteAssignmentMessage.cs",
+   "src/Mod/ScribeDeleteHistoryEntryMessage.cs",
+   "src/Mod/ScribeDeleteTaskMessage.cs",
+   "src/Mod/ScribeDeliveryConfig.cs",
+   "src/Mod/ScribeDeliveryRangeCheckMessages.cs"
+  ],
+  "lines": 2071
+ },
+ {
+  "id": "mod-07",
+  "files": [
+   "src/Mod/ScribeDialogBase.Editor.cs",
+   "src/Mod/ScribeDialogBase.Guestbook.cs",
+   "src/Mod/ScribeDialogBase.Handbook.cs"
+  ],
+  "lines": 1479
+ },
+ {
+  "id": "mod-08",
+  "files": [
+   "src/Mod/ScribeDialogBase.Layout.cs",
+   "src/Mod/ScribeDialogBase.Lifecycle.cs",
+   "src/Mod/ScribeDialogBase.PinTab.cs",
+   "src/Mod/ScribeDialogBase.QuestObjectiveProgress.cs",
+   "src/Mod/ScribeDialogBase.TrackerCount.cs"
+  ],
+  "lines": 2435
+ },
+ {
+  "id": "mod-09",
+  "files": [
+   "src/Mod/ScribeDialogBase.ViewSwitching.cs",
+   "src/Mod/ScribeDialogBase.cs",
+   "src/Mod/ScribeDialogBody.cs",
+   "src/Mod/ScribeDismissQuestPromptMessage.cs",
+   "src/Mod/ScribeDocumentAttributes.cs",
+   "src/Mod/ScribeDocumentSlot.cs",
+   "src/Mod/ScribeEditDocumentMessage.cs",
+   "src/Mod/ScribeEditGuestbookNoteMessage.cs",
+   "src/Mod/ScribeEditPinnedTaskMessage.cs"
+  ],
+  "lines": 2513
+ },
+ {
+  "id": "mod-10",
+  "files": [
+   "src/Mod/ScribeEditorContent.cs",
+   "src/Mod/ScribeFieldOnlyTraversalPolicy.cs",
+   "src/Mod/ScribeGearEffect.cs",
+   "src/Mod/ScribeGearTexture.cs",
+   "src/Mod/ScribeGearTuning.cs",
+   "src/Mod/ScribeGearTuningDialog.cs",
+   "src/Mod/ScribeGlobalTint.cs",
+   "src/Mod/ScribeGlyphFallback.cs",
+   "src/Mod/ScribeGuestbookSyncMessage.cs",
+   "src/Mod/ScribeGuidePageHandbookPatch.cs"
+  ],
+  "lines": 2536
+ },
+ {
+  "id": "mod-11",
+  "files": [
+   "src/Mod/ScribeHandbookPatch.cs",
+   "src/Mod/ScribeHarfBuzzLoadFix.cs",
+   "src/Mod/ScribeImportValidator.cs",
+   "src/Mod/ScribeInboxContent.cs",
+   "src/Mod/ScribeInboxShimmer.cs",
+   "src/Mod/ScribeItemRef.cs",
+   "src/Mod/ScribeKnownPlayersSyncMessage.cs",
+   "src/Mod/ScribeMarkAssignmentsSeenMessage.cs",
+   "src/Mod/ScribeMealPageHandbookPatch.cs",
+   "src/Mod/ScribeModSystem.Assets.cs",
+   "src/Mod/ScribeModSystem.Assignment.cs"
+  ],
+  "lines": 2418
+ },
+ {
+  "id": "mod-12",
+  "files": [
+   "src/Mod/ScribeModSystem.ClientPrefs.cs",
+   "src/Mod/ScribeModSystem.Delivery.cs",
+   "src/Mod/ScribeModSystem.DevTools.cs",
+   "src/Mod/ScribeModSystem.ExternalTaskApi.cs",
+   "src/Mod/ScribeModSystem.Handbook.cs",
+   "src/Mod/ScribeModSystem.History.cs",
+   "src/Mod/ScribeModSystem.KnownPlayers.cs"
+  ],
+  "lines": 2289
+ },
+ {
+  "id": "mod-13",
+  "files": [
+   "src/Mod/ScribeModSystem.Network.cs",
+   "src/Mod/ScribeModSystem.PinOperations.cs",
+   "src/Mod/ScribeModSystem.Quest.cs",
+   "src/Mod/ScribeModSystem.ServerLifecycle.cs",
+   "src/Mod/ScribeModSystem.Timer.cs",
+   "src/Mod/ScribeModSystem.cs"
+  ],
+  "lines": 2433
+ },
+ {
+  "id": "mod-14",
+  "files": [
+   "src/Mod/ScribeMultilineField.cs",
+   "src/Mod/ScribeNotebookOpenedMessage.cs",
+   "src/Mod/ScribeNotebookSaveMessage.cs",
+   "src/Mod/ScribeNumericField.cs",
+   "src/Mod/ScribePinStore.cs"
+  ],
+  "lines": 2291
+ },
+ {
+  "id": "mod-15",
+  "files": [
+   "src/Mod/ScribePinnedContent.cs",
+   "src/Mod/ScribePinnedSetMessage.cs",
+   "src/Mod/ScribePixelArtBackdrop.cs",
+   "src/Mod/ScribeProgressionFrameworkQuestCatalog.cs",
+   "src/Mod/ScribeQuestCatalog.cs",
+   "src/Mod/ScribeQuestDecisionSetMessage.cs",
+   "src/Mod/ScribeQuestDecisionStore.cs",
+   "src/Mod/ScribeQuestPromptActions.cs",
+   "src/Mod/ScribeQuestWatcher.cs",
+   "src/Mod/ScribeRasterIcon.cs",
+   "src/Mod/ScribeReadViewFilter.cs",
+   "src/Mod/ScribeRecordVisitorMessage.cs",
+   "src/Mod/ScribeReleaseLockMessage.cs",
+   "src/Mod/ScribeReorderPinsMessage.cs",
+   "src/Mod/ScribeRequestAccessMessage.cs"
+  ],
+  "lines": 2551
+ },
+ {
+  "id": "mod-16",
+  "files": [
+   "src/Mod/ScribeRowConstants.cs",
+   "src/Mod/ScribeRowSizeAnimation.cs",
+   "src/Mod/ScribeRowStyle.cs",
+   "src/Mod/ScribeRowWidgets.cs",
+   "src/Mod/ScribeSendAssignmentBatchMessage.cs",
+   "src/Mod/ScribeSetHistoryEntryTextMessage.cs",
+   "src/Mod/ScribeSetPinMessage.cs",
+   "src/Mod/ScribeSetQuestObjectiveProgressMessage.cs",
+   "src/Mod/ScribeSetReadViewStateMessage.cs",
+   "src/Mod/ScribeSetTrackerQuantityMessage.cs"
+  ],
+  "lines": 2558
+ },
+ {
+  "id": "mod-17",
+  "files": [
+   "src/Mod/ScribeSettingsContent.cs",
+   "src/Mod/ScribeSettingsDialog.cs",
+   "src/Mod/ScribeSkipLibGuiOnboarding.cs",
+   "src/Mod/ScribeStamp.cs",
+   "src/Mod/ScribeStampSound.cs",
+   "src/Mod/ScribeTaskNoticeActionMessage.cs",
+   "src/Mod/ScribeTaskNoticeProximityPingMessage.cs",
+   "src/Mod/ScribeTextDefaults.cs",
+   "src/Mod/ScribeTheme.cs",
+   "src/Mod/ScribeTimeRate.cs",
+   "src/Mod/ScribeTimerMessages.cs",
+   "src/Mod/ScribeTooltip.cs",
+   "src/Mod/ScribeTrackerCounter.cs",
+   "src/Mod/ScribeTranscribeCopyMessage.cs",
+   "src/Mod/ScribeTranscribeImportMessage.cs",
+   "src/Mod/ScribeTranscribeStampMessage.cs",
+   "src/Mod/ScribeVanillaDialogGuard.cs",
+   "src/Mod/ScribeVisualTuning.cs",
+   "src/Mod/SilentSoundPlayer.cs",
+   "src/Mod/TabletHost.cs",
+   "src/Mod/TabletReadability.cs"
+  ],
+  "lines": 2542
+ },
+ {
+  "id": "core-01",
+  "files": [
+   "src/Core/Cuneiform/CuneiformLineLayout.cs",
+   "src/Core/Cuneiform/CuneiformReveal.cs",
+   "src/Core/Cuneiform/Glyph.cs",
+   "src/Core/Cuneiform/GlyphBundle.cs",
+   "src/Core/Cuneiform/GlyphSeedMix.cs",
+   "src/Core/Cuneiform/GlyphStroke.cs",
+   "src/Core/Cuneiform/GlyphStrokeJitter.cs",
+   "src/Core/Cuneiform/GlyphStrokeRotation.cs",
+   "src/Core/Cuneiform/Vec2.cs",
+   "src/Core/GuestbookEntry.cs",
+   "src/Core/GuestbookStore.cs",
+   "src/Core/HistoryEntry.cs",
+   "src/Core/HistoryEntryCodec.cs",
+   "src/Core/HistoryEventKind.cs",
+   "src/Core/HistoryFlavor.cs",
+   "src/Core/HistoryPvpVerb.cs",
+   "src/Core/HistorySchema.cs",
+   "src/Core/HistoryStore.cs",
+   "src/Core/PendingHistoryStore.cs",
+   "src/Core/ScribeArrowDigraph.cs",
+   "src/Core/ScribeAssignment.cs"
+  ],
+  "lines": 2251
+ },
+ {
+  "id": "core-02",
+  "files": [
+   "src/Core/ScribeAssignmentStore.cs",
+   "src/Core/ScribeBlock.cs",
+   "src/Core/ScribeBlockKindToken.cs",
+   "src/Core/ScribeBrightnessCurve.cs",
+   "src/Core/ScribeCompletion.cs",
+   "src/Core/ScribeCompletionPolicy.cs",
+   "src/Core/ScribeCraftMath.cs",
+   "src/Core/ScribeDeliveryMode.cs",
+   "src/Core/ScribeDocument.cs",
+   "src/Core/ScribeDocumentCodec.cs"
+  ],
+  "lines": 2578
+ },
+ {
+  "id": "core-03",
+  "files": [
+   "src/Core/ScribeDocumentJsonCodec.cs",
+   "src/Core/ScribeDocumentPolicy.cs",
+   "src/Core/ScribeDocumentTsvCodec.cs",
+   "src/Core/ScribeExternalTaskMapper.cs",
+   "src/Core/ScribeHudAnchor.cs",
+   "src/Core/ScribeKnownPlayersStore.cs",
+   "src/Core/ScribeLinkTarget.cs",
+   "src/Core/ScribeListDiff.cs",
+   "src/Core/ScribeNewTaskInsert.cs",
+   "src/Core/ScribePinCodec.cs",
+   "src/Core/ScribePinInsert.cs",
+   "src/Core/ScribePinOrdering.cs",
+   "src/Core/ScribePinnedRef.cs",
+   "src/Core/ScribePlayerLocationStore.cs",
+   "src/Core/ScribePlayerSettings.cs",
+   "src/Core/ScribeQuestDecision.cs"
+  ],
+  "lines": 2462
+ },
+ {
+  "id": "core-04",
+  "files": [
+   "src/Core/ScribeQuestDecisionCodec.cs",
+   "src/Core/ScribeQuestPolicy.cs",
+   "src/Core/ScribeQuestPromptGate.cs",
+   "src/Core/ScribeReorderValidity.cs",
+   "src/Core/ScribeSubtaskBehavior.cs",
+   "src/Core/ScribeTextCorruptor.cs",
+   "src/Core/ScribeTrackerCompletion.cs",
+   "src/Core/ScribeTsvSafe.cs",
+   "src/Core/TimerStore.cs"
+  ],
+  "lines": 588
+ },
+ {
+  "id": "tests-core-01",
+  "files": [
+   "tests/Core.Tests/CuneiformTests.cs",
+   "tests/Core.Tests/GuestbookStoreTests.cs",
+   "tests/Core.Tests/HistoryFlavorTests.cs",
+   "tests/Core.Tests/HistoryStoreTests.cs",
+   "tests/Core.Tests/PendingHistoryStoreTests.cs",
+   "tests/Core.Tests/ScribeArrowDigraphTests.cs"
+  ],
+  "lines": 2389
+ },
+ {
+  "id": "tests-core-02",
+  "files": [
+   "tests/Core.Tests/ScribeAssignmentStoreTests.cs",
+   "tests/Core.Tests/ScribeAssignmentTests.cs",
+   "tests/Core.Tests/ScribeBrightnessCurveTests.cs",
+   "tests/Core.Tests/ScribeCompletionTests.cs",
+   "tests/Core.Tests/ScribeCraftTaskTests.cs",
+   "tests/Core.Tests/ScribeDeliveryPolicyTests.cs"
+  ],
+  "lines": 2349
+ },
+ {
+  "id": "tests-core-03",
+  "files": [
+   "tests/Core.Tests/ScribeDocumentCodecTests.cs",
+   "tests/Core.Tests/ScribeDocumentJsonCodecTests.cs",
+   "tests/Core.Tests/ScribeDocumentPolicyTests.cs",
+   "tests/Core.Tests/ScribeDocumentTests.cs",
+   "tests/Core.Tests/ScribeDocumentTsvCodecTests.cs",
+   "tests/Core.Tests/ScribeExternalTaskMapperTests.cs",
+   "tests/Core.Tests/ScribeKnownPlayersStoreTests.cs"
+  ],
+  "lines": 2516
+ },
+ {
+  "id": "tests-core-04",
+  "files": [
+   "tests/Core.Tests/ScribeListDiffTests.cs",
+   "tests/Core.Tests/ScribeOwnedRunTests.cs",
+   "tests/Core.Tests/ScribePinCodecTests.cs",
+   "tests/Core.Tests/ScribePinOrderingTests.cs",
+   "tests/Core.Tests/ScribePlayerLocationStoreTests.cs",
+   "tests/Core.Tests/ScribePlayerSettingsTests.cs",
+   "tests/Core.Tests/ScribeQuestDecisionTests.cs",
+   "tests/Core.Tests/ScribeQuestObjectiveTests.cs"
+  ],
+  "lines": 2585
+ },
+ {
+  "id": "tests-core-05",
+  "files": [
+   "tests/Core.Tests/ScribeQuestPromptGateTests.cs",
+   "tests/Core.Tests/ScribeReorderValidityTests.cs",
+   "tests/Core.Tests/ScribeTextCorruptorTests.cs",
+   "tests/Core.Tests/ScribeTsvSafeTests.cs",
+   "tests/Core.Tests/TimerStoreTests.cs"
+  ],
+  "lines": 512
+ },
+ {
+  "id": "tests-int-01",
+  "files": [
+   "tests/Integration.Tests/AssemblyInfo.cs",
+   "tests/Integration.Tests/AssignmentCompletionDocResolutionScenarios.cs",
+   "tests/Integration.Tests/EditorAssignmentCompletionSyncScenarios.cs",
+   "tests/Integration.Tests/ExternalTaskApiScenarios.cs",
+   "tests/Integration.Tests/FixtureBuilders.cs",
+   "tests/Integration.Tests/HistoryInventoryRaceScenarios.cs",
+   "tests/Integration.Tests/InboxCapacityScenarios.cs",
+   "tests/Integration.Tests/KnownPlayersScenarios.cs",
+   "tests/Integration.Tests/MigrationScenarios.cs",
+   "tests/Integration.Tests/MobDeathMessageScenarios.cs",
+   "tests/Integration.Tests/NoticeLifecycleScenarios.cs",
+   "tests/Integration.Tests/OfflineAssignmentSendScenarios.cs",
+   "tests/Integration.Tests/PersistenceScenarios.cs",
+   "tests/Integration.Tests/PinScenarios.cs",
+   "tests/Integration.Tests/ReadEditorAccessScenarios.cs",
+   "tests/Integration.Tests/ReadViewStatePersistenceScenarios.cs"
+  ],
+  "lines": 2592
+ },
+ {
+  "id": "tests-int-02",
+  "files": [
+   "tests/Integration.Tests/ScribeHarfBuzzLoadFixTests.cs",
+   "tests/Integration.Tests/ScribeReadViewFilterTests.cs",
+   "tests/Integration.Tests/ServerAuthoritativeEditScenarios.cs",
+   "tests/Integration.Tests/SingleEditorLockScenarios.cs",
+   "tests/Integration.Tests/TabletNotebookDocIdStampRaceScenarios.cs"
+  ],
+  "lines": 609
+ }
+]
