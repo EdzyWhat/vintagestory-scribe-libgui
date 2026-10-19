@@ -7,22 +7,17 @@ using Vintagestory.API.Common;
 namespace Integration.Tests;
 
 /// <summary>
-/// Coverage for the Death-recording fallback in <c>ScribeModSystem.History.cs</c> — when a competing mod's own
-/// <c>OnEntityDeath</c> handler evicts a carried Notebook before Scribe's live scan runs, the Death
-/// entry is queued against that document's own id (via <see cref="ScribeModSystem.PendingHistoryStore"/>)
-/// rather than dropped, and flushed by <c>OnHistoryScanTick</c> the next time that document is seen in
-/// a live carried slot — in its correct chronological position, per document id, regardless of who
-/// ends up carrying it.
+/// Coverage for the Death-recording fallback in <c>ScribeModSystem.History.cs</c>: when a competing mod's
+/// <c>OnEntityDeath</c> handler evicts a carried Notebook before Scribe's live scan runs, the Death entry is
+/// queued against that document's id (via <see cref="ScribeModSystem.PendingHistoryStore"/>) rather than
+/// dropped, and flushed by <c>OnHistoryScanTick</c> when that document is next seen in a live carried slot,
+/// in chronological position, regardless of who carries it.
 ///
-/// Eviction is simulated the same way a competing mod's corpse-creation would do it: nulling out the
-/// live <c>ItemSlot.Itemstack</c> directly (never touching Scribe's own code), while keeping the
-/// original <c>ItemStack</c> reference around so a later scenario can "recover" the exact same
-/// document by placing it into a (possibly different) slot — proving the fallback is keyed by
-/// document id, not by player.
+/// Eviction is simulated by nulling the live <c>ItemSlot.Itemstack</c> directly while keeping the original
+/// <c>ItemStack</c> so a later scenario can place the same document into a different slot.
 ///
-/// <c>OnHistoryScanTick</c> and <c>_lastKnownCarriedDocIds</c> are <c>internal</c> (not <c>private</c>)
-/// solely so this suite can drive the periodic scan/flush directly rather than waiting out the real
-/// 10s interval, and seed a snapshot without waiting out a real tick — see their own doc comments.
+/// <c>OnHistoryScanTick</c> and <c>_lastKnownCarriedDocIds</c> are <c>internal</c> solely so this suite can
+/// drive the scan/flush and seed a snapshot without waiting out the real 10s interval.
 /// </summary>
 public class HistoryInventoryRaceScenarios : AtlasScenarioBase
 {
@@ -50,7 +45,7 @@ public class HistoryInventoryRaceScenarios : AtlasScenarioBase
         await player.GiveItem(NotebookCode);
         var slot = player.Player.InventoryManager.ActiveHotbarSlot;
         var seed = new NotebookHost(slot);
-        seed.Flush(); // persist a real document so its DocId is stable across later re-reads (construction alone does not stamp one)
+        seed.Flush(); // persist so the DocId is stable across re-reads (construction alone does not stamp one)
         var docId = seed.Document.DocId;
 
         var mod = Mod;
@@ -78,8 +73,7 @@ public class HistoryInventoryRaceScenarios : AtlasScenarioBase
         var mod = Mod;
         mod._lastKnownCarriedDocIds[victim.Player.PlayerUID] = new HashSet<Guid> { docId };
 
-        // Simulate a competing mod's own OnEntityDeath handler moving the notebook into a corpse
-        // moments before Scribe's own handler runs -- never touching Scribe's code to do it.
+        // Simulate a competing mod's OnEntityDeath handler moving the notebook into a corpse first.
         slot.Itemstack = null;
         slot.MarkDirty();
 
@@ -105,9 +99,8 @@ public class HistoryInventoryRaceScenarios : AtlasScenarioBase
         var killerDocId = new NotebookHost(killerSlot).Document.DocId;
 
         var mod = Mod;
-        // Seed a "snapshot" for the KILLER too, mirroring the victim-side scenario above -- the point
-        // of this test is that it must have no effect. Nothing evicts a killer's inventory during
-        // their own kill, so the fallback never extends to their side (see design.md's Non-Goals).
+        // Seed a snapshot for the KILLER too; it must have no effect, since nothing evicts a killer's
+        // inventory during their own kill, so the fallback never extends to their side.
         mod._lastKnownCarriedDocIds[killer.Player.PlayerUID] = new HashSet<Guid> { killerDocId };
         killerSlot.Itemstack = null;
         killerSlot.MarkDirty();
@@ -130,7 +123,7 @@ public class HistoryInventoryRaceScenarios : AtlasScenarioBase
             Kind = HistoryEventKind.Death, Detail = "For the evicted document.", InGameDate = "d", InGameTimestamp = 1,
         });
 
-        // A brand-new notebook (document B), unrelated to docA, crafted/given AFTER the queuing.
+        // A brand-new notebook (document B) given AFTER the queuing.
         await player.GiveItem(NotebookCode);
         var slotB = player.Player.InventoryManager.ActiveHotbarSlot;
         var docB = new NotebookHost(slotB).Document.DocId;
@@ -151,7 +144,7 @@ public class HistoryInventoryRaceScenarios : AtlasScenarioBase
         await original.GiveItem(NotebookCode);
         var originalSlot = original.Player.InventoryManager.ActiveHotbarSlot;
         var seed = new NotebookHost(originalSlot);
-        seed.Flush(); // persist a real document so its DocId is stable across later re-reads (construction alone does not stamp one)
+        seed.Flush(); // persist so the DocId is stable across re-reads (construction alone does not stamp one)
         var docId = seed.Document.DocId;
         var stack = originalSlot.Itemstack!;
         originalSlot.Itemstack = null;
@@ -200,11 +193,10 @@ public class HistoryInventoryRaceScenarios : AtlasScenarioBase
         await victim.GiveItem(NotebookCode);
         var slot = victim.Player.InventoryManager.ActiveHotbarSlot;
         var host = new NotebookHost(slot);
-        host.Flush(); // persist a real document so its DocId is stable across later re-reads (construction alone does not stamp one)
+        host.Flush(); // persist so the DocId is stable across re-reads (construction alone does not stamp one)
         var docId = host.Document.DocId;
 
-        // Entries recorded (directly, for determinism) both chronologically before and after the
-        // real moment the fallback entry below claims for itself.
+        // Entries recorded directly, both before and after the fallback entry's moment.
         host.History.TryAddEntry(new HistoryEntry { Kind = HistoryEventKind.Manual, Detail = "before", InGameDate = "d", InGameTimestamp = 1, EntryId = Guid.NewGuid() });
         host.History.TryAddEntry(new HistoryEntry { Kind = HistoryEventKind.Manual, Detail = "after",  InGameDate = "d", InGameTimestamp = 3, EntryId = Guid.NewGuid() });
         host.FlushHistory();
@@ -219,9 +211,8 @@ public class HistoryInventoryRaceScenarios : AtlasScenarioBase
         await World.Ticks(1);
 
         var reopened = new NotebookHost(slot);
-        // Ignore the incidental PickedUp entry OnHistoryScanTick's own FindCarriedNotebooks walk
-        // records the first time it attaches server context to this slot -- not what this scenario
-        // is about; it always sorts after "after" (its timestamp is "now", the largest of the four).
+        // Ignore the incidental PickedUp entry that OnHistoryScanTick's FindCarriedNotebooks walk records on
+        // first attaching server context; it sorts last (its timestamp is "now").
         var details = reopened.History.Entries
             .Where(e => e.Kind != HistoryEventKind.PickedUp)
             .Select(e => e.Detail).ToList();
@@ -263,9 +254,8 @@ public class HistoryInventoryRaceScenarios : AtlasScenarioBase
             Kind = HistoryEventKind.Death, Detail = "Survives a restart.", InGameDate = "d", InGameTimestamp = 1,
         });
 
-        // Simulate a save/reload on the SAME instance: serialize exactly like OnGameWorldSave does,
-        // then re-hydrate it back through LoadFrom -- the exact call OnSaveGameLoaded makes -- proving
-        // the wire format round trips (mirrors ReadViewStatePersistenceScenarios' own convention).
+        // Simulate a save/reload on the SAME instance: serialize like OnGameWorldSave, then re-hydrate via
+        // LoadFrom (as OnSaveGameLoaded does) to prove the wire format round trips.
         var bytes = mod.PendingHistoryStore!.SerializeStore();
         var reloaded = new PendingHistoryStore();
         reloaded.LoadFrom(bytes);

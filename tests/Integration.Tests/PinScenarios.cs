@@ -6,10 +6,9 @@ using Scribe.Core;
 namespace Integration.Tests;
 
 /// <summary>
-/// Exercises the per-player pin store through the real server path
-/// (the mod system's SetPinForPlayer / CompleteTaskForPlayer, which the network handlers delegate
-/// to), addressed by (DocId, TaskId). RollbackWorld is enough for the in-memory assertions here;
-/// restart-persistence lives in PersistenceScenarios.
+/// Exercises the per-player pin store through the real server path (SetPinForPlayer / CompleteTaskForPlayer,
+/// which the network handlers delegate to), addressed by (DocId, TaskId). Restart persistence lives in
+/// PersistenceScenarios.
 /// </summary>
 public class PinScenarios : AtlasScenarioBase
 {
@@ -143,8 +142,7 @@ public class PinScenarios : AtlasScenarioBase
         Mod.SetPinForPlayer(alice.Player, docId, taskId, pinned: true);
         Mod.SetPinForPlayer(bob.Player, docId, taskId, pinned: true);
 
-        // Alice completes under Unpin (her client-local policy, carried in the request) — this would
-        // remove a pin, but only hers; Bob's own copy of the same task is untouched.
+        // Alice completes under Unpin (her client-local policy, carried in the request); only her pin is removed.
         Mod.CompleteTaskForPlayer(alice.Player, docId, taskId, ScribeCompletionPolicy.Unpin);
 
         var store = Mod.PinStore!;
@@ -185,8 +183,7 @@ public class PinScenarios : AtlasScenarioBase
 
         Mod.SetPinForPlayer(player.Player, docId, taskId, pinned: true);
 
-        // Break the lectern: the pin is kept (player-owned, non-destructive), and unpin must still
-        // succeed by identity alone with no block to resolve.
+        // Break the lectern: the pin is kept, and unpin must still succeed by identity alone.
         World.SetBlock("game:air", pos);
         await World.Ticks(2);
 
@@ -194,8 +191,8 @@ public class PinScenarios : AtlasScenarioBase
         Assert.False(Mod.PinStore!.IsPinned(player.Player.PlayerUID, docId, taskId));
     }
 
-    /// <summary>Player-owned: breaking a lectern does NOT clear or alter a pin — it stays with its
-    /// last-known snapshot and remains completable (a re-place can even restore its source).</summary>
+    /// <summary>Player-owned: breaking a lectern does NOT clear or alter a pin; it keeps its last-known
+    /// snapshot and remains completable (a re-place can restore its source).</summary>
     [AtlasScenario(RollbackWorld = true)]
     public async Task Breaking_a_lectern_keeps_pins_intact()
     {
@@ -208,7 +205,6 @@ public class PinScenarios : AtlasScenarioBase
         World.SetBlock("game:air", pos);
         await World.Ticks(2);
 
-        // The pin is retained with its last-known snapshot and is NOT flagged as removed.
         var pin = Assert.Single(Mod.PinStore!.Get(player.Player.PlayerUID));
         Assert.Equal("Find copper", pin.LastKnownText);
         Assert.True(Mod.PinStore!.IsPinned(player.Player.PlayerUID, docId, taskId));
@@ -225,8 +221,7 @@ public class PinScenarios : AtlasScenarioBase
 
         Mod.SetPinForPlayer(player.Player, docId, taskId, pinned: true);
 
-        // Unload (not delete) the chunk column hosting the lectern — the block is gone from memory but
-        // the pin must persist and still be removable by identity alone.
+        // Unload (not delete) the chunk hosting the lectern: the pin must persist and be removable by identity.
         int chunkSize = World.Api.WorldManager.ChunkSize;
         World.Api.WorldManager.UnloadChunkColumn(pos.X / chunkSize, pos.Z / chunkSize);
         await World.Ticks(2);
@@ -237,9 +232,9 @@ public class PinScenarios : AtlasScenarioBase
         Assert.False(Mod.PinStore!.IsPinned(player.Player.PlayerUID, docId, taskId));
     }
 
-    /// <summary>Player-owned reconcile: when a player deletes one of their own pinned tasks in their
-    /// own edit, only that player's pin for the deleted task is removed; their other pin is kept and
-    /// its snapshot refreshed. Drives the real ApplyEdit path with a scratch copy, as autosave does.</summary>
+    /// <summary>Player-owned reconcile: deleting one of their own pinned tasks in their own edit removes only
+    /// that player's pin for it; their other pin is kept and its snapshot refreshed. Drives ApplyEdit with a
+    /// scratch copy, as autosave does.</summary>
     [AtlasScenario(RollbackWorld = true)]
     public async Task Deleting_my_pinned_task_in_my_edit_removes_my_pin()
     {
@@ -273,9 +268,8 @@ public class PinScenarios : AtlasScenarioBase
         Assert.False(store.IsPinned(player.Player.PlayerUID, docId, deleteId)); // deleted task's pin removed
     }
 
-    /// <summary>Grief-proof: ANOTHER player editing (rewriting) a task I pinned does NOT change my
-    /// pin's captured text, and another player deleting it does NOT remove my pin. My pin is my own
-    /// copy, reconciled only by my own actions.</summary>
+    /// <summary>Grief-proof: another player rewriting or deleting a task I pinned does not change my pin's
+    /// captured text or remove it; my pin is reconciled only by my own actions.</summary>
     [AtlasScenario(RollbackWorld = true)]
     public async Task Another_players_edit_does_not_change_my_pin()
     {
@@ -284,23 +278,20 @@ public class PinScenarios : AtlasScenarioBase
         var pos = World.Spawn.Offset(5, 0, 0);
         var (lectern, docId, taskId) = await SeedLectern(owner, pos);
 
-        // Pinner pins the task, capturing "Find copper".
         Mod.SetPinForPlayer(pinner.Player, docId, taskId, pinned: true);
 
-        // The owner rewrites the task text to something else, then deletes it — a griefing sequence.
+        // The owner rewrites the task text, then deletes it: a griefing sequence.
         lectern.OnRightClick(owner.Player, wantEditor: true, quickAdd: false);
         Assert.True(ScribeDocumentCodec.TryDeserialize(ScribeDocumentCodec.Serialize(lectern.Document), out var edited));
         Assert.True(edited!.SetBlockText(0, "You have been griefed"));
         Assert.True(lectern.ApplyEdit(owner.Player, ScribeDocumentCodec.Serialize(edited)));
 
-        // Pinner's captured copy is unchanged (grief-proof) and still pinned.
         var store = Mod.PinStore!;
         var pin = Assert.Single(store.Get(pinner.Player.PlayerUID));
         Assert.Equal("Find copper", pin.LastKnownText);
         Assert.True(store.IsPinned(pinner.Player.PlayerUID, docId, taskId));
 
-        // The owner now deletes the task entirely — Pinner's pin still survives (only Pinner's own
-        // action could remove it).
+        // The owner deletes the task entirely; Pinner's pin still survives.
         Assert.True(ScribeDocumentCodec.TryDeserialize(ScribeDocumentCodec.Serialize(lectern.Document), out var deleted));
         Assert.True(deleted!.DeleteBlock(0));
         Assert.True(lectern.ApplyEdit(owner.Player, ScribeDocumentCodec.Serialize(deleted)));
@@ -321,23 +312,21 @@ public class PinScenarios : AtlasScenarioBase
 
         Mod.SetPinForPlayer(player.Player, docId, taskId, pinned: true);
 
-        // Capture the drop the way breaking the block would (GetDrops runs while the BE is alive and
-        // stamps the document onto the stack), then remove the block. The pin is kept (non-destructive).
+        // Capture the drop as breaking the block would (GetDrops stamps the document onto the stack), then
+        // remove the block; the pin is kept.
         var drop = lectern.Block.GetDrops(World.Api.World, pos, player.Player)![0];
         World.SetBlock("game:air", pos);
         await World.Ticks(2);
         Assert.True(Mod.PinStore!.IsPinned(player.Player.PlayerUID, docId, taskId));
 
-        // Re-place the lectern from the carried stack: OnBlockPlaced restores the document (same
-        // DocId) and re-registers it in the live index.
+        // Re-place from the carried stack: OnBlockPlaced restores the document (same DocId) and re-registers it.
         World.SetBlock("scribe:scribelectern", pos);
         var replaced = World.BlockEntityAt<BlockEntityScribeLectern>(pos);
         Assert.NotNull(replaced);
         replaced!.OnBlockPlaced(drop);
         await World.Ticks(2);
 
-        // Same identity came back, and the pin resolves again: completing it (default Sink) writes
-        // through to the restored document's task done.
+        // Same identity came back and the pin resolves again: completing it (default Sink) writes through.
         Assert.Equal(docId, replaced.Document.DocId);
         Assert.True(Mod.PinStore!.IsPinned(player.Player.PlayerUID, docId, taskId));
         Mod.CompleteTaskForPlayer(player.Player, docId, taskId);

@@ -7,10 +7,9 @@ using Vintagestory.API.Datastructures;
 namespace Integration.Tests;
 
 /// <summary>
-/// The Inbox's inventory has 12 slots (8 restricted + 4 open). Both scenarios exercise the real
-/// slot-restriction path (<see cref="ItemSlot.TryPutInto"/>, which invokes <c>CanHold</c>/<c>CanTakeFrom</c>)
-/// rather than assigning <c>Itemstack</c> directly, so a break in the restriction itself would
-/// actually fail these tests, not just a miscounted slot total.
+/// The Inbox inventory has 12 slots (8 restricted + 4 open). Scenarios go through the real slot-restriction
+/// path (<see cref="ItemSlot.TryPutInto"/>, which invokes <c>CanHold</c>/<c>CanTakeFrom</c>) rather than assigning
+/// <c>Itemstack</c> directly, so a broken restriction fails the tests.
 /// </summary>
 public class InboxCapacityScenarios : AtlasScenarioBase
 {
@@ -30,15 +29,13 @@ public class InboxCapacityScenarios : AtlasScenarioBase
         var inbox = World.BlockEntityAt<BlockEntityInbox>(pos);
         Assert.NotNull(inbox);
 
-        // A non-Scribe item is rejected from a restricted slot (checked while it's still empty, so
-        // the rejection can only be the slot's own restriction, not merely "already occupied").
+        // A non-Scribe item is rejected from an empty restricted slot, so the rejection is the restriction itself.
         var rejected = new DummySlot(ArbitraryItem()).TryPutInto(World.Api.World, inbox!.Inventory[0]);
         Assert.Equal(0, rejected);
         Assert.Null(inbox.Inventory[0].Itemstack);
 
-        // Fill all 8 restricted slots with a Scribe item and all 4 open slots with an arbitrary item,
-        // through the real accept path (proves the open slots truly accept anything, not just that a
-        // direct assignment would have "worked" regardless of any restriction).
+        // Fill the 8 restricted slots with a Scribe item and the 4 open slots with an arbitrary item via the real
+        // accept path.
         for (int i = 0; i < BlockEntityInbox.RestrictedSlotCount; i++)
         {
             var moved = new DummySlot(ScribeItem()).TryPutInto(World.Api.World, inbox.Inventory[i]);
@@ -50,10 +47,9 @@ public class InboxCapacityScenarios : AtlasScenarioBase
             Assert.Equal(1, moved);
         }
 
-        // Tree round-trip: serialize then feed straight back through FromTreeAttributes (the same call a
-        // real save/load makes), then confirm every slot's contents survived unchanged. Uses the same
-        // live block entity rather than a bare `new BlockEntityInbox()`: FromTreeAttributes's base chain
-        // resolves `Block` from `Api`/`Pos`, which only a placed, `Initialize`d entity has.
+        // Tree round-trip through ToTreeAttributes/FromTreeAttributes (as save/load does). Uses the live block
+        // entity, not a bare `new BlockEntityInbox()`: FromTreeAttributes's base chain resolves `Block` from
+        // `Api`/`Pos`, which only a placed, initialized entity has.
         var savedTree = new TreeAttribute();
         inbox.ToTreeAttributes(savedTree);
         inbox.FromTreeAttributes(savedTree, World.Api.World);
@@ -78,9 +74,8 @@ public class InboxCapacityScenarios : AtlasScenarioBase
         var inbox = World.BlockEntityAt<BlockEntityInbox>(pos);
         Assert.NotNull(inbox);
 
-        // Hand-build a tree exactly as an old, pre-this-change 8-slot Inbox would have persisted it —
-        // qslots=8 and only indices 0-7 present in the "slots" sub-tree (SlotsToTreeAttributes never
-        // writes empty slots, so a real old save would look identical to this by construction).
+        // Hand-build a tree as an old 8-slot Inbox persisted it: qslots=8 and only indices 0-7 in "slots"
+        // (SlotsToTreeAttributes never writes empty slots).
         var oldInvTree = new TreeAttribute();
         oldInvTree.SetInt("qslots", 8);
         var oldSlotsTree = new TreeAttribute();
@@ -94,7 +89,7 @@ public class InboxCapacityScenarios : AtlasScenarioBase
         inbox!.ToTreeAttributes(savedTree);
         savedTree["inboxInventory"] = oldInvTree;
 
-        // Same live entity, not a bare `new BlockEntityInbox()` — see the roundtrip scenario's note above.
+        // Same live entity as the roundtrip scenario.
         inbox.FromTreeAttributes(savedTree, World.Api.World);
 
         Assert.Equal(BlockEntityInbox.SlotCount, inbox.Inventory.Count);

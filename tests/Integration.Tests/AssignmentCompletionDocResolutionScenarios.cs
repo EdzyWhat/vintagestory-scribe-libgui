@@ -7,12 +7,9 @@ using Vintagestory.API.Common;
 namespace Integration.Tests;
 
 /// <summary>
-/// Completing a pinned Accepted-assignment task must
-/// derive Completed on the canonical <see cref="ScribeAssignmentStore"/> record even when the
-/// task's owning Notebook is not currently in the completing player's inventory (the derivation
-/// must not depend on <c>CompleteTaskForPlayer</c>'s resolved-document branch). Exercises the real production path
-/// (<see cref="ScribeModSystem.CompleteTaskForPlayer"/>) the same way <see cref="PinScenarios"/>
-/// and <see cref="NoticeLifecycleScenarios"/> do.
+/// Completing a pinned Accepted-assignment task derives Completed on the canonical
+/// <see cref="ScribeAssignmentStore"/> record even when the task's owning Notebook is not in the
+/// completing player's inventory. Drives <see cref="ScribeModSystem.CompleteTaskForPlayer"/> directly.
 /// </summary>
 public class AssignmentCompletionDocResolutionScenarios : AtlasScenarioBase
 {
@@ -21,9 +18,8 @@ public class AssignmentCompletionDocResolutionScenarios : AtlasScenarioBase
     private ItemStack BlankNotice() =>
         new(World.Api.World.GetItem(new AssetLocation("scribe", "tasknotice"))!, 1);
 
-    /// <summary>Sends, receives, and accepts a Task Notice onto a Notebook the assignee carries in
-    /// their hotbar slot 1, pinning the resulting task. Returns the assignment id (== TaskId), the
-    /// Notebook's DocId, and the hotbar slot holding the Notebook so the caller can remove it.</summary>
+    /// <summary>Sends, receives, and accepts a Task Notice onto a Notebook in the assignee's hotbar slot 1,
+    /// pinning the task. Returns the assignment id (== TaskId), the Notebook's DocId, and its slot.</summary>
     private async Task<(Guid assignmentId, Guid docId, Vintagestory.API.Common.ItemSlot notebookSlot)>
         SeedAcceptedAndPinnedAssignment(ITestPlayer assigner, ITestPlayer assignee, Vintagestory.API.MathTools.BlockPos deskPos)
     {
@@ -93,8 +89,8 @@ public class AssignmentCompletionDocResolutionScenarios : AtlasScenarioBase
         var store = Mod.AssignmentStore!;
         Assert.Equal(ScribeAssignmentState.Accepted, store.TryGet(assignmentId)!.Assignment!.State);
 
-        // Remove the Notebook from the assignee's inventory entirely -- TryResolveDocHost's fallback
-        // only scans the completing player's own inventory, so the document is now unresolvable.
+        // Removing the Notebook makes the document unresolvable: TryResolveDocHost's fallback only scans
+        // the completing player's own inventory.
         notebookSlot.Itemstack = null;
         notebookSlot.MarkDirty();
 
@@ -108,7 +104,7 @@ public class AssignmentCompletionDocResolutionScenarios : AtlasScenarioBase
         Assert.Equal(ScribeAssignmentState.Completed,
             Assert.Single(store.Sent(assigner.Player.PlayerUID)).Assignment!.State);
 
-        // The pin's own done-state was already unconditional before this fix and still is.
+        // The pin's own done-state is unconditional.
         var pin = Assert.Single(Mod.PinStore!.Get(assignee.Player.PlayerUID));
         Assert.True(pin.LastKnownDone);
     }

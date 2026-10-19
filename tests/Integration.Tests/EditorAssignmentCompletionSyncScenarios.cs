@@ -7,28 +7,21 @@ using Vintagestory.API.Common;
 namespace Integration.Tests;
 
 /// <summary>
-/// The Editor view's own completion checkbox has no dedicated
-/// completion message (<c>ScribeCompleteTaskMessage</c>) — it mutates <c>Done</c> locally and relies on
-/// the ordinary whole-document autosave flush to persist it. Each whole-document
-/// flush handler (<see cref="BlockEntityScribeWritingStation.ApplyEdit"/> for a Lectern,
-/// <see cref="ScribeModSystem.OnServerReceivedNotebookSave"/> for a Notebook/Tablet) therefore calls into
-/// <see cref="ScribeModSystem.NotifyAssignmentDoneChanged"/>, so completing an assigned task purely
-/// through the Editor derives Completed on the canonical <see cref="ScribeAssignmentStore"/>
-/// record — essential on a Tablet, whose dialog offers no other tab.
+/// The Editor view's completion checkbox has no dedicated message: it mutates <c>Done</c> locally and
+/// relies on the whole-document flush (<see cref="BlockEntityScribeWritingStation.ApplyEdit"/> for a Lectern,
+/// <see cref="ScribeModSystem.OnServerReceivedNotebookSave"/> for a Notebook/Tablet), which calls
+/// <see cref="ScribeModSystem.NotifyAssignmentDoneChanged"/> so Editor-only completion (the only option on a
+/// Tablet) still derives Completed on the canonical <see cref="ScribeAssignmentStore"/> record.
 ///
-/// Exercises the production entry points directly, the same way <see cref="PinScenarios"/> and
-/// <see cref="AssignmentCompletionDocResolutionScenarios"/> do: <c>ApplyEdit</c> for the Lectern, and
-/// <c>OnServerReceivedNotebookSave</c> (widened to <c>internal</c> for this purpose, matching the
-/// <c>OnHistoryScanTick</c> precedent) for a Notebook/Tablet — never a real network round-trip.
+/// Calls the production entry points directly, with no network round-trip.
 /// </summary>
 public class EditorAssignmentCompletionSyncScenarios : AtlasScenarioBase
 {
     private ScribeModSystem Mod => World.Api.ModLoader.GetModSystem<ScribeModSystem>();
 
-    /// <summary>Seeds an Accepted canonical assignment record directly (bypassing the desk/notice send
-    /// flow, already covered by <see cref="AssignmentCompletionDocResolutionScenarios"/>) and returns a
-    /// document block carrying the SAME TaskId + Assignment, ready to be placed onto a Lectern/Notebook/
-    /// Tablet's document exactly as a real Accept-placement would.</summary>
+    /// <summary>Seeds an Accepted canonical assignment record directly (the desk/notice send flow is covered
+    /// by <see cref="AssignmentCompletionDocResolutionScenarios"/>) and returns a block carrying the same
+    /// TaskId + Assignment, ready to place as a real Accept would.</summary>
     private ScribeBlock SeedAcceptedAssignmentBlock(ITestPlayer assigner, ITestPlayer assignee, Guid assignmentId,
         string text = "Chop 10 logs")
     {
@@ -66,9 +59,8 @@ public class EditorAssignmentCompletionSyncScenarios : AtlasScenarioBase
         AssertBothPartiesCompleted(assigner, assignee, assignmentId);
         string? completedDateAfterFirst = Mod.AssignmentStore!.TryGet(assignmentId)!.Assignment!.CompletedDate;
 
-        // Calling it again on the same (already-Completed) document must be a cheap no-op: the canonical
-        // store gate rejects it before any mutation or sync push, which is what lets the flush
-        // skip diffing old vs. new.
+        // A repeat call on the already-Completed document is a cheap no-op: the store gate rejects it before
+        // any mutation or sync push, which is what lets the flush skip diffing old vs. new.
         Mod.NotifyDoneAssignmentsInDocument(doc);
         Assert.Equal(ScribeAssignmentState.Completed, Mod.AssignmentStore!.TryGet(assignmentId)!.Assignment!.State);
         Assert.Equal(completedDateAfterFirst, Mod.AssignmentStore!.TryGet(assignmentId)!.Assignment!.CompletedDate);
@@ -98,8 +90,7 @@ public class EditorAssignmentCompletionSyncScenarios : AtlasScenarioBase
 
         Assert.Equal(ScribeAssignmentState.Accepted, Mod.AssignmentStore!.TryGet(assignmentId)!.Assignment!.State);
 
-        // Simulate the Editor's own checkbox: toggle Done LOCALLY (exactly what ToggleEditorTask does
-        // client-side), then flush the whole document -- no ScribeCompleteTaskMessage involved.
+        // Simulate the Editor checkbox: toggle Done locally, then flush the whole document.
         var authoritative = lectern.Document;
         int idx = authoritative.Blocks.ToList().FindIndex(b => b.TaskId == assignmentId);
         Assert.True(authoritative.ToggleTask(idx));
@@ -145,8 +136,7 @@ public class EditorAssignmentCompletionSyncScenarios : AtlasScenarioBase
         ScribeDocumentAttributes.WriteTo(hotbar[0]!.Itemstack!, doc); // as if placed there by a prior Accept
         hotbar[0]!.MarkDirty();
 
-        // The Tablet's dialog has ONLY an Editor tab -- so completion can only come from the Editor. Toggle Done
-        // locally, then flush the whole document; no ScribeCompleteTaskMessage is ever sent.
+        // The Tablet dialog has only an Editor tab, so completion can only come from the Editor flush.
         Assert.True(doc.ToggleTask(0));
         FlushNotebookSave(assignee, doc);
 
@@ -167,8 +157,7 @@ public class EditorAssignmentCompletionSyncScenarios : AtlasScenarioBase
         ScribeDocumentAttributes.WriteTo(hotbar[0]!.Itemstack!, doc);
         hotbar[0]!.MarkDirty();
 
-        // Same whole-document flush path as the Tablet above, showing the behavior isn't Tablet-specific --
-        // completed via the Notebook's Editor tab, not the HUD, Pin Tab, or Read view.
+        // Same flush path as the Tablet, so the behavior is not Tablet-specific.
         Assert.True(doc.ToggleTask(0));
         FlushNotebookSave(assignee, doc);
 
@@ -189,9 +178,8 @@ public class EditorAssignmentCompletionSyncScenarios : AtlasScenarioBase
         Assert.True(store.TryApplyAction(assignmentId, assignee.Player.PlayerUID, ScribeAssignmentAction.Discard));
         Assert.Equal(ScribeAssignmentState.Discarded, store.TryGet(assignmentId)!.Assignment!.State);
 
-        // The task itself is still checked off in the document -- the discard deliberately leaves the
-        // task in place (NotifyAssignmentDiscardOnDelete is a separate concern) -- but the canonical
-        // record is terminal, so the flush-time derivation must be a no-op.
+        // The discard leaves the task in place and checked off, but the canonical record is terminal,
+        // so the flush-time derivation must be a no-op.
         block.Done = true;
         var doc = new ScribeDocument();
         doc.AppendAssignedBlock(block);
@@ -255,12 +243,11 @@ public class EditorAssignmentCompletionSyncScenarios : AtlasScenarioBase
         doc.AppendAssignedBlock(block);
         lectern.ApplyEdit(assignee.Player, ScribeDocumentCodec.Serialize(doc)); // places the task, not done yet
 
-        // Complete it the HUD/Pin-Tab way -- a dedicated completion message, never an Editor flush.
+        // Complete it the HUD/Pin-Tab way: a dedicated completion message, never an Editor flush.
         Mod.CompleteTaskForPlayer(assignee.Player, doc.DocId, assignmentId);
         AssertBothPartiesCompleted(assigner, assignee, assignmentId);
 
-        // A later, unrelated whole-document flush of the same (now-Completed) document must not disturb
-        // it -- the flush-time derivation call is as much a no-op here as the idempotency covered above.
+        // A later unrelated flush of the now-Completed document must not disturb it.
         lectern.OnRightClick(assignee.Player, wantEditor: true, quickAdd: false);
         var editedDoc = lectern.Document;
         editedDoc.AddTextSection("unrelated note");

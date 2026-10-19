@@ -5,12 +5,10 @@ using Scribe.Core;
 namespace Integration.Tests;
 
 /// <summary>
-/// Builder scenarios harvested into world fixtures via `atlas fixture` (see README's
-/// "Running the Atlas suite" section for the exact command). Not run as part of the normal
-/// `dotnet test` suite -- selected individually by `atlas fixture --scenario &lt;substring&gt;`.
-/// Each builder places a lectern, edits its document through the real production path
-/// (OnRightClick to acquire the lock, then ApplyEdit), and lets the fixture's graceful
-/// teardown persist the save.
+/// Builder scenarios harvested into world fixtures via `atlas fixture` (see README's "Running the Atlas
+/// suite" section). Not part of the normal `dotnet test` run; selected with
+/// `atlas fixture --scenario &lt;substring&gt;`. Each builder places a lectern and edits its document via
+/// OnRightClick (acquire the lock) then ApplyEdit; the fixture's graceful teardown persists the save.
 /// </summary>
 public class FixtureBuilders : AtlasScenarioBase
 {
@@ -33,10 +31,8 @@ public class FixtureBuilders : AtlasScenarioBase
         doc.ToggleTask(0);
         lectern.ApplyEdit(player.Player, ScribeDocumentCodec.Serialize(doc));
 
-        // Pin the (now-done) first task for this player through the real server path, so the
-        // persistence fixture also captures a per-player pin that must survive a restart. (Per-player
-        // preferences are NOT server state anymore — they're client-local JSON — so there is nothing
-        // settings-related to seed into the save here.)
+        // Pin the now-done first task through the real server path so the fixture also captures a per-player
+        // pin that must survive a restart.
         var mod = World.Api.ModLoader.GetModSystem<Scribe.ScribeModSystem>();
         mod.SetPinForPlayer(player.Player, lectern.Document.DocId, lectern.Document.Blocks[0].TaskId, pinned: true);
 

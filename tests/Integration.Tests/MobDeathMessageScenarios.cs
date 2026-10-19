@@ -7,27 +7,22 @@ using Vintagestory.API.Common;
 namespace Integration.Tests;
 
 /// <summary>
-/// Coverage for creature-death / PvP History recording: the <c>scribe-mob-death-N</c>
-/// flavor pool is discovered without formatting a zero-arg template, Death/PvpKill fact capture is
-/// skipped when no relevant party carries a Notebook, and live-schema rows store facts (not a
-/// finished English sentence) that <see cref="HistoryDisplay"/> formats in the viewer locale.
+/// Coverage for creature-death / PvP History recording: the <c>scribe-mob-death-N</c> flavor pool is
+/// discovered without formatting a zero-arg template, fact capture is skipped when no relevant party
+/// carries a Notebook, and live-schema rows store facts that <see cref="HistoryDisplay"/> formats in the
+/// viewer locale.
 ///
-/// Each scenario watches <c>Api.Logger.EntryAdded</c> around the death for a Warning containing
-/// "Translation string format exception" -- the exact text <c>TryFormat</c>'s own catch block
-/// writes -- to prove the pool-size probe never triggers it.
-///
-/// Deaths are induced directly via <c>Api.Event.TriggerEntityDeath</c> -- the same public entry
-/// point <c>Entity.Die()</c> uses internally, and the exact event
-/// <c>ScribeModSystem.OnEntityDeath</c> subscribes to in <c>StartServerSide</c>.
+/// Each scenario watches <c>Api.Logger.EntryAdded</c> for the Warning "Translation string format exception"
+/// (written by <c>TryFormat</c>'s catch block) to prove the pool-size probe never triggers it. Deaths are
+/// induced via <c>Api.Event.TriggerEntityDeath</c>, the event <c>ScribeModSystem.OnEntityDeath</c> subscribes to.
 /// </summary>
 public class MobDeathMessageScenarios : AtlasScenarioBase
 {
     private const string TranslationWarningMarker = "Translation string format exception";
     private const string NotebookCode = "scribe:scribenotebook";
 
-    /// <summary>Subscribes to the server logger and reports whether a translation-format warning
-    /// fired while subscribed. Callers must invoke the returned <c>Detach</c> action once done
-    /// watching (there is no scenario-scoped auto-unsubscribe).</summary>
+    /// <summary>Subscribes to the server logger and reports whether a translation-format warning fired.
+    /// Callers must invoke the returned <c>Detach</c> when done (there is no auto-unsubscribe).</summary>
     private (Action Detach, Func<bool> WasLogged) WatchForTranslationWarning()
     {
         bool seen = false;
@@ -101,8 +96,7 @@ public class MobDeathMessageScenarios : AtlasScenarioBase
         var pos = World.Spawn.Offset(3, 0, 0);
         var wolf = World.SpawnEntity("game:wolf-eurasian-adult-male", pos);
 
-        // Deliberately no GiveItem -- this player carries no Notebook anywhere on their person, so
-        // there is nowhere for a Death entry to land.
+        // No GiveItem: this player carries no Notebook, so no Death entry can land.
         var victim = await World.JoinPlayer("MobDeathNoNB");
 
         var (detach, wasLogged) = WatchForTranslationWarning();
@@ -139,8 +133,7 @@ public class MobDeathMessageScenarios : AtlasScenarioBase
         Assert.Equal("", last.Detail);
         Assert.Contains("MobDeathVicNoNB", HistoryDisplay.Sentence(last));
 
-        // The victim carries no Notebook, so there's nothing to inspect on their side -- the point
-        // of this scenario is precisely that no Death entry is written for them anywhere.
+        // The victim carries no Notebook; the point is that no Death entry is written for them anywhere.
         Assert.Null(victim.Player.InventoryManager.ActiveHotbarSlot?.Itemstack);
     }
 
@@ -167,8 +160,7 @@ public class MobDeathMessageScenarios : AtlasScenarioBase
         Assert.Equal("", last.Detail);
         Assert.Contains("MobDeathKilNoNB", HistoryDisplay.Sentence(last));
 
-        // The killer carries no Notebook, so there's nothing to inspect on their side -- the point
-        // of this scenario is precisely that no PvpKill entry is written for them anywhere.
+        // The killer carries no Notebook; the point is that no PvpKill entry is written for them anywhere.
         Assert.Null(killer.Player.InventoryManager.ActiveHotbarSlot?.Itemstack);
     }
 }

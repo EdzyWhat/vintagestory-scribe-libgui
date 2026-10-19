@@ -7,10 +7,9 @@ using Vintagestory.API.Common;
 namespace Integration.Tests;
 
 /// <summary>
-/// End-to-end coverage of the public
-/// <see cref="ScribeModSystem.TryCreateExternalTask"/> entry point — the title/bodyText/extraInfo mapping,
-/// the silent last-opened-or-first-writeable target resolution, and the three failure reasons (no Scribe
-/// item, all locked, target full), against a real player and real carried items.
+/// End-to-end coverage of <see cref="ScribeModSystem.TryCreateExternalTask"/>: the title/bodyText/extraInfo
+/// mapping, silent last-opened-or-first-writeable target resolution, and the three failure reasons (no Scribe
+/// item, all locked, target full), against a real player and carried items.
 /// </summary>
 public class ExternalTaskApiScenarios : AtlasScenarioBase
 {
@@ -99,8 +98,8 @@ public class ExternalTaskApiScenarios : AtlasScenarioBase
         hotbar[1]!.Itemstack = new ItemStack(World.Api.World.GetItem(new AssetLocation("scribe", "scribenotebook"))!, 1);
         hotbar[1]!.MarkDirty();
 
-        // Both books are documentless so far; write a seed document onto the SECOND one and mark it
-        // as the tracked last-opened item, so resolution must skip the first (default) writeable slot.
+        // Write a seed document onto the SECOND book and mark it last-opened, so resolution must skip the
+        // first (default) writeable slot.
         var secondDoc = new ScribeDocument();
         ScribeDocumentAttributes.WriteTo(hotbar[1]!.Itemstack!, secondDoc);
         hotbar[1]!.MarkDirty();
@@ -157,9 +156,8 @@ public class ExternalTaskApiScenarios : AtlasScenarioBase
     [AtlasScenario(RollbackWorld = true)]
     public async Task TargetDocumentFull_FailsAndDoesNotOverflow()
     {
-        // A wet clay tablet reports ScribeDocumentPolicy.Tablet (MaxBlocks = 15). Seed it already at
-        // the cap so the external add has no room, and confirm it's refused rather than silently
-        // overflowing past the cap.
+        // A wet clay tablet uses ScribeDocumentPolicy.Tablet (MaxBlocks = 15). Seed it at the cap and confirm
+        // the external add is refused rather than overflowing.
         var (player, slot) = await SeedCarriedItem("ExtTaskFullCap1", "scribetablet-clay-red");
 
         var seeded = new ScribeDocument();
