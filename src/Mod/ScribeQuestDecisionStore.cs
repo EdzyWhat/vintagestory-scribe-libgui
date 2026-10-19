@@ -3,16 +3,13 @@ using Scribe.Core;
 namespace Scribe;
 
 /// <summary>
-/// Server-side owner of every player's quest-decision ledger — mirrors <see cref="ScribePinStore"/>'s
-/// shape (a per-player collection, a serialize/deserialize bridge to a Core codec, no network/persistence
-/// I/O of its own). Persisted with the save game and synced to its owning player; the <see cref="ScribeModSystem"/> owns the
-/// actual save-game read/write and the network push, calling into this store.
+/// Server-side owner of every player's quest-decision ledger; mirrors <see cref="ScribePinStore"/>. It does
+/// no I/O: <see cref="ScribeModSystem"/> owns the save-game read/write and the network push.
 /// </summary>
 public sealed class ScribeQuestDecisionStore
 {
     private readonly Dictionary<string, ScribeQuestDecisionSet> _sets = new();
 
-    /// <summary>The player's decisions (empty list if they have none).</summary>
     public IReadOnlyList<ScribeQuestDecisionEntry> Get(string playerUid)
         => _sets.TryGetValue(playerUid, out var set) ? set.Entries : Array.Empty<ScribeQuestDecisionEntry>();
 
@@ -20,8 +17,8 @@ public sealed class ScribeQuestDecisionStore
     public ScribeQuestDecision? Lookup(string playerUid, string source, string questCode, bool isCompletion)
         => _sets.TryGetValue(playerUid, out var set) ? set.Lookup(source, questCode, isCompletion) : null;
 
-    /// <summary>Records (or overwrites) the player's decision for this exact key. Returns true if the
-    /// player's set actually changed (so the caller re-pushes only on a real change).</summary>
+    /// <summary>Records (or overwrites) the decision for this key. Returns true only on a real change, so
+    /// callers re-push only then.</summary>
     public bool Set(string playerUid, string source, string questCode, bool isCompletion, ScribeQuestDecision decision)
     {
         var set = _sets.TryGetValue(playerUid, out var existing) ? existing : _sets[playerUid] = new ScribeQuestDecisionSet();
@@ -30,7 +27,6 @@ public sealed class ScribeQuestDecisionStore
 
     // ---------------- Persistence bridge ----------------
 
-    /// <summary>Serializes the whole store to the savegame blob form.</summary>
     public byte[] SerializeStore()
     {
         var asDict = new Dictionary<string, List<ScribeQuestDecisionEntry>>(_sets.Count);
@@ -38,12 +34,10 @@ public sealed class ScribeQuestDecisionStore
         return ScribeQuestDecisionCodec.SerializeStore(asDict);
     }
 
-    /// <summary>Serializes one player's decision list to the network-push blob form.</summary>
     public byte[] SerializeList(string playerUid) => ScribeQuestDecisionCodec.SerializeList(Get(playerUid));
 
-    /// <summary>Replaces the in-memory state from the persisted blob (called on world load). A
-    /// null/malformed blob leaves the store empty rather than throwing — a corrupt save degrades to
-    /// "no recorded decisions" rather than crashing the load.</summary>
+    /// <summary>Replaces the in-memory state from the persisted blob. A null/malformed blob leaves the store
+    /// empty rather than crashing the load.</summary>
     public void LoadFrom(byte[]? bytes)
     {
         _sets.Clear();

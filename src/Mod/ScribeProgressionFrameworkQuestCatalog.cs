@@ -11,23 +11,15 @@ using Vintagestory.API.Config;
 
 namespace Scribe;
 
-/// <summary>One objective definition from a Progression Framework quest's catalog entry — a stable
-/// <see cref="Code"/> (matched against the same code in the player's <c>WatchedAttributes</c> tree, never
-/// by position) and the count required to complete it, read directly from the catalog. Unlike
-/// vsquest's <see cref="ScribeQuestObjectiveDef"/>, this needs no positional zip against a separately-read
-/// live count: PF's own attribute tree already carries <c>{status, progress}</c> keyed by this same code.
-/// <see cref="ItemCode"/> is set only when the objective's <c>items</c> list resolves to exactly one
-/// concrete item with no alternates (a delivery-type objective);
-/// <see cref="Label"/> is the captured display text used when it doesn't (PF's own <c>Title</c>,
-/// falling back to <see cref="Code"/> — never null, so a QuestObjective subtask always has something to show).</summary>
+/// <summary>One objective of a Progression Framework quest: a stable <see cref="Code"/> (matched against the
+/// player's <c>WatchedAttributes</c> tree, never by position) and the count required. <see cref="ItemCode"/>
+/// is set only when the <c>items</c> list resolves to exactly one concrete item with no alternates;
+/// otherwise <see cref="Label"/> (PF's <c>Title</c>, falling back to <see cref="Code"/>, never null) is shown.</summary>
 internal readonly record struct ScribePfObjectiveDef(string Code, int Required, string? ItemCode, string Label);
 
-/// <summary>One Progression Framework quest's catalog entry, richer than the shared
-/// <see cref="ScribeQuestCatalogEntry"/> the picker renders (which carries no PF-specific objective shape —
-/// see that type's remarks). <see cref="ScribeQuestWatcher"/> keeps its own by-code lookup of these for
-/// progress mirroring; <see cref="ToPickerEntry"/> projects the display-only fields a picker needs.
-/// <see cref="IsServerScoped"/> tells the watcher which shared-state source to read for this code
-/// — it is not rendered, only consumed by detection.</summary>
+/// <summary>One PF quest's catalog entry, richer than the picker's <see cref="ScribeQuestCatalogEntry"/>;
+/// <see cref="ToPickerEntry"/> projects the display fields. <see cref="IsServerScoped"/> tells
+/// <see cref="ScribeQuestWatcher"/> which shared-state source to read; it is not rendered.</summary>
 internal readonly record struct ScribeProgressionFrameworkQuestEntry(
     string QuestCode, string Title, string? Description, IReadOnlyList<ScribePfObjectiveDef> Objectives,
     bool IsServerScoped)
@@ -38,33 +30,18 @@ internal readonly record struct ScribeProgressionFrameworkQuestEntry(
 }
 
 /// <summary>
-/// Reads the installed Progression Framework mod's static <c>config/quests/*.json</c> catalog — the second,
-/// independently-gated Quest Link backend. Mirrors
-/// <see cref="ScribeQuestCatalog"/>'s shape (soft-dependency, no reflection, no compiled reference,
-/// <see cref="IsAvailable"/>-gated shared-asset-system read) but reads Progression Framework's own JSON
-/// schema (<c>code</c>, <c>npc</c>, <c>scope</c>, <c>*LangKey</c>, <c>objectives[]</c>, <c>rewards[]</c>,
-/// <c>prerequisites[]</c> — verified against Seafarer's real quest files, decompiled in
-/// <c>reference/ProgressionInvestigations/</c>, gitignored) rather than vsquest's.
+/// Reads the installed Progression Framework mod's static <c>config/quests/*.json</c> catalog, the second
+/// Quest Link backend. Like <see cref="ScribeQuestCatalog"/> it is a soft dependency with no reflection or
+/// compiled reference (gated by <see cref="IsAvailable"/>), but it reads PF's own JSON schema.
 ///
-/// <para>Both player- and server-scoped quests are surfaced:
-/// a server-scoped quest is one shared instance every player contributes to together, with no per-player
-/// state of its own — <see cref="ScribeProgressionFrameworkQuestEntry.IsServerScoped"/> records which shared-
-/// state source <see cref="ScribeQuestWatcher"/> must read for it (the player's own <c>WatchedAttributes</c>
-/// tree for a player-scoped code, a reflected read of the mod's shared server-quest state for a server-scoped
-/// one). Progression Framework's own <c>QuestScope</c> enum defaults to Player when a quest's JSON omits
-/// <c>"scope"</c> entirely (confirmed against the decompiled <c>Quest</c>/<c>QuestScope</c> source) — real
-/// Seafarer data relies on this: most of its quests omit the field rather than writing
-/// <c>"scope": "player"</c> explicitly, so this reader treats an absent/blank scope as player-scoped, and
-/// only an explicit <c>"server"</c> as server-scoped.</para>
+/// <para>A server-scoped quest is one shared instance; <see cref="ScribeProgressionFrameworkQuestEntry.IsServerScoped"/>
+/// tells <see cref="ScribeQuestWatcher"/> which state source to read. PF defaults an omitted <c>"scope"</c> to
+/// Player (real Seafarer data relies on this), so an absent/blank scope is player-scoped and only an explicit
+/// <c>"server"</c> is server-scoped.</para>
 ///
-/// <para>Title/description resolve via each quest's own <c>titleLangKey</c>/<c>descriptionLangKey</c> —
-/// unlike vsquest's fixed <c>{id}-title</c>/<c>{id}-desc</c> convention, PF quests carry their own lang key
-/// directly in the catalog JSON. Both the quest <c>code</c> and its lang keys may be written BARE (no
-/// domain prefix) in the JSON — confirmed against real Seafarer files (e.g. <c>"code": "dawnmarie-orchard"</c>)
-/// and against PF's own loader (<c>QuestSystem.LoadQuests</c>'s <c>PrefixIfBare</c>), which prefixes a bare
-/// code/lang-key with the ASSET'S OWN domain at load time (never the requesting mod's). This reader
-/// replicates that exact prefixing so a picker-created Link's stored code matches what later shows up in
-/// the player's own <c>WatchedAttributes</c> tree verbatim.</para>
+/// <para>Titles/descriptions come from each quest's own lang keys. The quest <c>code</c> and lang keys may be
+/// BARE; PF's loader prefixes them with the ASSET'S OWN domain, and this reader replicates that exactly so a
+/// Link's stored code matches the player's <c>WatchedAttributes</c> tree verbatim.</para>
 /// </summary>
 internal static class ScribeProgressionFrameworkQuestCatalog
 {
@@ -74,29 +51,21 @@ internal static class ScribeProgressionFrameworkQuestCatalog
     /// <summary>Whether the Quest Link option should offer Progression Framework entries at all.</summary>
     public static bool IsAvailable(ICoreClientAPI capi) => capi.ModLoader.IsModEnabled(ModId);
 
-    /// <summary>The stable <c>ToggleKeyCombinationCode</c> Progression Framework's <c>GuiDialogLedger</c>
-    /// overrides publicly — matches the reflection-free dialog-lookup pattern already used for the
-    /// base-game Handbook (<c>VSAPI-NOTES.md</c>): scan <see cref="IGuiAPI.LoadedGuis"/> for the dialog
-    /// whose <c>ToggleKeyCombinationCode</c> equals this string, rather than referencing the type.</summary>
+    /// <summary>The public <c>ToggleKeyCombinationCode</c> of PF's <c>GuiDialogLedger</c>; the dialog is found
+    /// by scanning <see cref="IGuiAPI.LoadedGuis"/> for it rather than referencing the type.</summary>
     private const string LedgerToggleCode = "progressionframeworkledger";
 
-    /// <summary>Name of <c>GuiDialogLedger</c>'s private <c>currentTab</c> field and the enum member it must
-    /// be set to for the click to land on the Quest Log (not Training) tab — verified against the
-    /// decompiled source (<c>reference/ProgressionInvestigations/</c>): a private nested
-    /// <c>enum LedgerTab { Training, QuestLog }</c> field, defaulting to Training.</summary>
+    /// <summary><c>GuiDialogLedger</c>'s private <c>currentTab</c> field (a nested <c>enum LedgerTab
+    /// { Training, QuestLog }</c>, default Training) and the member to set so the dialog opens on the Quest Log.</summary>
     private const string CurrentTabFieldName = "currentTab";
     private const string QuestLogTabName = "QuestLog";
 
-    /// <summary>Cached once resolved; <see langword="null"/> forever once tab-forcing self-disables
-    /// (mirrors <see cref="ScribeQuestWatcher"/>'s self-disabling reflection posture).</summary>
+    /// <summary>Cached once resolved; tab-forcing self-disables permanently on failure.</summary>
     private static FieldInfo? currentTabField;
     private static bool tabReflectionDisabled;
 
-    /// <summary>Open Progression Framework's own Quest Log dialog (<c>GuiDialogLedger</c>), landed on its
-    /// Quest Log tab, via <see cref="IGuiAPI.LoadedGuis"/> + the dialog's own public <c>TryOpen()</c> — no
-    /// reflection for the open itself, matching the base-game Handbook's zero-reflection lookup. Returns
-    /// false (no-op) when the dialog isn't registered (Progression Framework not installed, or not yet
-    /// loaded), matching the existing "orphaned Quest Link" no-op behavior for a missing target.</summary>
+    /// <summary>Opens PF's Quest Log dialog on its Quest Log tab (no reflection for the open itself). Returns
+    /// false (no-op) when the dialog isn't registered.</summary>
     public static bool TryOpenQuestLog(ICoreClientAPI capi)
     {
         var dialog = capi.Gui.LoadedGuis.FirstOrDefault(d => d?.ToggleKeyCombinationCode == LedgerToggleCode);
@@ -107,13 +76,9 @@ internal static class ScribeProgressionFrameworkQuestCatalog
         return true;
     }
 
-    /// <summary>Best-effort reflected write of <c>GuiDialogLedger</c>'s private <see cref="CurrentTabFieldName"/>
-    /// field to its <see cref="QuestLogTabName"/> enum value, before <see cref="TryOpenQuestLog"/> calls
-    /// <c>TryOpen()</c> (which internally recomposes from current state). Wrapped in try/catch: any failure
-    /// (field renamed/retyped by a Progression Framework update) permanently disables this step for the
-    /// session and is logged once — the plain, zero-reflection open in <see cref="TryOpenQuestLog"/> still
-    /// happens regardless, so a reflection failure never degrades to "click does nothing," only to
-    /// "opens on whichever tab the player last had."</summary>
+    /// <summary>Best-effort reflected write of <see cref="CurrentTabFieldName"/> to <see cref="QuestLogTabName"/>
+    /// before <c>TryOpen()</c> recomposes. Any failure (field renamed by a PF update) disables this step for the
+    /// session and is logged once; the dialog still opens, possibly on the wrong tab.</summary>
     private static void ForceQuestLogTab(ICoreClientAPI capi, GuiDialog dialog)
     {
         if (tabReflectionDisabled) return;
@@ -134,15 +99,14 @@ internal static class ScribeProgressionFrameworkQuestCatalog
         }
     }
 
-    /// <summary>Every player-scoped quest in the installed catalog, titled and sorted for a picker. Empty
-    /// (never null/throws) when the mod isn't installed or its catalog fails to parse.</summary>
+    /// <summary>Every quest in the installed catalog, titled and sorted for a picker. Empty (never null/throws)
+    /// when the mod isn't installed or its catalog fails to parse.</summary>
     public static IReadOnlyList<ScribeProgressionFrameworkQuestEntry> ReadCatalog(ICoreClientAPI capi)
     {
         if (!IsAvailable(capi)) return Array.Empty<ScribeProgressionFrameworkQuestEntry>();
         try
         {
-            // One RawQuest object per asset file — matches QuestSystem.LoadQuests's own shape
-            // (JToken.Parse(...).ToObject<Quest>() per file), NOT a JSON array of quests per file.
+            // One RawQuest object per asset file, NOT an array per file (matches PF's own loader).
             var byLocation = capi.Assets.GetMany<RawQuest>(capi.Logger, "config/quests", null);
             var result = new List<ScribeProgressionFrameworkQuestEntry>();
             foreach (var (location, q) in byLocation)
@@ -170,10 +134,8 @@ internal static class ScribeProgressionFrameworkQuestCatalog
         }
     }
 
-    /// <summary>Mirrors PF's own <c>QuestSystem.PrefixIfBare</c> exactly: a code/lang-key already containing
-    /// a domain (<c>:</c>) is left untouched; a bare one is prefixed with <paramref name="domain"/> — the
-    /// asset's own domain, not necessarily <see cref="ModId"/> (a third-party quest pack contributes assets
-    /// under its own domain).</summary>
+    /// <summary>Mirrors PF's <c>QuestSystem.PrefixIfBare</c>: a key containing <c>:</c> is untouched; a bare one
+    /// gets the asset's own <paramref name="domain"/> (not necessarily <see cref="ModId"/>).</summary>
     private static string? PrefixIfBare(string? key, string domain)
         => string.IsNullOrEmpty(key) || key.Contains(':') ? key : domain + ":" + key;
 
@@ -187,10 +149,8 @@ internal static class ScribeProgressionFrameworkQuestCatalog
             .ToList();
     }
 
-    /// <summary>The objective's delivery item code, when its <c>items</c> list resolves to exactly one
-    /// concrete item with no alternates — null for a
-    /// multi-item/alternates delivery or a non-item objective type (kill/interact/etc.), which then renders
-    /// as a captured label instead (see <see cref="ScribePfObjectiveDef.Label"/>).</summary>
+    /// <summary>The delivery item code when <c>items</c> is exactly one item with no alternates; otherwise null
+    /// (the objective renders as <see cref="ScribePfObjectiveDef.Label"/>).</summary>
     private static string? ResolveSingleItemCode(RawObjective o)
     {
         if (o.Items is not { Count: 1 }) return null;
@@ -199,10 +159,8 @@ internal static class ScribeProgressionFrameworkQuestCatalog
         return string.IsNullOrEmpty(item.Item) ? null : item.Item;
     }
 
-    /// <summary>Formats a Progression Framework quest's per-objective status as "N of M
-    /// objectives complete" for a multi-objective quest, or the bare status word for a single-objective one
-    /// (the requirement's "accept/complete state only, without needing an aggregate count" scenario). Null
-    /// when there's nothing to show (no cataloged objectives, or none read from the attribute tree yet).</summary>
+    /// <summary>"N of M objectives complete" for a multi-objective quest, the bare status word for a
+    /// single-objective one; null when there's nothing to show.</summary>
     public static string? FormatProgress(
         IReadOnlyList<ScribePfObjectiveDef> objectives, IReadOnlyDictionary<string, string> statusByCode)
     {
@@ -215,16 +173,14 @@ internal static class ScribeProgressionFrameworkQuestCatalog
                 : null;
         }
 
-        // "completed" — matches QuestSystem's own objective-tree status string exactly (confirmed against
-        // the decompiled source: GetOrAddObjectiveTree seeds "pending", CompleteObjective writes "completed").
+        // "completed" is the status string PF's objective tree writes (it seeds "pending").
         int complete = objectives.Count(o =>
             statusByCode.TryGetValue(o.Code, out string? status)
             && string.Equals(status, "completed", StringComparison.OrdinalIgnoreCase));
         return Lang.Get("scribe:scribe-questobjective-pf-aggregate", complete, objectives.Count);
     }
 
-    /// <summary>The fields this reader needs from a PF quest catalog entry — mirrors Progression
-    /// Framework's own <c>Quest</c> JSON shape without referencing that mod's assembly.</summary>
+    /// <summary>PF's <c>Quest</c> JSON shape, without referencing that mod's assembly.</summary>
     private sealed class RawQuest
     {
         [JsonProperty("code")]
@@ -252,21 +208,14 @@ internal static class ScribeProgressionFrameworkQuestCatalog
         public List<string>? Prerequisites { get; set; }
     }
 
-    /// <summary>Mirrors Progression Framework's own <c>Objective</c> JSON shape. <see cref="Type"/>/
-    /// <see cref="Pattern"/> describe how PF itself validates delivery/kill/etc. progress and have no bearing
-    /// on Scribe's read-only progress mirroring (which reads PF's own already-computed status rather than
-    /// re-deriving it) — read but unused here.
+    /// <summary>PF's <c>Objective</c> JSON shape. <see cref="Type"/>/<see cref="Pattern"/> are read but unused
+    /// (Scribe mirrors PF's already-computed status).
     ///
-    /// <para><see cref="Items"/> mirrors PF's own <c>QuestItemRequirement</c> shape
-    /// (<c>reference/ProgressionInvestigations/progressionframework-decompiled/ProgressionFramework.Quests/
-    /// QuestItemRequirement.cs</c>, confirmed by decompile): <c>{ item, quantity, alternates }</c>, a JSON
-    /// ARRAY of OBJECTS, not strings. Typing it as <c>List&lt;string&gt;</c> would throw for every real
-    /// Seafarer delivery objective and silently drop the whole containing quest file from the catalog
-    /// (Newtonsoft can't convert a JSON object into a string). Delivery objectives'
-    /// items resolve for <see cref="ScribePfObjectiveDef.ItemCode"/> through the correctly typed shape.</para>
-    /// <see cref="Title"/> is PF's own raw display text (not a lang key — confirmed against the decompiled
-    /// <c>LedgerQuestLogTab.ComposeObjective</c>, which shows it verbatim, falling back to <c>Code</c>), used
-    /// as <see cref="ScribePfObjectiveDef.Label"/> for a non-item objective.</summary>
+    /// <para><see cref="Items"/> is a JSON array of OBJECTS (<c>{ item, quantity, alternates }</c>), not strings;
+    /// typing it as <c>List&lt;string&gt;</c> would throw and silently drop every quest file with a delivery
+    /// objective from the catalog.</para>
+    /// <see cref="Title"/> is PF's raw display text (not a lang key), used as
+    /// <see cref="ScribePfObjectiveDef.Label"/> for a non-item objective.</summary>
     private sealed class RawObjective
     {
         [JsonProperty("code")]
@@ -288,10 +237,8 @@ internal static class ScribeProgressionFrameworkQuestCatalog
         public string? Pattern { get; set; }
     }
 
-    /// <summary>Mirrors Progression Framework's own <c>QuestItemRequirement</c> shape exactly (see
-    /// <see cref="RawObjective.Items"/>'s remarks). <see cref="Quantity"/> is read but unused — Scribe shows
-    /// the OBJECTIVE's own <c>required</c> count (already the delivery target Progression Framework itself
-    /// enforces), not a second per-item quantity.</summary>
+    /// <summary>PF's <c>QuestItemRequirement</c> shape (see <see cref="RawObjective.Items"/>).
+    /// <see cref="Quantity"/> is unused: Scribe shows the objective's own <c>required</c> count.</summary>
     private sealed class RawItemRequirement
     {
         [JsonProperty("item")]

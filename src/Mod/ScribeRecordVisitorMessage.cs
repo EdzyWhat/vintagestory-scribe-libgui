@@ -2,9 +2,8 @@ using ProtoBuf;
 
 namespace Scribe;
 
-/// <summary>Client → server: notify the server that this client has opened a Lectern GUI. The server
-/// records the visiting player and the in-game date, then syncs the updated guestbook back.
-/// Addressed by <see cref="DocIdBytes"/> (replacing the former PosX/Y/Z fields).</summary>
+/// <summary>Client → server: this client opened a Lectern GUI. The server records the visitor and in-game
+/// date, then syncs the guestbook back.</summary>
 [ProtoContract]
 public sealed class ScribeRecordVisitorMessage
 {

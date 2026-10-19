@@ -7,9 +7,8 @@ using Scribe.Core;           // ScribeBlockKind
 namespace Scribe;
 
 /// <summary>
-/// Read View's five filter-pill categories (read-view-filter-pills). <c>Active</c>/<c>Completed</c>/
-/// <c>Other</c> are mutually exclusive per row (design.md's Decision); <c>Pinned</c> is independent and
-/// may co-occur with either. <c>All</c> applies no filtering.
+/// Read View's five filter-pill categories. <c>Active</c>/<c>Completed</c>/<c>Other</c> are mutually
+/// exclusive per row; <c>Pinned</c> is independent and may co-occur with either. <c>All</c> applies no filtering.
 /// </summary>
 internal enum ReadViewFilterCategory
 {
@@ -20,9 +19,8 @@ internal enum ReadViewFilterCategory
     Other,
 }
 
-/// <summary>How a row renders under the active filter pill (read-view-subtask-collapse): fully visible,
-/// visible-but-deemphasized ("shadow" — shown only for its subtask group's context), or removed from the
-/// rendered list entirely.</summary>
+/// <summary>How a row renders under the active filter pill: fully visible, deemphasized ("shadow", shown only
+/// for its subtask group's context), or removed from the rendered list.</summary>
 internal enum ReadRowVisibility
 {
     Hidden,
@@ -31,12 +29,8 @@ internal enum ReadRowVisibility
 }
 
 /// <summary>
-/// Pure Mod-layer helpers for the Read View filter-pill row and subtask-group collapse toggle — no
-/// Vintage Story API dependency, so these are covered by ordinary unit tests. Operates directly over the
-/// already-resolved <see cref="ScribeReadRowData"/> list a dialog builds for <c>ScribeReadContent</c>,
-/// mirroring <see cref="ScribeDocument.OwnedRun"/> (Core) but over that rendered snapshot rather than the
-/// live document, since the row list already carries <see cref="ScribeReadRowData.Depth"/>/<see
-/// cref="ScribeReadRowData.Done"/>/<see cref="ScribeReadRowData.Pinned"/>.
+/// Pure helpers (no Vintage Story API) for the Read View filter pills and subtask-group collapse, operating
+/// over the resolved <see cref="ScribeReadRowData"/> snapshot rather than the live document.
 /// </summary>
 internal static class ScribeReadViewFilter
 {
@@ -47,14 +41,10 @@ internal static class ScribeReadViewFilter
     public static IReadOnlyList<ReadViewFilterCategory> AllPills => SelectablePills;
 
     /// <summary>
-    /// The set of filter categories a row matches, given its block kind, completion state, and the
-    /// viewing player's pin state (read-view-filter-pills' block-kind-mapping requirement).
-    /// <see cref="ReadViewFilterCategory.All"/> is always included, so callers can test membership
-    /// uniformly (including for the All pill) without a special case. <c>Text</c>/<c>QuestObjective</c>
-    /// always match <see cref="ReadViewFilterCategory.Other"/>; every other kind matches
-    /// <see cref="ReadViewFilterCategory.Active"/> or <see cref="ReadViewFilterCategory.Completed"/> by
-    /// its Done flag. <see cref="ReadViewFilterCategory.Pinned"/> is added independently when
-    /// <paramref name="pinned"/> is true, so a pinned+completed row matches both.
+    /// The filter categories a row matches. <see cref="ReadViewFilterCategory.All"/> is always included.
+    /// <c>Text</c>/<c>QuestObjective</c> match <see cref="ReadViewFilterCategory.Other"/>; every other kind
+    /// matches Active or Completed by its Done flag. Pinned is added independently, so a pinned+completed row
+    /// matches both.
     /// </summary>
     public static IReadOnlySet<ReadViewFilterCategory> CategoriesFor(ScribeBlockKind kind, bool done, bool pinned)
     {
@@ -66,22 +56,17 @@ internal static class ScribeReadViewFilter
         return categories;
     }
 
-    /// <summary>Whether <paramref name="row"/> individually matches <paramref name="category"/> — the
-    /// "normal opacity" / "counts toward the pill" predicate everywhere below.</summary>
+    /// <summary>Whether <paramref name="row"/> individually matches <paramref name="category"/>.</summary>
     public static bool Matches(ScribeReadRowData row, ReadViewFilterCategory category) =>
         CategoriesFor(row.Kind, row.Done, row.Pinned).Contains(category);
 
-    /// <summary>The bracketed count a pill shows (read-view-filter-pills: "shown only when > 0"). Counts
-    /// only rows that INDIVIDUALLY match — a shadow row rendered solely for its group's context never
-    /// inflates any pill's count (read-view-subtask-collapse's shadow-count requirement), because that
-    /// requirement is independent of visibility/grouping entirely: it is simply never counted here.</summary>
+    /// <summary>The count a pill shows. Counts only rows that INDIVIDUALLY match, so a shadow row shown for
+    /// group context never inflates a count.</summary>
     public static int CountFor(IReadOnlyList<ScribeReadRowData> rows, ReadViewFilterCategory category) =>
         rows.Count(r => Matches(r, category));
 
-    /// <summary>Lang key + pill color for a category, mirroring
-    /// <see cref="ScribeAssignmentFilterGroups.LabelAndColor"/>'s shape but this feature's own distinct
-    /// category set and color aliases (design.md's Decision: All→NavActiveSettings, Completed→NavActiveRead,
-    /// Active→NavActivePinned, Pinned→NavActiveTranscribe, Other→NavActiveGuestbook).</summary>
+    /// <summary>Lang key + pill color for a category; same shape as
+    /// <see cref="ScribeAssignmentFilterGroups.LabelAndColor"/>.</summary>
     public static (string LangKey, Vector4 Color) LabelAndColor(ReadViewFilterCategory category) => category switch
     {
         ReadViewFilterCategory.All       => ("scribe:scribe-read-filter-all", ScribeRowConstants.ReadFilterAll),
@@ -93,10 +78,9 @@ internal static class ScribeReadViewFilter
     };
 
     /// <summary>
-    /// The contiguous depth-1 run owned by <paramref name="rows"/>[<paramref name="parentIndex"/>]:
-    /// half-open <c>[start, end)</c>, mirroring <see cref="ScribeDocument.OwnedRun"/> exactly but over this
-    /// already-rendered row snapshot. An invalid index or a parent with no following depth-1
-    /// rows yields an empty run (<c>start == end</c>).
+    /// The contiguous depth-1 run owned by <paramref name="rows"/>[<paramref name="parentIndex"/>] as half-open
+    /// <c>[start, end)</c>, mirroring <see cref="ScribeDocument.OwnedRun"/>. An invalid index or no following
+    /// depth-1 rows yields an empty run.
     /// </summary>
     public static (int Start, int End) OwnedRun(IReadOnlyList<ScribeReadRowData> rows, int parentIndex)
     {
@@ -108,20 +92,14 @@ internal static class ScribeReadViewFilter
     }
 
     /// <summary>
-    /// Computes each row's rendered <see cref="ReadRowVisibility"/> under the active filter pill and the
-    /// current collapse set, per read-view-subtask-collapse's rules:
+    /// Computes each row's <see cref="ReadRowVisibility"/> under the active pill and collapse set:
     /// <list type="number">
-    /// <item>a subtask group (a depth-0 parent + its owned run) is a unit for FILTER visibility — hidden
-    /// entirely unless at least one member individually matches;</item>
-    /// <item>within a visible group, each member's opacity (Normal/Shadow) depends only on whether THAT
-    /// member individually matches — independent of collapse state;</item>
-    /// <item>collapsing only removes the owned run's rows from the render list; the parent's own
-    /// visibility/opacity is unaffected and still reflects a matching hidden child;</item>
-    /// <item>under <see cref="ReadViewFilterCategory.All"/>, every row is Normal (never Hidden/Shadow),
-    /// since <see cref="Matches"/> is always true for it.</item>
+    /// <item>a subtask group (depth-0 parent + owned run) is hidden entirely unless a member individually matches;</item>
+    /// <item>within a visible group, a member is Normal/Shadow by whether THAT member matches, independent of collapse;</item>
+    /// <item>collapsing only removes the owned run; the parent's visibility is unaffected;</item>
+    /// <item>under All, every row is Normal.</item>
     /// </list>
-    /// A depth-1 row with no preceding depth-0 parent (not reachable through normal editing, per
-    /// task-subtasks' invariants) is defensively treated as its own standalone group of one.
+    /// An orphaned depth-1 row is defensively treated as its own group of one.
     /// </summary>
     public static IReadOnlyDictionary<Guid, ReadRowVisibility> ComputeVisibility(
         IReadOnlyList<ScribeReadRowData> rows,
@@ -134,7 +112,6 @@ internal static class ScribeReadViewFilter
         {
             if (rows[i].Depth != 0)
             {
-                // Defensive: an orphaned depth-1 row is its own singleton group.
                 result[rows[i].TaskId] = Matches(rows[i], activeCategory) ? ReadRowVisibility.Normal : ReadRowVisibility.Shadow;
                 i++;
                 continue;
@@ -169,9 +146,8 @@ internal static class ScribeReadViewFilter
         return result;
     }
 
-    /// <summary>Packs a set of group-parent TaskIds into a flat byte blob (16 bytes each), for the
-    /// same tree-attribute/ItemStack-attribute storage shape the document codec's other byte fields use.
-    /// Order is not preserved (a set has none); <see cref="DeserializeGuidSet"/> rebuilds an equivalent set.</summary>
+    /// <summary>Packs group-parent TaskIds into a flat blob (16 bytes each). Order is not preserved;
+    /// <see cref="DeserializeGuidSet"/> rebuilds an equivalent set.</summary>
     public static byte[] SerializeGuidSet(IReadOnlyCollection<Guid> ids)
     {
         var bytes = new byte[ids.Count * 16];
@@ -184,9 +160,8 @@ internal static class ScribeReadViewFilter
         return bytes;
     }
 
-    /// <summary>Inverse of <see cref="SerializeGuidSet"/>. A null/short/malformed-length blob (e.g. an
-    /// absent attribute on a pre-existing save) yields an empty set — fully expanded, per the
-    /// "defaults to expanded" persistence requirement.</summary>
+    /// <summary>Inverse of <see cref="SerializeGuidSet"/>. A null/short blob (e.g. absent attribute) yields an
+    /// empty set, i.e. fully expanded.</summary>
     public static HashSet<Guid> DeserializeGuidSet(byte[]? bytes)
     {
         var result = new HashSet<Guid>();
@@ -198,22 +173,16 @@ internal static class ScribeReadViewFilter
         return result;
     }
 
-    /// <summary>Whether a Read View refresh should accept the host's persisted filter-pill mirror
-    /// (read-view-collapse-affordance-fixes' pending-until-confirmed guard). <paramref name="pending"/> is
-    /// the category the local player just selected but hasn't yet seen echoed back by the server, or
-    /// <c>null</c> if no local selection is in flight. The mirror is accepted whenever nothing is pending
-    /// (an ordinary resync — e.g. another player's change) or once it catches up to exactly the pending
-    /// value (this player's own round trip landing); it is rejected while a pending pick is still stale, so
-    /// a row mutation's synchronous refresh (e.g. completing a task) can never stomp a just-made pill
-    /// selection back to an older mirror value.</summary>
+    /// <summary>Whether a Read View refresh should accept the host's persisted filter-pill mirror.
+    /// <paramref name="pending"/> is the local pick not yet echoed back by the server (or <c>null</c>). The
+    /// mirror is accepted when nothing is pending or once it equals the pending value, and rejected while
+    /// stale so a synchronous refresh can't stomp a just-made selection.</summary>
     public static bool ShouldAcceptHostFilterCategory(ReadViewFilterCategory? pending, ReadViewFilterCategory hostValue) =>
         pending is null || pending.Value == hostValue;
 
-    /// <summary>The collapse-set counterpart of <see cref="ShouldAcceptHostFilterCategory"/>: whether a
-    /// Read View refresh should accept the host's persisted collapsed-group mirror, given
-    /// <paramref name="pending"/> — a snapshot of the local collapse set taken right after the player's
-    /// last toggle, or <c>null</c> if none is in flight — compared against the host's current mirror
-    /// <paramref name="hostValue"/> by set membership, not reference or order.</summary>
+    /// <summary>The collapse-set counterpart of <see cref="ShouldAcceptHostFilterCategory"/>:
+    /// <paramref name="pending"/> is a snapshot of the local set after the last toggle (or <c>null</c>),
+    /// compared to <paramref name="hostValue"/> by set membership.</summary>
     public static bool ShouldAcceptHostCollapsedGroupIds(IReadOnlySet<Guid>? pending, IReadOnlyCollection<Guid> hostValue) =>
         pending is null || pending.SetEquals(hostValue);
 }

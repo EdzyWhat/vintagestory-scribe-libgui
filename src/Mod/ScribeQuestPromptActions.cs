@@ -13,28 +13,22 @@ using Vintagestory.API.Config;    // Lang
 namespace Scribe;
 
 /// <summary>
-/// Shared "Link / Dismiss / Settings" action-button rendering + the 0/1/2+ Accept-destination-picker
-/// rule for a quest accept/completion prompt — used identically
-/// by the HUD banner (<see cref="HudScribePins"/>) and the center-screen modal
-/// (<see cref="GuiDialogScribeQuestPrompt"/>) so the two presentation styles' button colors and behavior
-/// can never drift apart. Pure widget composition — no game-state reads beyond what's passed in.
+/// Shared "Link / Dismiss / Settings" action buttons + the 0/1/2+ Accept-destination-picker rule for a quest
+/// prompt, used by both the HUD banner (<see cref="HudScribePins"/>) and the modal
+/// (<see cref="GuiDialogScribeQuestPrompt"/>) so their behavior can't drift apart. Pure widget composition.
 /// </summary>
 internal static class ScribeQuestPromptActions
 {
-    /// <summary>A single bordered, tinted-fill action button in one of the three named accent colors
+    /// <summary>A bordered, tinted-fill action button in one of the prompt accent colors
     /// (<see cref="ScribeRowConstants.QuestPromptLinkColor"/>/<see cref="ScribeRowConstants.QuestPromptDismissColor"/>/
     /// <see cref="ScribeRowConstants.QuestPromptSettingsColor"/>). Built on the stock
-    /// <see cref="Gui.Widgets.Basic.Button"/>, so the stock widget's hard-coded downward hover box-shadow
-    /// (see VSAPI-NOTES.md's LibGUI section) is an accepted quirk here rather than a duplicated button
-    /// implementation.</summary>
+    /// <see cref="Gui.Widgets.Basic.Button"/>, so its hard-coded downward hover box-shadow is accepted.</summary>
     public static Widget AccentButton(
         string label, Vector4 accent, float fontSize, Action? onTap, bool enabled = true,
         Vector4? textColor = null, float? glowWidth = null, Vector4? glowColor = null)
     {
         var variantStyle = new ButtonVariantStyle
         {
-            // Fill alpha per interaction state: solid enough that the buttons read as filled rather than
-            // a faint tint, which is why the label text below has a decoupled color option.
             BackgroundColor = accent with { W = enabled ? 0.29f : 0.05f },
             HoverBackgroundColor = accent with { W = enabled ? 0.48f : 0.05f },
             PressBackgroundColor = accent with { W = enabled ? 0.68f : 0.05f },
@@ -43,11 +37,8 @@ internal static class ScribeQuestPromptActions
             CornerRadius = 4f,
         };
         Vector4 resolvedTextColor = textColor ?? accent;
-        // NOTE (LibGUI 3.1.0 landmine — VSAPI-NOTES.md "DefaultTextStyle + TextStyle.Merge"): a
-        // TextStyle.Color of exactly Vector4.One (pure opaque white) is Merge's "unset" sentinel and
-        // silently inherits whatever ancestor DefaultTextStyle is in scope instead of applying — do NOT
-        // pass pure white here. Callers that want "the standard HUD text color" should pass the HUD's
-        // own near-white row-text constant (never exactly (1,1,1,1)) rather than white.
+        // LibGUI 3.1.0: a TextStyle.Color of exactly Vector4.One is Merge's "unset" sentinel and silently
+        // inherits the ancestor DefaultTextStyle, so never pass pure white here (use a near-white constant).
         return new Gui.Widgets.Basic.Button(
             child: new Gui.Widgets.Basic.Text(label, new TextStyle
             {
@@ -62,13 +53,9 @@ internal static class ScribeQuestPromptActions
             enabled: enabled);
     }
 
-    /// <summary>The Link action for a prompt: a disabled button + tooltip (0 eligible carried Scribe
-    /// documents — nothing to place onto), a direct Link button (a completion-prompt, which has no
-    /// destination to choose, or exactly 1 candidate), or a two-step tap revealing a candidate picker
-    /// dropdown above the button (2+ candidates) — mirrors the Inbox Accept control /
-    /// <c>GuiDialogTaskNotice</c>'s own Accept shape.
-    /// Returns the picker widget (or null when not shown) and the button separately so each host lays
-    /// them out in its own structure.</summary>
+    /// <summary>The Link action: disabled button + tooltip (0 candidates), a direct button (completion prompt
+    /// or exactly 1 candidate), or a two-step tap revealing a picker dropdown (2+ candidates). Returns the
+    /// picker (null when not shown) and button separately so each host lays them out itself.</summary>
     public static (Widget? Picker, Widget Button) BuildLinkControl(
         ScribeQuestPrompt prompt,
         IReadOnlyList<ScribeAcceptCandidate> candidates,
@@ -91,9 +78,7 @@ internal static class ScribeQuestPromptActions
 
         if (candidates.Count == 0)
         {
-            // The disabled/no-candidates treatment uses disabledTextColor as its own accent (a muted,
-            // neutral look distinct from the green accept accent) — it deliberately does NOT take the
-            // decoupled textColor/glow above, which is tuned for the enabled green button's fill.
+            // Deliberately ignores textColor/glow, which are tuned for the enabled button's fill.
             Widget disabled = AccentButton(label, disabledTextColor, fontSize, null, enabled: false);
             Widget tipped = new Tooltip(
                 child: disabled,

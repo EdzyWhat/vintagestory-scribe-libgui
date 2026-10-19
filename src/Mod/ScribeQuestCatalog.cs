@@ -10,79 +10,60 @@ using Vintagestory.API.Config;
 namespace Scribe;
 
 /// <summary>
-/// One entry from an installed quest mod's catalog, resolved for the Quest Link picker. <see cref="QuestCode"/> is the quest's own (already
-/// domain-qualified) id, e.g. <c>"vsquest:quest-freeghost"</c> — stored verbatim after the <c>"quest:"</c>
-/// prefix (<see cref="Scribe.Core.ScribeLinkTarget.ForQuest"/>), so a Layer 2 auto-detect correlation can
-/// compare against the exact same string later without re-deriving anything. <see cref="Source"/> is the
-/// backend mod that owns this entry (<see cref="Scribe.Core.ScribeQuestSource"/>), always recorded on the created Link so later
-/// resolution never has to guess which backend a quest code came from. <see cref="Objectives"/> is
-/// vsquest-specific (positional kill/place/break tracking) — a Progression Framework entry from
-/// <see cref="ScribeProgressionFrameworkQuestCatalog"/> always leaves it empty; its own per-objective
-/// progress is read by objective code, not by position, through
-/// <see cref="ScribeQuestWatcher"/>'s separate PF-specific surface. For vsquest, it includes the
-/// static gather objectives used by one-shot QuestObjective generation; live progress formatting
-/// filters those back out because vsquest exposes no gather counter.
+/// One entry from an installed quest mod's catalog, resolved for the Quest Link picker.
+/// <see cref="QuestCode"/> is the quest's own domain-qualified id (e.g. <c>"vsquest:quest-freeghost"</c>),
+/// stored verbatim after the <c>"quest:"</c> prefix (<see cref="Scribe.Core.ScribeLinkTarget.ForQuest"/>)
+/// so auto-detect can compare against the same string. <see cref="Source"/>
+/// (<see cref="Scribe.Core.ScribeQuestSource"/>) is always recorded on the created Link.
+/// <see cref="Objectives"/> is vsquest-specific (positional tracking) and always empty for a Progression
+/// Framework entry, which is read by objective code instead. It includes static gather objectives; live
+/// progress formatting filters those out because vsquest exposes no gather counter.
 /// </summary>
 internal readonly record struct ScribeQuestCatalogEntry(
     string Source, string QuestCode, string Title, string? Description,
     IReadOnlyList<ScribeQuestObjectiveDef> Objectives);
 
-/// <summary>Which vsquest tracker list an objective belongs to (for progress mirroring) — matches <c>VsQuest.ActiveQuest.trackerProgress()</c>'s fixed concatenation
-/// order (kill, then block-place, then block-break), which is how a live tracker count read off the
-/// open quest dialog lines up positionally with the static objective it belongs to. Gather is a
-/// static-only kind and has no corresponding live tracker count.</summary>
+/// <summary>Which vsquest tracker list an objective belongs to. Order matches
+/// <c>VsQuest.ActiveQuest.trackerProgress()</c>'s concatenation (kill, block-place, block-break), which is how
+/// live counts line up positionally with objectives. Gather is static-only (no live count).</summary>
 internal enum ScribeQuestObjectiveKind { Kill, BlockPlace, BlockBreak, Gather }
 
-/// <summary>One static objective definition (a required count of a matching entity/block code),
-/// paired positionally with a live <c>EventTracker.count</c> read off <c>VsQuest.ActiveQuest</c> by
-/// <see cref="ScribeQuestWatcher"/> to render "count/demand" progress. Gather objectives also
-/// live here for one-shot static criteria generation; <see cref="ScribeQuestCatalog.FormatProgress"/>
-/// excludes them from the positional live-count zip because vsquest exposes no gather counter.</summary>
+/// <summary>One static objective (a required count of a matching entity/block code), paired positionally
+/// with a live <c>EventTracker.count</c> by <see cref="ScribeQuestWatcher"/>. Gather objectives live here
+/// too; <see cref="ScribeQuestCatalog.FormatProgress"/> excludes them from the positional zip.</summary>
 internal readonly record struct ScribeQuestObjectiveDef(
     ScribeQuestObjectiveKind Kind, IReadOnlyList<string> ValidCodes, int Demand);
 
-/// <summary>An exact objective match resolved against the live game registries. <see cref="Code"/> is
-/// the objective's sole concrete match code, <see cref="DisplayName"/> is its localized player-facing
-/// name, and <see cref="HasItemStack"/> says whether the current QuestObjective row can render it with
-/// a real inventory icon. Entities resolve to a name and use the generic objective icon.</summary>
+/// <summary>An exact objective match resolved against the live registries. <see cref="HasItemStack"/> says
+/// whether the row can render a real inventory icon (entities use the generic objective icon).</summary>
 internal readonly record struct ScribeQuestObjectiveResolution(
     string Code, string DisplayName, bool HasItemStack);
 
 /// <summary>
-/// Reads the installed quest mod's static <c>config/quests/*.json</c> catalog ("Layer 1").
-/// Deliberately reflection- and dependency-free: unlike the Layer 2 soft auto-detect (which
-/// reaches into <c>VsQuest.QuestSelectGui</c> internals via Harmony/reflection), Layer 1 only needs
-/// the quest ids/titles/descriptions that <c>vsquest</c> itself loads from these same JSON assets — so it
-/// reads them itself with a tiny local DTO, never touching the vsquest assembly at all. This keeps the
-/// "no new mod dependencies" guardrail intact: <c>vsquest</c> is optional and gated purely on
-/// <see cref="IsAvailable"/> (<c>IsModEnabled</c>), the same pattern <c>ConfigLib</c> and
-/// <see cref="CarryOnBridge"/> use for their own soft dependencies.
+/// Reads the installed quest mod's static <c>config/quests/*.json</c> catalog. Reflection- and
+/// dependency-free: it parses the same JSON assets with a local DTO and never touches the vsquest assembly,
+/// gated only on <see cref="IsAvailable"/> (same soft-dependency pattern as <see cref="CarryOnBridge"/>).
 ///
-/// <para>Searches every installed mod's domain, not just <c>vsquest</c>'s own, mirroring how
-/// <c>VsQuest.QuestSystem.AssetsLoaded</c> itself scans every installed mod's domain — real quest content is
-/// always contributed by a separate dependent mod under its own domain (e.g. VS Village).</para>
+/// <para>Searches every installed mod's domain, as <c>VsQuest.QuestSystem.AssetsLoaded</c> does, because
+/// quest content comes from separate dependent mods under their own domains.</para>
 ///
-/// <para>Title/description are resolved via <c>Lang.Get(id + "-title"/"-desc")</c> — the catalog JSON
-/// carries no display text of its own (confirmed by decompiling <c>VsQuest.QuestSelectGui</c>). Captured
-/// once at picker-open time; the caller persists the resolved strings into the created Link block, which
-/// never re-reads this catalog (orphan-safe).</para>
+/// <para>Title/description come from <c>Lang.Get(id + "-title"/"-desc")</c> (the JSON carries no display
+/// text). They are captured once at picker-open and persisted into the created Link, which never re-reads
+/// this catalog (orphan-safe).</para>
 /// </summary>
 internal static class ScribeQuestCatalog
 {
     public const string VsQuestModId = "vsquest";
     private const string StaticObjectiveCodePrefix = "vsquest-objective-";
 
-    /// <summary>Whether a QuestObjective stable key belongs to the one-shot VS Quest catalog path.
-    /// The key survives in pin snapshots, so this remains available when the owning document is
-    /// unloaded.</summary>
+    /// <summary>Whether a QuestObjective stable key belongs to the VS Quest catalog path. Works from pin
+    /// snapshots, so it needs no loaded document.</summary>
     public static bool IsStaticObjectiveCode(string? code)
         => code?.StartsWith(StaticObjectiveCodePrefix, StringComparison.Ordinal) == true;
 
-    /// <summary>Formats live kill/block-place/block-break counts against their static objectives as a
-    /// compact "Kills 2/5 · Blocks placed 0/3" line, zipping the two lists positionally (index
-    /// <c>i</c> in one is objective/count <c>i</c> in the other — see <see cref="ScribeQuestObjectiveDef"/>'s
-    /// doc-comment). Null when either list is empty, so a caller can treat null as "nothing to show"
-    /// (no gather-objective progress is ever included here).</summary>
+    /// <summary>Formats live counts against their static objectives as "Kills 2/5 · Blocks placed 0/3",
+    /// zipping the lists positionally (see <see cref="ScribeQuestObjectiveDef"/>). Null when either list is
+    /// empty. Gather objectives are never included.</summary>
     public static string? FormatProgress(
         IReadOnlyList<ScribeQuestObjectiveDef> objectives, IReadOnlyList<int> counts)
     {
@@ -98,9 +79,8 @@ internal static class ScribeQuestCatalog
         return parts.Count == 0 ? null : string.Join(" · ", parts);
     }
 
-    /// <summary>Resolve an objective whose <c>validCodes</c> contains exactly one concrete code. Gather
-    /// objectives use the item registry, place/break use the block registry, and kill uses the entity
-    /// registry. Wildcards, alternate codes, malformed codes, and registry misses return null so the
+    /// <summary>Resolves an objective with exactly one concrete code (gather: item registry; place/break:
+    /// block; kill: entity). Wildcards, alternates, malformed codes and registry misses return null so the
     /// caller can use <see cref="FormatFallbackLabel"/>.</summary>
     public static ScribeQuestObjectiveResolution? ResolveExactObjective(
         ICoreClientAPI capi, ScribeQuestObjectiveDef objective)
@@ -141,9 +121,8 @@ internal static class ScribeQuestCatalog
     public static string FormatFallbackLabel(ScribeQuestObjectiveDef objective)
         => $"{KindLabel(objective.Kind)} {objective.Demand}";
 
-    /// <summary>Convert all modeled objectives into the Core reconciliation shape used by both manual
-    /// Quest Link creation and the accept-time auto-link message. The positional key is private to the
-    /// parent Link and only needs to distinguish siblings because VS Quest criteria are generated once.</summary>
+    /// <summary>Converts objectives into the Core reconciliation shape used by manual Link creation and the
+    /// accept-time auto-link. The positional key only needs to distinguish siblings under one parent.</summary>
     public static IReadOnlyList<(string Code, string? ItemCode, string? Label, int Required)>
         BuildStaticObjectives(ICoreClientAPI capi, IReadOnlyList<ScribeQuestObjectiveDef> objectives)
         => objectives.Select((objective, index) =>
@@ -162,12 +141,10 @@ internal static class ScribeQuestCatalog
         _ => Lang.Get("scribe:scribe-questobjective-gather"),
     };
 
-    /// <summary>Whether the Quest Link option should be offered at all.</summary>
     public static bool IsAvailable(ICoreClientAPI capi) => capi.ModLoader.IsModEnabled(VsQuestModId);
 
-    /// <summary>Every quest in the installed <c>vsquest</c> catalog, titled and sorted for a picker.
-    /// Empty (never null/throws) when vsquest isn't installed or its catalog fails to parse — a picker
-    /// with nothing to show is the caller's problem, not this reader's.</summary>
+    /// <summary>Every quest in the installed <c>vsquest</c> catalog, titled and sorted for a picker. Empty
+    /// (never null/throws) when vsquest isn't installed or its catalog fails to parse.</summary>
     public static IReadOnlyList<ScribeQuestCatalogEntry> ReadCatalog(ICoreClientAPI capi)
     {
         if (!IsAvailable(capi)) return Array.Empty<ScribeQuestCatalogEntry>();
@@ -192,10 +169,8 @@ internal static class ScribeQuestCatalog
         }
     }
 
-    /// <summary>Flattens a raw quest's modeled objective lists into one ordered list. The live-tracked
-    /// prefix stays in the SAME order <c>ActiveQuest.trackerProgress()</c> concatenates its counts (kill,
-    /// then place, then break). Gather follows that prefix because it is static-only; <see
-    /// cref="FormatProgress"/> also filters it explicitly before the positional zip.</summary>
+    /// <summary>Flattens objectives in the SAME order <c>ActiveQuest.trackerProgress()</c> concatenates counts
+    /// (kill, place, break), with static-only gather last.</summary>
     private static List<ScribeQuestObjectiveDef> BuildObjectives(RawQuest q)
     {
         var result = new List<ScribeQuestObjectiveDef>();
@@ -212,8 +187,7 @@ internal static class ScribeQuestCatalog
         return result;
     }
 
-    /// <summary>The fields this reader needs from a quest catalog entry — mirrors <c>VsQuest.Quest</c>'s
-    /// JSON shape without referencing that type/assembly.</summary>
+    /// <summary>Mirrors <c>VsQuest.Quest</c>'s JSON shape without referencing its assembly.</summary>
     private sealed class RawQuest
     {
         [JsonProperty("id")]
