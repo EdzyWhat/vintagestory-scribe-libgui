@@ -56,7 +56,16 @@ code stops adding history while the sweep runs.
 so a script (pipeline: sweep, verify, collect) is preferred over hand-launched agents. The merge and
 final full verification stay with the orchestrator.
 
-**Trim rubric given to every agent (moderate):**
+**8. Second, more aggressive pass for restating comments.** The first pass removed history (-93% of
+history-marker lines) but trimmed only ~4% of comment lines, because agents were conservative about
+comments that merely restate code. A second pass uses the same machinery (worktree per batch, IL
+verification, reviewer stage) with a tighter rubric aimed at restating comments: collapse long
+doc-comments to the contract, drop comments that repeat an identifier or the next statement, and cut
+design-rationale prose unless it carries a non-obvious live constraint. It is piloted on three
+representative batches first, with the cuts inspected before the remaining batches run. The reviewer
+stage is the guard against losing live constraints, and its "concerns" are resolved before merge.
+
+**Trim rubric given to every agent (moderate, first pass):**
 - Remove: dates, change names, spec/design IDs, commit hashes, playtest-round references, "used to /
   no longer / previously / regression" narration.
 - Remove: comments that only restate the adjacent code.
