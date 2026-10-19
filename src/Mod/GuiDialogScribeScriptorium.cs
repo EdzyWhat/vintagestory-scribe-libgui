@@ -22,7 +22,7 @@ namespace Scribe;
 /// mirroring <see cref="GuiDialogScribeLecternLibGui"/>. All view state, build methods, lock
 /// orchestration, autosave, title editing, scroll management, and nav-button layout live in the base
 /// class. For v1.2 the Scriptorium adds the Guestbook nav button (exactly like the Lectern) plus its own
-/// Scribe-items-only inventory tab (add-scriptorium-inventory). This subclass is also the v1.3 attachment
+/// Scribe-items-only inventory tab. This subclass is also the v1.3 attachment
 /// point for the Scriptorium-only Assign &amp; History and Inbox nav buttons.
 /// </summary>
 public sealed class GuiDialogScribeScriptorium : ScribeDialogBase
@@ -45,13 +45,13 @@ public sealed class GuiDialogScribeScriptorium : ScribeDialogBase
 
     /// <summary>The Scriptorium inventory slot indices. Slot 0 is the copy Original (source), slot 1 the copy
     /// Duplicate (target), and slot 2 the Import/Export source-and-target — the item a JSON/TSV export reads
-    /// from and an import writes onto (add-scriptorium-import-export). All three are real
+    /// from and an import writes onto. All three are real
     /// <see cref="BlockEntityScriptorium"/> slots watched by the same <see cref="slotController"/>.</summary>
     private const int SourceSlotIndex = 0;
     private const int TargetSlotIndex = 1;
     private const int ImportExportSlotIndex = 2;
 
-    /// <summary>The seal button's two-press overwrite-confirm state (add-transcribe-copy-paste D3). Held on
+    /// <summary>The seal button's two-press overwrite-confirm state. Held on
     /// the dialog (client-only UX); the server re-checks the overwrite gate regardless. Reset to
     /// <see cref="TranscribeConfirm.Idle"/> whenever a slot's contents change (see
     /// <see cref="EnsureSlotController"/>).</summary>
@@ -59,14 +59,14 @@ public sealed class GuiDialogScribeScriptorium : ScribeDialogBase
     private TranscribeConfirm confirmState = TranscribeConfirm.Idle;
 
     /// <summary>The Import button's own two-press overwrite-confirm state — the peer of <see cref="confirmState"/>
-    /// for the Import/Export slot (add-scriptorium-import-export). Kept separate from the copy confirm because the
+    /// for the Import/Export slot. Kept separate from the copy confirm because the
     /// two buttons target different slots; both reset to Idle whenever any slot's contents change (see
     /// <see cref="OnSlotsChanged"/>). Only meaningful in <see cref="CopyMode.Overwrite"/> against a non-empty
     /// target; Append and an empty target import on a single press.</summary>
     private TranscribeConfirm importConfirmState = TranscribeConfirm.Idle;
 
-    /// <summary>The copy BEHAVIOR selected by the radio under the Copy button (2026-08-17).
-    /// <see cref="CopyMode.Overwrite"/> (default) REPLACES the target document — the original behavior, with the
+    /// <summary>The copy BEHAVIOR selected by the radio under the Copy button.
+    /// <see cref="CopyMode.Overwrite"/> (default) REPLACES the target document, with the
     /// two-press <see cref="confirmState"/> guard when the target is non-empty. <see cref="CopyMode.Append"/> adds
     /// the source's tasks onto the target's existing document without deleting anything, so it needs no confirm
     /// and copies on a single press. Client-only UX; the server re-checks capacity and applies the chosen mode
@@ -74,13 +74,13 @@ public sealed class GuiDialogScribeScriptorium : ScribeDialogBase
     private enum CopyMode { Overwrite, Append }
     private CopyMode copyMode = CopyMode.Overwrite;
 
-    /// <summary>The wooden rubber-stamp flourish (add-transcribe-copy-paste D4). Non-load-bearing: whatever it
-    /// marks (a copy today; an import/export in the next section) is already done — server-authoritative — by the
+    /// <summary>The wooden rubber-stamp flourish. Non-load-bearing: whatever it
+    /// marks (a copy, an import, or an export) is already done — server-authoritative — by the
     /// time this plays. <see cref="stampRegistry"/> owns the animation controller so the motion survives the
     /// per-frame body reconcile; <see cref="stampGeneration"/> bumps on each play so a re-play remounts a fresh
     /// <see cref="ScribeStamp"/> (new key + id) and replays rather than reusing the completed controller.
     ///
-    /// <para><b>Generalized (2026-08-17):</b> the flourish is no longer wired to a single hard-coded slot + fixed
+    /// <para>The flourish is not tied to a single slot or fixed
     /// "COPIED" text. <see cref="stampTargetSlot"/> names the inventory slot the overlay sits on (−1 = nothing
     /// playing), and <see cref="stampLabel"/> is the imprint text. <see cref="PlayStamp"/> takes both, so any
     /// slot can be stamped with any word ("COPIED", "Imported", "Exported") — see <see cref="BuildStampOverlay"/>,
@@ -100,22 +100,22 @@ public sealed class GuiDialogScribeScriptorium : ScribeDialogBase
     public GuiDialogScribeScriptorium(BlockPos pos, IScribeDocumentHost host, ICoreClientAPI capi)
         // Pass the BE's inventory to the inventory-carrying GuiDialogBlockEntityBase ctor so OpenInventory /
         // CloseInventoryAndSync fire automatically on open/close. The Lectern/Notebook/Tablet dialogs keep
-        // the null default, so their behavior is byte-identical to the old inventory-less ctor.
+        // the null default, so their behavior is that of an inventory-less ctor.
         : base(pos, host, capi, ((BlockEntityScriptorium)host).Inventory)
     {
         scriptorium = (BlockEntityScriptorium)host;
-        // Transcribe is the Scriptorium's default view — what a plain right-click opens
-        // (assignment-icon-and-tab-defaults D6). See EnterGrantedView below.
+        // Transcribe is the Scriptorium's default view — what a plain right-click opens.
+        // See EnterGrantedView below.
         DefaultToInventoryView();
     }
 
     /// <summary>The Scriptorium is a shared placed block (like the Lectern): editor access requires a
     /// server lock round-trip, so the grant lands asynchronously in
     /// <see cref="ScribeDialogBase.EnterEditorMode"/>. A Handbook "Add to Scribe" click stashes its append
-    /// and waits for that grant (add-tracker-link-tasks 3.4).</summary>
+    /// and waits for that grant.</summary>
     protected override bool EditorAccessIsAsync => true;
 
-    /// <summary>Transcribe is the Scriptorium's first tab (assignment-icon-and-tab-defaults D5) — it
+    /// <summary>Transcribe is the Scriptorium's first tab — it
     /// reads before Read/Edit/Pinned in <see cref="ScribeDialogBase.BuildRightColNav"/>'s nav order,
     /// rather than after Pinned like the other extra tabs below.</summary>
     protected override IEnumerable<Widget> GetLeadingNavButtons()
@@ -131,8 +131,8 @@ public sealed class GuiDialogScribeScriptorium : ScribeDialogBase
             activeColor: IsInventoryView ? ScribeRowConstants.NavActiveTranscribe : null);
     }
 
-    /// <summary>Right-click always lands on Transcribe (assignment-icon-and-tab-defaults D6) rather than
-    /// the base's Read view — Read is still reachable via its own nav button, just no longer the default.
+    /// <summary>Right-click always lands on Transcribe rather than
+    /// the base's Read view; Read is still reachable via its own nav button.
     /// Crouch+right-click is unaffected: it's the quick-add gesture handled entirely in
     /// <see cref="BlockScribeWritingStation.OnBlockInteractStart"/>, upstream of any dialog view.</summary>
     public override void EnterGrantedView() => OnClickSwitchToInventory();
@@ -149,7 +149,7 @@ public sealed class GuiDialogScribeScriptorium : ScribeDialogBase
             boxShadows: NavButtonShadow,
             activeColor: IsVisitorsView ? ScribeRowConstants.NavActiveGuestbook : null);
 
-        // Gated on assignment history (refine-assignment-desk-inbox-ux 3.2 / inbox-tab spec): a player
+        // Gated on assignment history: a player
         // who has never received an assignment gets no Inbox nav button here — the Assignment Desk and
         // standalone Inbox block are unaffected, they always show their Inbox surface.
         if (modSystem.MyReceivedAssignments.Count > 0)
@@ -179,7 +179,7 @@ public sealed class GuiDialogScribeScriptorium : ScribeDialogBase
 
     /// <summary>Fixed width of the stacked import/export controls column. Bounded so the buttons size to a tidy
     /// column instead of a <see cref="CrossAxisAlignment.Stretch"/> Column ballooning to the full page width.
-    /// Narrowed 200 → 140 (70%, refinement) after the buttons read as too wide for their short labels; their
+    /// Narrow so the buttons are not wider than their short labels; their
     /// text is centred within the stretched button (see <see cref="LabelButton"/>'s <c>center</c> option).</summary>
     private const float IoControlsWidth = 140f;
 
@@ -204,25 +204,24 @@ public sealed class GuiDialogScribeScriptorium : ScribeDialogBase
         var colors = ScribeTheme.For(modSystem.MySettings.PixelArtDisplay).ColorScheme;
         // Book drawn full-opacity Primary UNDER the slot; the slot's box fill is the parchment Surface (the
         // creme that matches the page art) at ~66% alpha, veiling the book down to a faint, non-disruptive
-        // watermark (feedback — a black veil read as "almost black"). Tunable polish knob (design.md D7).
+        // watermark. Tunable polish knob.
         var bookColor = colors.Primary;
         var veilColor = colors.Surface with { W = 0.66f };
 
-        // All heading + button + caption + arrow text on this tab renders in Caudex (refinement #7), the same
+        // All heading + button + caption + arrow text on this tab renders in Caudex, the same
         // bundled face as the dialog title and the editor's text buttons (ScribeTaskFont.ButtonFamily).
         var headingStyle = new TextStyle
         {
             FontSize = 16, Weight = FontWeight.Bold, Color = colors.OnSurface, FontFamily = ScribeTaskFont.ButtonFamily,
         };
 
-        // Vertical 50/50 split (refinement #6): the top half is the copy mechanic, the bottom half the
-        // (unwired) import/export placeholder, each vertically CENTRED within its zone. Two Expanded halves
+        // Vertical 50/50 split: the top half is the copy mechanic, the bottom half the
+        // import/export zone, each vertically CENTRED within its zone. Two Expanded halves
         // divide the fixed central region (given height InnerH by the SectionInnerBox's stretched Row), so the
-        // split is exact and needs no scroll — this fixed layout supersedes task 3.4's scroll mitigation now
-        // that the button sits below the slots and the content fits the region at every supported size.
-        // 8-unit top padding lives with this zone's own content (unify-tab-header-layout §7, doubled from
-        // 4 per 2026-09-09 playtest feedback) so the durable divider above sits flush against it, instead
-        // of the old fixed gap outside.
+        // split is exact and needs no scroll — this fixed layout needs no scroll because
+        // the content fits the region at every supported size.
+        // 8-unit top padding lives with this zone's own content so the durable divider above sits flush
+        // against it.
         var topZone = new Center(child: new Padding(EdgeInsets.Only(top: 8f), child: new Column(
             spacing: 10,
             crossAxisAlignment: CrossAxisAlignment.Center,
@@ -245,16 +244,16 @@ public sealed class GuiDialogScribeScriptorium : ScribeDialogBase
                 BuildImportExportSection(controller, colors, bookColor, veilColor),
             }));
 
-        // Shared Row 2 subtitle + durable divider (unify-tab-header-layout 4.2) — the Transcribe tab treats
-        // both zones as scrollable/general content (neither is Row 3), so the divider now sits directly
-        // after the subtitle instead of directly after the title bar. The existing Divider between the
+        // Shared Row 2 subtitle + durable divider — the Transcribe tab treats
+        // both zones as scrollable/general content (neither is Row 3), so the divider sits directly
+        // after the subtitle. The Divider between the
         // Copy/Seal zone and the Import/Export zone is KEPT as an internal content separator, not the
-        // header-closing divider (design.md's one exception for the two form-shaped tabs).
+        // header-closing divider.
         Widget header = ScribeTabHeader.Build(colors, RowStyle,
             "scribe:scribe-tab-transcribe", "scribe:scribe-tab-subtitle-transcribe",
             modSystem.VisualTuning.ShowSubtitleRow);
-        // Top inset reduced from 10 to 4 (2026-09-08 playtest feedback: 6px less gap between the title bar
-        // and the Row 2 subtitle); left/right/bottom stay 10 like every other tab.
+        // Top inset is 4 (small gap between the title bar and the Row 2 subtitle); left/right/bottom
+        // are 10 like every other tab.
         var content = new Padding(EdgeInsets.Ltrb(10f, 4f, 10f, 10f), new Column(
             spacing: 0,
             crossAxisAlignment: CrossAxisAlignment.Stretch,
@@ -267,11 +266,11 @@ public sealed class GuiDialogScribeScriptorium : ScribeDialogBase
                 new Expanded(child: bottomZone),
             }));
 
-        // A bottom-right "Show / hide Transcribe features" info button, overlaid on the tab (refinement round
-        // 3) — the peer of the editor's "Show / hide Editor Features" button, toggling this tab's own handbook
+        // A bottom-right "Show / hide Transcribe features" info button, overlaid on the tab
+        // — the peer of the editor's "Show / hide Editor Features" button, toggling this tab's own handbook
         // guide page. Stacked so it pins to the corner without disturbing the 50/50 split above it. Nudged up
         // and left off the corner by 3% of the Pixel Art Size (on top of the 4px base inset) so it clears the
-        // page edge at every art size (refinement round 3).
+        // page edge at every art size.
         float cornerInset = 4f + ScribePlayerSettings.ClampPixelArtSize(modSystem.MySettings.PixelArtSize) * 0.01f;
         return new Stack(children: new Widget[]
         {
@@ -280,7 +279,7 @@ public sealed class GuiDialogScribeScriptorium : ScribeDialogBase
         });
     }
 
-    /// <summary>The bottom-right "Show / hide Transcribe features" info button (refinement round 3): the
+    /// <summary>The bottom-right "Show / hide Transcribe features" info button: the
     /// Transcribe-tab peer of the editor footer's "Show / hide Editor Features" button. Same LibGUI
     /// <see cref="Button"/> on the theme's <c>ButtonStyle</c> (tight <c>All(7)</c> padding so it's a small
     /// square, matching the editor's icon button) with the same scaled ⓘ glyph in the button foreground, and
@@ -305,18 +304,18 @@ public sealed class GuiDialogScribeScriptorium : ScribeDialogBase
     }
 
     /// <summary>The copy pair: the Original slot, a Caudex "→" arrow, and the Duplicate slot, in a centered
-    /// row (the Copy button now sits BELOW this row — refinement #4). Each slot carries a caption underneath.
+    /// row. Each slot carries a caption underneath.
     /// The arrow uses the same U+2192 glyph the editors substitute for a typed <c>-&gt;</c>
-    /// (<see cref="ScribeArrowDigraph.RightArrow"/>) so the "Original → Duplicate" direction reads at a glance
-    /// (refinement #8); it is boxed to the slot height and centred so it lines up with the slots, not their
+    /// (<see cref="ScribeArrowDigraph.RightArrow"/>) so the "Original → Duplicate" direction reads at a glance;
+    /// it is boxed to the slot height and centred so it lines up with the slots, not their
     /// captions.</summary>
     private Widget BuildCopySection(SlotController controller, ColorScheme colors, Vector4 bookColor, Vector4 veilColor)
     {
         var inv = scriptorium.Inventory;
         // The arrow is boxed to a FIXED width as well as the slot height: a Center (RenderPositionedBox) only
         // shrink-wraps when its incoming width is unbounded — given a finite max (which the copy Row passes it),
-        // it grows to that max. An unbounded-width Center here ballooned to the full page, shoving the Original
-        // slot off the left edge and the Duplicate off the right (the "stretched to full width" bug). Bounding
+        // it grows to that max. An unbounded-width Center here would balloon to the full page, shoving the Original
+        // slot off the left edge and the Duplicate off the right. Bounding
         // both axes pins it to a small glyph cell that the Row can hug.
         Widget arrow = new SizedBox(width: ArrowCellWidth, height: SlotSize, child: new Center(child: new Text(
             ScribeArrowDigraph.RightArrow.ToString(),
@@ -369,7 +368,7 @@ public sealed class GuiDialogScribeScriptorium : ScribeDialogBase
     }
 
     /// <summary>The stamp flourish overlaid on <paramref name="slotIndex"/>, or <c>null</c> when nothing is
-    /// playing over THAT slot (D4). The dialog asks each captioned slot for its overlay; only the slot whose index
+    /// playing over THAT slot. The dialog asks each captioned slot for its overlay; only the slot whose index
     /// matches the active <see cref="stampTargetSlot"/> gets one, so the same call site serves the copy's Duplicate
     /// slot today and the import/export slot in the next section. A fresh <see cref="ScribeStamp"/> is created each
     /// rebuild while a play is active; its <c>ValueKey</c> + id carry the current <see cref="stampGeneration"/> so
@@ -380,10 +379,10 @@ public sealed class GuiDialogScribeScriptorium : ScribeDialogBase
         if (slotIndex != stampTargetSlot) return null;
         string id = StampId(stampGeneration);
         // Peg the stamp + imprint width to the player's Pixel Art Size setting (× 0.2, so the 600 default →
-        // 120px) — larger than the 48px slot, spilling over its sides (refinement #2).
+        // 120px) — larger than the 48px slot, spilling over its sides.
         float artWidth = ScribePlayerSettings.ClampPixelArtSize(modSystem.MySettings.PixelArtSize) * 0.2f;
-        // Page-background colour for the imprint's outer glow: the theme's parchment Surface at 0.6 alpha
-        // (refinement 2026-08-17), so the dark-red "COPIED" reads over whatever sits under the slot without the
+        // Page-background colour for the imprint's outer glow: the theme's parchment Surface at 0.6 alpha,
+        // so the dark-red "COPIED" reads over whatever sits under the slot without the
         // glow reading as a solid plate (and so the dark landing shadow above it still contrasts).
         var colors = ScribeTheme.For(modSystem.MySettings.PixelArtDisplay).ColorScheme;
         return new ScribeStamp(
@@ -400,16 +399,16 @@ public sealed class GuiDialogScribeScriptorium : ScribeDialogBase
             key: new ValueKey<string>(id));
     }
 
-    /// <summary>Play the one-shot stamp sound at the flourish's contact frame (add-transcribe-stamp-sound).
+    /// <summary>Play the one-shot stamp sound at the flourish's contact frame.
     /// Wired to <see cref="ScribeStamp.OnDescend"/>, so it plays only when the flourish is actually mounted and
     /// seen by this client — a multiplayer watcher on another tab never triggers it. Extracted to
-    /// <see cref="ScribeStampSound"/> (refine-assignment-desk-inbox-ux 10.3) so the Assignment Desk's own
+    /// <see cref="ScribeStampSound"/> so the Assignment Desk's own
     /// stamp shares the same cue without duplicating the sound-load boilerplate.</summary>
     private void PlayStampSound() => ScribeStampSound.Play(capi);
 
-    /// <summary>The Copy button (D3/D4), sitting below the slot pair (refinement #4). Disabled (greyed, with an
+    /// <summary>The Copy button, sitting below the slot pair. Disabled (greyed, with an
     /// explainer tooltip) until both copy slots hold a Scribe item AND the Duplicate is a valid target —
-    /// writeable and with room for the source's tasks (refinement #1). When the target already has tasks, the
+    /// writeable and with room for the source's tasks. When the target already has tasks, the
     /// first press flips the button to a red "overwrite N tasks" confirm; the second press sends the copy. An
     /// empty target copies on a single press. Label/variant derive from the live slot contents +
     /// <see cref="confirmState"/>; styled like the editor's "Done editing" button (thematic Button, Caudex
@@ -422,9 +421,8 @@ public sealed class GuiDialogScribeScriptorium : ScribeDialogBase
         // The can't-copy affordance: a REAL disabled Button (enabled:false) wrapped in an explainer tooltip —
         // NOT a hand-rolled Container. A disabled Button renders in the exact theme as the editor's "Done
         // editing" button (default ButtonStyle, Caudex label) at 0.45 opacity, so it reads as a proper greyed
-        // button instead of an off-theme box; enabled:false skips ButtonState's press-sound path entirely, so
-        // the earlier "avoid a live Button here" caution doesn't apply. It hugs its label like the live button
-        // (refinement #5).
+        // button instead of an off-theme box; enabled:false skips ButtonState's press-sound path entirely.
+        // It hugs its label like the live button.
         Widget Disabled(string tooltipKey, params object[] tooltipArgs) => WithTooltip(
             tooltipKey,
             LabelButton(Lang.Get("scribe:scribe-transcribe-stamp"), colors, enabled: false, ButtonVariant.Primary),
@@ -436,7 +434,7 @@ public sealed class GuiDialogScribeScriptorium : ScribeDialogBase
             return Disabled("scribe-transcribe-stamp-disabled");
         }
 
-        // Valid-target gate (refinement #1): the Duplicate must be WRITEABLE (not hardened/fired) AND have
+        // Valid-target gate: the Duplicate must be WRITEABLE (not hardened/fired) AND have
         // ROOM for the source's tasks. Both facts come from the target item's document policy — a read-only
         // tablet reports ReadOnly; a wet tablet caps at 10 task blocks. The server re-checks the same policy
         // in OnServerReceivedTranscribeCopy, so this gate is UX, not the authority.
@@ -471,13 +469,13 @@ public sealed class GuiDialogScribeScriptorium : ScribeDialogBase
 
         // Same styling as the editor's "Done editing" button — a plain thematic LibGUI Button on the default
         // theme ButtonStyle (no explicit style), its label in Caudex (#7) — but NOT wrapped in Expanded, so it
-        // hugs its text (#5). Being a live Button it inherits the standard hover-grow / press-shrink feedback
+        // hugs its text. Being a live Button it inherits the standard hover-grow / press-shrink feedback
         // the rest of the Scribe UI has. The confirming state flips to Danger to signal the destructive overwrite.
         return LabelButton(label, colors, enabled: true, confirming ? ButtonVariant.Danger : ButtonVariant.Primary,
             onTap: OnSealPressed);
     }
 
-    /// <summary>The copy-behavior radio set, sitting directly under the Copy button (2026-08-17): a
+    /// <summary>The copy-behavior radio set, sitting directly under the Copy button: a
     /// <see cref="CopyMode.Overwrite"/> / <see cref="CopyMode.Append"/> choice built from LibGUI's
     /// <see cref="RadioButton{T}"/>. <c>RadioButton</c> is constrained to <c>IEquatable&lt;T&gt;</c>, which a bare
     /// enum does not satisfy, so the group value is the enum cast to <c>int</c> (mirroring the framework's own
@@ -544,7 +542,7 @@ public sealed class GuiDialogScribeScriptorium : ScribeDialogBase
     /// <summary>A thematic label Button matching the editor's "Done editing"/"Add task" footer buttons: the
     /// default theme <c>ButtonStyle</c> (no explicit style override) with a Caudex label in the variant's
     /// foreground colour, so it inherits the identical background, border, padding, and hover-grow/press-shrink
-    /// feedback. Non-<c>Expanded</c>, so it hugs its label (refinement #5). A disabled button (<paramref
+    /// feedback. Non-<c>Expanded</c>, so it hugs its label. A disabled button (<paramref
     /// name="enabled"/> false) renders the same shape at 0.45 opacity and never fires its tap/press-sound path.
     ///
     /// <para>When <paramref name="center"/> is set the label is centred within a button whose WIDTH is fixed by
@@ -578,7 +576,7 @@ public sealed class GuiDialogScribeScriptorium : ScribeDialogBase
     /// This is the capacity measure the tier cap counts (<see cref="Scribe.Core.ScribeDocument.BlockCount"/>);
     /// the cap is "N of anything", so every block counts, not just tasks. 0 when the source is empty or carries
     /// no document, so an empty source always fits any writeable target (the source may be any Scribe object,
-    /// even an empty one — refinement #1).</summary>
+    /// even an empty one).</summary>
     private int SourceBlockCount()
     {
         var stack = scriptorium.Inventory[SourceSlotIndex].Itemstack;
@@ -623,7 +621,7 @@ public sealed class GuiDialogScribeScriptorium : ScribeDialogBase
 
     /// <summary>Handle a press of the (enabled) seal button. In <see cref="CopyMode.Append"/> a single press
     /// always sends (non-destructive, no confirm). In <see cref="CopyMode.Overwrite"/> an empty target copies
-    /// immediately; a non-empty target arms the red confirm on the first press and commits on the second (D3).</summary>
+    /// immediately; a non-empty target arms the red confirm on the first press and commits on the second.</summary>
     private void OnSealPressed()
     {
         if (copyMode == CopyMode.Append)
@@ -651,7 +649,7 @@ public sealed class GuiDialogScribeScriptorium : ScribeDialogBase
         }
     }
 
-    /// <summary>Play the "COPIED" flourish over the Duplicate slot — the copy path's use of the now-generalized
+    /// <summary>Play the "COPIED" flourish over the Duplicate slot — the copy path's use of
     /// <see cref="PlayStamp"/>. Both copy modes stamp the same word onto the same (target) slot; only the
     /// underlying document write differs.</summary>
     private void StampCopy() => PlayStamp(TargetSlotIndex, Lang.Get("scribe:scribe-transcribe-stamp-imprint"));
@@ -673,7 +671,7 @@ public sealed class GuiDialogScribeScriptorium : ScribeDialogBase
     /// <paramref name="label"/>. Called only on an action that will succeed (a copy's empty target / confirming
     /// press today) — the client gates never fire a play the server would reject, so a played stamp always
     /// corresponds to a real change. Bumping the generation gives the next <see cref="ScribeStamp"/> a fresh
-    /// key+id so the reconciler replays it from the start instead of reusing the just-completed controller (D4).</summary>
+    /// key+id so the reconciler replays it from the start instead of reusing the just-completed controller.</summary>
     private void PlayStamp(int targetSlot, string label)
     {
         stampGeneration++;
@@ -698,7 +696,7 @@ public sealed class GuiDialogScribeScriptorium : ScribeDialogBase
 
     private static string StampId(int generation) => $"transcribe-stamp:{generation}";
 
-    /// <summary>Send the server-authoritative copy request for this Scriptorium's copy pair (D2). The server
+    /// <summary>Send the server-authoritative copy request for this Scriptorium's copy pair. The server
     /// clones the source document with a fresh identity and writes it onto the target, syncing the result
     /// back through the inventory channel.</summary>
     private void SendTranscribeCopy(bool append, bool allowOverwrite)
@@ -716,7 +714,7 @@ public sealed class GuiDialogScribeScriptorium : ScribeDialogBase
         });
     }
 
-    /// <summary>The Import/Export section, now live (add-scriptorium-import-export D7): a real watermarked slot
+    /// <summary>The Import/Export section: a real watermarked slot
     /// (index <see cref="ImportExportSlotIndex"/>, bound to the shared <paramref name="controller"/> like the copy
     /// slots and carrying the IMPORTED/EXPORTED stamp overlay) beside a fixed-width column of three Caudex
     /// buttons — <b>Copy as JSON</b>, <b>Copy as TSV</b>, and <b>Import</b>. Exports read the slotted item's
@@ -765,7 +763,7 @@ public sealed class GuiDialogScribeScriptorium : ScribeDialogBase
             });
     }
 
-    /// <summary>The Import button (D6): a single press imports in Append mode or onto an empty target; in
+    /// <summary>The Import button: a single press imports in Append mode or onto an empty target; in
     /// Overwrite mode against a non-empty target it arms the same red two-press confirm the Copy button uses
     /// (<see cref="importConfirmState"/>). Disabled — with an explainer tooltip — when the slot is empty
     /// (nothing to import onto) or holds a read-only (hardened/fired) item. The confirming label mirrors the copy
@@ -850,7 +848,7 @@ public sealed class GuiDialogScribeScriptorium : ScribeDialogBase
         capi.TriggerIngameDiscovery(this, "scribe-transcribe-export", Lang.Get("scribe:scribe-transcribe-export-done", "TSV"));
     }
 
-    /// <summary>Handle a press of the (enabled) Import button (D4/D6). Reads the clipboard, auto-detects JSON vs
+    /// <summary>Handle a press of the (enabled) Import button. Reads the clipboard, auto-detects JSON vs
     /// TSV (a trimmed payload starting with <c>{</c> is JSON, otherwise TSV), parses it with the Core codec, and
     /// validates item references against the game (<see cref="ScribeImportValidator"/>). A payload that parses as
     /// neither surfaces the "not a valid Scribe export" error and does nothing. In Append mode, or Overwrite onto
@@ -877,7 +875,7 @@ public sealed class GuiDialogScribeScriptorium : ScribeDialogBase
             return;
         }
 
-        // Best-effort reconstruction: unresolved item/link references degrade to plain tasks (D5).
+        // Best-effort reconstruction: unresolved item/link references degrade to plain tasks.
         var result = ScribeImportValidator.Validate(capi.World, doc);
 
         // Overwrite onto a non-empty target arms the two-press confirm; Append and empty targets send at once.
@@ -902,7 +900,7 @@ public sealed class GuiDialogScribeScriptorium : ScribeDialogBase
         capi.TriggerIngameDiscovery(this, "scribe-transcribe-import", message);
     }
 
-    /// <summary>Send the server-authoritative import request for the Import/Export slot (D6). The validated
+    /// <summary>Send the server-authoritative import request for the Import/Export slot. The validated
     /// document is serialized to JSON (the one wire format the server parses); the server re-deserializes it
     /// (minting fresh ids), re-checks capacity, and writes onto the slot's item, syncing the result back through
     /// the inventory channel.</summary>
@@ -923,12 +921,11 @@ public sealed class GuiDialogScribeScriptorium : ScribeDialogBase
 
     /// <summary>One inventory slot: an always-present, fully-opaque <c>scribebook</c> watermark UNDERNEATH the
     /// real <see cref="FlatItemSlot"/>, whose box fill is made transparent so the book shows through. This
-    /// under-layering (feedback) fixes three problems the earlier over-layering had at once:
+    /// under-layering gives:
     /// <list type="bullet">
-    /// <item>The book is the sole visible fill, at full opacity, so it actually reads (the faint on-top wash
-    /// was invisible against the parchment).</item>
+    /// <item>The book is the sole visible fill, at full opacity, so it reads clearly against the parchment.</item>
     /// <item>The <see cref="FlatItemSlot"/> is on TOP and owns the full-slot gesture region, so the glyph can
-    /// never intercept the click that drops an item in (the over-layer version blocked the slot centre).</item>
+    /// never intercept the click that drops an item in (an over-layered glyph would block the slot centre).</item>
     /// <item>A placed item is drawn by the slot's own overlay, i.e. ON TOP of the book, with no z-order race —
     /// the watermark is simply always under, "a fun visual indicator that's always there," never toggled.</item>
     /// </list>
@@ -936,7 +933,7 @@ public sealed class GuiDialogScribeScriptorium : ScribeDialogBase
     /// at <see cref="SlotSize"/>) regardless of child order, and paints in list order — so the
     /// <see cref="Positioned"/> book (first) paints under the slot (second).
     ///
-    /// <para>The slot itself is our custom <see cref="ScribeDocumentSlot"/> (refine-scribe-hover-tooltips D3)
+    /// <para>The slot itself is our custom <see cref="ScribeDocumentSlot"/>
     /// rather than the stock <see cref="FlatItemSlot"/>: it renders the same slot box + item but shows a
     /// compact Scribe document-summary card on hover (name / title / per-kind counts / never-opened), shaded
     /// by the live illumination shade at reduced hover strength, instead of LibGUI's fixed 350px item
@@ -948,7 +945,7 @@ public sealed class GuiDialogScribeScriptorium : ScribeDialogBase
         float inset = (SlotSize - glyph) / 2f;
         // The book underneath is drawn at full Primary; the slot's own box fill sits ON TOP of it as a
         // semi-opaque parchment veil, muting the book to a faint-but-discernible watermark rather than a bold
-        // icon (feedback). Border left default so the slot still reads as a slot.
+        // icon. Border left default so the slot still reads as a slot.
         var slotStyle = ItemSlotStyle.Default with { BackgroundColor = veilColor };
         return new Stack(children: new Widget[]
         {
@@ -967,10 +964,9 @@ public sealed class GuiDialogScribeScriptorium : ScribeDialogBase
     /// <c>StatefulWidget</c> that subscribes to the controller (a <c>ChangeNotifier</c>) and calls
     /// <c>SetState</c> on notify. Our <see cref="ScribeDocumentSlot"/> is a plain <c>StatelessWidget</c>
     /// (it drops that gesture layer to swap the tooltip), so nothing rebuilds it when a slot's contents
-    /// change — a just-placed item stayed invisible until some UNRELATED rebuild (e.g. an illumination
-    /// shade change) happened to re-run the tree, which is exactly why it only appeared when the local
-    /// light shifted. Subscribing <see cref="ScribeDialogBase.RebuildBody"/> to the controller closes the
-    /// gap: any <c>SlotModified</c> now marks the body for reconcile via <c>SetState</c> (deferred, so it's
+    /// change — a just-placed item would stay invisible until some UNRELATED rebuild (e.g. an illumination
+    /// shade change) re-ran the tree. Subscribing <see cref="ScribeDialogBase.RebuildBody"/> to the controller closes the
+    /// gap: any <c>SlotModified</c> marks the body for reconcile via <c>SetState</c> (deferred, so it's
     /// safe even when a click fires <c>SlotModified</c> mid-pointer-dispatch), and the reconcile reuses the
     /// rest of the tree. The listener lives on the controller and is cleared when we dispose it in
     /// <see cref="OnGuiClosed"/> (<c>ChangeNotifier.Dispose</c> clears its listeners).</para></summary>
@@ -980,7 +976,7 @@ public sealed class GuiDialogScribeScriptorium : ScribeDialogBase
         {
             slotController = new SlotController(capi);
             slotController.WatchInventory(scriptorium.Inventory);
-            // Any slot-content change resets the overwrite confirm to Idle (D3: "confirmation resets if the
+            // Any slot-content change resets the overwrite confirm to Idle ("confirmation resets if the
             // slots change") and then re-renders — a copy landing on the target, or a player pulling/swapping
             // an item mid-confirm, must not leave a stale "overwrite N tasks" armed against different contents.
             slotController.AddListener(OnSlotsChanged);
@@ -989,7 +985,7 @@ public sealed class GuiDialogScribeScriptorium : ScribeDialogBase
     }
 
     /// <summary>Slot-change hook: cancel any armed overwrite confirm, then rebuild the body. See the listener
-    /// registration in <see cref="EnsureSlotController"/> for why the reset lives here (D3).</summary>
+    /// registration in <see cref="EnsureSlotController"/> for why the reset lives here.</summary>
     private void OnSlotsChanged()
     {
         confirmState = TranscribeConfirm.Idle;

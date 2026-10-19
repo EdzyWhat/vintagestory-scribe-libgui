@@ -16,8 +16,8 @@ namespace Scribe;
 
 /// <summary>
 /// The center-screen "Add this Quest to Scribe?" modal — the <see cref="ScribeQuestAcceptPolicy.PromptPopup"/>
-/// accept-prompt presentation style, an alternative to the HUD banner
-/// (rework-quest-accept-notification-styles). Mirrors <see cref="ScribeSettingsDialog"/>'s WindowFrame-hosted
+/// accept-prompt presentation style, an alternative to the HUD banner.
+/// Mirrors <see cref="ScribeSettingsDialog"/>'s WindowFrame-hosted
 /// construction and <see cref="DrawOrder"/> band. Reuses <see cref="ScribeQuestPromptActions"/> for its
 /// Link/Dismiss/Settings buttons so this presentation style can never drift from the polished HUD banner's
 /// colors/behavior.
@@ -33,7 +33,7 @@ namespace Scribe;
 public sealed class GuiDialogScribeQuestPrompt : GuiBase
 {
     /// <summary>Guard/eligibility re-check cadence, matching <c>ScribeQuestWatcher</c>'s own detection
-    /// tick — "check on the same tick cadence as detection" (tasks.md 3.4).</summary>
+    /// tick — "check on the same tick cadence as detection".</summary>
     private const int GuardCheckIntervalMs = 1000;
 
     private readonly ScribeModSystem modSystem;
@@ -88,8 +88,8 @@ public sealed class GuiDialogScribeQuestPrompt : GuiBase
         if (!IsOpened())
         {
             // Only the OPEN transition needs the guard — an already-open modal isn't newly contesting a
-            // click against a vanilla dialog that opens later (fix-libgui-click-draw-order-mismatch's
-            // guard exists for the open race, not as an ongoing z-order arbiter).
+            // click against a vanilla dialog that opens later (the guard exists for the open race,
+            // not as an ongoing z-order arbiter).
             if (ScribeVanillaDialogGuard.IsAnyVanillaDialogOpen(capi)) return; // deferred; re-checked next trigger
             ShowPrompt(next.Value);
             TryOpen();
@@ -135,8 +135,7 @@ public sealed class GuiDialogScribeQuestPrompt : GuiBase
         var candidates = modSystem.ComputeQuestAcceptCandidates();
 
         // The accept/dismiss labels render in the HUD's own standard near-white row-text color, decoupled
-        // from their own accent color — matches the HUD banner's treatment (rework-quest-accept-
-        // notification-styles) so the two presentation styles never drift apart. No glow here (unlike the
+        // from their own accent color — matches the HUD banner's treatment so the two presentation styles never drift apart. No glow here (unlike the
         // banner): this modal has an opaque dialog backdrop, not an in-world overlay, so the glow's
         // legibility-over-the-world purpose doesn't apply.
         Vector4 promptActionTextColor = ScribeRowConstants.HudStandardTextColor;

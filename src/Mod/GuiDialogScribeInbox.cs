@@ -12,14 +12,13 @@ namespace Scribe;
 /// <summary>
 /// The standalone Inbox block's dialog — a thin sealed subclass of <see cref="ScribeDialogBase"/>. All
 /// view state, build methods, lock orchestration, autosave, title editing, and scroll management live
-/// in the base class; this dialog opens directly into the shared Inbox tab and, since
-/// add-inbox-inventory-tab, also exposes its own Inbox Inventory tab (the block's mixed
+/// in the base class; this dialog opens directly into the shared Inbox tab and
+/// also exposes its own Inbox Inventory tab (the block's mixed
 /// restricted/open storage). Its right-column nav drops the base's Read/Editor/Pinned buttons entirely
-/// — per <c>inbox-block</c>'s spec this block's capabilities are the shared Inbox tab plus its own
+/// — this block's capabilities are the shared Inbox tab plus its own
 /// Inbox Inventory tab — keeping an Assignment Inbox button, an Inbox Inventory button, and Settings.
 ///
-/// <para>PARTIAL (add-assignment-and-quest-support §6.3): defaulting into the Inbox tab is real; the
-/// Inbox tab's own row/filter content (§7) does not exist yet, so it still renders through
+/// <para>The Inbox tab has no row/filter content of its own yet, so it renders through
 /// <see cref="ScribeDialogBase.BuildInboxContent"/>'s empty-state placeholder.</para>
 /// </summary>
 public sealed class GuiDialogScribeInbox : ScribeDialogBase
@@ -45,7 +44,7 @@ public sealed class GuiDialogScribeInbox : ScribeDialogBase
         // Unlike every other Inbox-reaching surface, this dialog never routes through
         // OnClickSwitchToInbox() (it has no nav button that does) — mark-seen must fire here directly,
         // or the ambient particle/nav shimmer can persist indefinitely regardless of how long the
-        // player looks at their assignments (refine-assignment-desk-inbox-ux D2/4.1-4.2).
+        // player looks at their assignments.
         MarkInboxSeenIfNeeded();
     }
 
@@ -56,20 +55,18 @@ public sealed class GuiDialogScribeInbox : ScribeDialogBase
 
     /// <summary>This dialog has no Read view to land on (see class remarks) — a plain access grant, the
     /// ordinary reply every right-click on the block gets, must leave the dialog on Inbox instead of
-    /// being force-switched to a nonexistent Read view. Overriding the base's <c>EnterReadMode()</c>
-    /// default this way was the fix for the Inbox always opening on Read despite having no Read nav
-    /// button.</summary>
+    /// being force-switched to a nonexistent Read view. This overrides the base's <c>EnterReadMode()</c>
+    /// default.</summary>
     public override void EnterGrantedView()
     {
         LeaveEditorIfActive();
         // Every right-click re-open grants access here and lands back on the (only) Inbox view without
-        // going through OnClickSwitchToInbox() — mark-seen must fire on every grant, not just the first
-        // (refine-assignment-desk-inbox-ux D2/4.2).
+        // going through OnClickSwitchToInbox() — mark-seen must fire on every grant, not just the first.
         MarkInboxSeenIfNeeded();
         if (IsOpened()) ForceRebuild();
     }
 
-    /// <summary>Inbox / Inbox Inventory / Settings (add-inbox-inventory-tab). The Inbox button switches
+    /// <summary>Inbox / Inbox Inventory / Settings. The Inbox button switches
     /// to the shared Inbox tab, the Inbox Inventory button to the block's own 8-slot storage tab.</summary>
     protected override Widget BuildRightColNav()
     {
@@ -103,13 +100,12 @@ public sealed class GuiDialogScribeInbox : ScribeDialogBase
     /// Scribe-items-only (any <c>IScribeDocumentItem</c>, including blank and sealed Task Notices,
     /// matching the Scriptorium's own restriction), the third row (8-11) open — laid out 3 rows of 4 and
     /// centered both horizontally and vertically in the tab's content region
-    /// (add-inbox-inventory-tab; grew from 2 rows/8 slots via
-    /// redesign-inbox-block-placement-and-capacity). Each slot uses the shared
+    /// Each slot uses the shared
     /// <see cref="ScribeInventorySlotStyle"/> helper so it matches the Assignment Desk's own slots
     /// exactly; only the restricted rows pass a watermark icon, using the Scriptorium's generic
-    /// "scribebook" glyph (not "scribeassignment") since the restriction is no longer Task-Notice-
+    /// "scribebook" glyph (not "scribeassignment") since the restriction is not Task-Notice-
     /// specific. A restricted slot holding an undiscovered notice addressed to the local player
-    /// additionally wraps in <see cref="ScribeShimmerWrap"/> (signal-tasknotice-inbox-presence).</summary>
+    /// additionally wraps in <see cref="ScribeShimmerWrap"/>.</summary>
     protected override Widget BuildInboxInventoryContent()
     {
         var controller = EnsureSlotController();
@@ -131,8 +127,7 @@ public sealed class GuiDialogScribeInbox : ScribeDialogBase
             .Select(i => ScribeInventorySlotStyle.Build(inv[i], controller, colors, CurrentShade, null))
             .ToArray();
 
-        // 8-unit top padding (unify-tab-header-layout §7, doubled from 4 per 2026-09-09 playtest feedback)
-        // so the durable divider below sits flush against it.
+        // 8-unit top padding so the durable divider below sits flush against it.
         Widget slotGrid = new Center(child: new Padding(EdgeInsets.Only(top: 8f), child: new Column(
             spacing: SlotRowSpacing,
             mainAxisSize: MainAxisSize.Min,
@@ -144,14 +139,9 @@ public sealed class GuiDialogScribeInbox : ScribeDialogBase
                 new Row(spacing: SlotSpacing, mainAxisSize: MainAxisSize.Min, children: openSlots),
             })));
 
-        // Shared Row 2 subtitle + durable divider (unify-tab-header-layout §6.2/§10-refinement). The slot
-        // grid is this tab's general CONTENT, not Row 3 controls — passing it as row3Content previously put
-        // the divider below it instead of directly under the subtitle (2026-09-09 playtest feedback: every
-        // tab sharing the Row 1/Row 2 header anatomy should show its divider right there, matching the
-        // Editor/History tabs' no-Row-3 pattern). This tab was missed by the original nine-tab sweep since
-        // it wasn't added until add-inbox-inventory-tab, after that pass had already landed. Wrapped in the
-        // same inset every other tab uses (top reduced from 10 to 4 per the 2026-09-08 playtest row1-row2
-        // gap fix) — this tab used to return the header bare, with none of that inset.
+        // Shared Row 2 subtitle + durable divider. The slot grid is this tab's general CONTENT, not
+        // Row 3 controls, so the divider sits directly under the subtitle (as on the Editor/History
+        // tabs, which have no Row 3). The header is wrapped in the same inset every other tab uses.
         Widget header = ScribeTabHeader.Build(colors, RowStyle,
             "scribe:scribe-tab-inbox-inventory", "scribe:scribe-tab-subtitle-inbox-inventory",
             modSystem.VisualTuning.ShowSubtitleRow);
