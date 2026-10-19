@@ -1,14 +1,10 @@
 namespace Scribe.Core;
 
 /// <summary>
-/// One entry in a player's per-player pin set: a durable reference to a specific task, plus a
-/// last-known snapshot so the task can still be shown when its owning block is unloaded (or gone).
-///
-/// The reference is <see cref="OwnerDocId"/> + <see cref="TaskId"/> — never a block position. A
-/// pin therefore keeps resolving across the owning block being broken and re-placed (the ids ride
-/// inside the document's serialized bytes), and can be acted on (unpinned) with no block lookup at
-/// all. This type is game-agnostic (pure BCL); the Mod layer owns where the set lives and how it
-/// syncs. Serialized by <see cref="ScribePinCodec"/>.
+/// One entry in a player's pin set: a durable reference to a task plus a last-known snapshot so it can be
+/// shown when its owning block is unloaded or gone. The reference is <see cref="OwnerDocId"/> +
+/// <see cref="TaskId"/>, never a block position, so it survives the block being broken and re-placed.
+/// Pure BCL; serialized by <see cref="ScribePinCodec"/>.
 /// </summary>
 public sealed class ScribePinnedRef
 {
@@ -18,104 +14,67 @@ public sealed class ScribePinnedRef
     /// <summary>The <see cref="ScribeBlock.TaskId"/> of the pinned task within that document.</summary>
     public Guid TaskId { get; set; }
 
-    /// <summary>Game time (total hours) at which the task was pinned. A game-agnostic numeric stamp;
-    /// the Mod layer supplies it from the world calendar and formats it for display.</summary>
+    /// <summary>Game time (total hours) when pinned; supplied by the Mod layer from the world calendar.</summary>
     public double PinnedAtTotalHours { get; set; }
 
-    /// <summary>True once the referenced task is known to be permanently gone (its block was
-    /// broken/removed, or the task was deleted from a saved edit). An orphaned pin keeps its
-    /// last-known snapshot and stays in the player's set until they remove it; it is never set
-    /// merely because the target is temporarily unresolvable (an unloaded chunk).</summary>
+    /// <summary>True once the task is known to be permanently gone (block removed or task deleted). An
+    /// orphaned pin keeps its snapshot until the player removes it; it is never set merely because a chunk is unloaded.</summary>
     public bool Orphaned { get; set; }
 
-    /// <summary>Last-known text of the task, refreshed from the authoritative document on edit, so
-    /// a client can display the pin even when the task's chunk is unloaded.</summary>
+    /// <summary>Last-known task text, refreshed from the authoritative document on edit.</summary>
     public string LastKnownText { get; set; } = "";
 
     /// <summary>Last-known completed state of the task, refreshed alongside <see cref="LastKnownText"/>.</summary>
     public bool LastKnownDone { get; set; }
 
-    /// <summary>The pinned task's kind, snapshotted so a client can render/act on the pin by kind even
-    /// when the owning block is unloaded — most importantly so the HUD can treat a pinned Link's label as
-    /// a Handbook hyperlink. Defaults to <see cref="ScribeBlockKind.Task"/>
-    /// (the value pre-v2 pin blobs migrate to), so an ordinary pinned task is unaffected.</summary>
+    /// <summary>The pinned task's kind, snapshotted so a client can act on the pin by kind with its block
+    /// unloaded (e.g. the HUD treats a pinned Link's label as a Handbook hyperlink). Pre-v2 blobs migrate to Task.</summary>
     public ScribeBlockKind Kind { get; set; } = ScribeBlockKind.Task;
 
-    /// <summary>For a <see cref="ScribeBlockKind.Link"/> pin, the last-known link target (the collectible
-    /// code its Handbook hyperlink opens); null for every other kind. Snapshotted alongside
-    /// <see cref="Kind"/> so the HUD can open the page without resolving the (possibly unloaded) source
-    /// document.</summary>
+    /// <summary>For a Link pin, the last-known link target; null for other kinds.</summary>
     public string? LinkTarget { get; set; }
 
-    /// <summary>For a <see cref="ScribeBlockKind.Tracker"/> pin, the last-known target item code (the
-    /// collectible the tracker counts and whose icon/name the pin renders); null for every other kind.
-    /// Snapshotted alongside <see cref="Kind"/> so the HUD and Pin Tab can render a pinned Tracker's
-    /// icon + name + counter without resolving the (possibly unloaded) source document
-    /// Distinct from <see cref="LinkTarget"/> so a future kind that carries
-    /// both a link and a counted item stays unambiguous.</summary>
+    /// <summary>For a Tracker pin, the last-known target item code (what it counts and renders); null for other kinds.</summary>
     public string? TargetItemCode { get; set; }
 
-    /// <summary>For a <see cref="ScribeBlockKind.Tracker"/> pin, the last-known target quantity (the
-    /// "need" side of the have/need counter). Defaults to 1; snapshotted alongside
-    /// <see cref="TargetItemCode"/> and refreshed on edit so the pin's counter stays current.</summary>
+    /// <summary>For a Tracker pin, the last-known target quantity (the "need" side). Defaults to 1.</summary>
     public int TargetQuantity { get; set; } = 1;
 
-    /// <summary>For a <see cref="ScribeBlockKind.Tracker"/> pin, the last-known current quantity (the
-    /// "have" side of the have/need counter). Defaults to 0; refreshed from the authoritative document on
-    /// edit — this snapshot is the persisted fallback. The live counter is recomputed continuously by
-    /// whichever client-side engine is watching the viewer's carried inventory: a Scribe dialog's read view
-    /// when one is open, or the HUD's own count engine when a pinned Tracker is
-    /// shown with no dialog open. This field reflects the last value the document held between those
-    /// live updates.</summary>
+    /// <summary>For a Tracker pin, the last-known current quantity (the "have" side), the persisted fallback.
+    /// The live count is recomputed by the client engine watching the carried inventory (an open Scribe
+    /// dialog's read view, or the HUD's own count engine).</summary>
     public int CurrentQuantity { get; set; }
 
-    /// <summary>For a guide-page <see cref="ScribeBlockKind.Link"/> pin (a <c>"page:"</c>-prefixed
-    /// <see cref="LinkTarget"/>), the last-known display title of the guide — snapshotted because a guide
-    /// page has no item to resolve a name from, so without it the HUD/Pin Tab could only show a bare book
-    /// icon. Null for an item Link (whose name resolves live from the item) and for every other kind.</summary>
+    /// <summary>For a guide-page Link pin (<c>"page:"</c> <see cref="LinkTarget"/>), the last-known display
+    /// title, since a guide page has no item to name it. Null for item Links and other kinds.</summary>
     public string? LinkLabel { get; set; }
 
-    /// <summary>The pinned task's last-known subtask depth (0 = top-level, 1 = a one-level subtask;
-    /// clamped to <c>[0, 1]</c> like <see cref="ScribeBlock.Depth"/>). Snapshotted so the HUD and Pin Tab
-    /// indent a pinned subtask identically to the editor/read surfaces. Defaults to 0, so a pin from an old blob
-    /// (or a top-level task) is unaffected.</summary>
+    /// <summary>The pinned task's subtask depth (0 or 1, clamped like <see cref="ScribeBlock.Depth"/>), so the
+    /// HUD and Pin Tab indent a subtask like the editor does.</summary>
     public int Depth { get; set; }
 
-    /// <summary>True when the pinned task carries an Accepted player-to-player assignment
-    /// (<see cref="ScribeBlock.Assignment"/>'s <see cref="ScribeAssignmentState.Accepted"/>), snapshotted
-    /// so the HUD and Pin Tab can render the leading-icon assignment marker without resolving the
-    /// (possibly unloaded) source document. Defaults to false, so a
-    /// pin from an old blob (or an un-assigned task) is unaffected.</summary>
+    /// <summary>True when the task carries an Accepted assignment (<see cref="ScribeAssignmentState.Accepted"/>),
+    /// snapshotted so the HUD and Pin Tab can render the assignment marker without the source document.</summary>
     public bool IsAcceptedAssignment { get; set; }
 
     /// <summary>When <see cref="IsAcceptedAssignment"/>, the assigner's player uid; empty otherwise.
-    /// Snapshotted (alongside <see cref="AssignedDate"/>/<see cref="AcceptedDate"/>) so the HUD and
-    /// Pin Tab can render the assignment marker's tooltip without resolving the (possibly unloaded)
-    /// source document (assignment-icon-and-tab-defaults).</summary>
+    /// Snapshotted (with <see cref="AssignedDate"/>/<see cref="AcceptedDate"/>) for the marker's tooltip.</summary>
     public string AssignerUid { get; set; } = "";
 
-    /// <summary>When <see cref="IsAcceptedAssignment"/>, the in-game date the assignment was sent
-    /// (<see cref="ScribeAssignment.AssignedDate"/>); empty otherwise.</summary>
+    /// <summary>When <see cref="IsAcceptedAssignment"/>, the in-game date the assignment was sent; empty otherwise.</summary>
     public string AssignedDate { get; set; } = "";
 
-    /// <summary>When <see cref="IsAcceptedAssignment"/>, the in-game date the assignment was accepted
-    /// (<see cref="ScribeAssignment.AcceptedDate"/>); null otherwise (mirrors the source field, which
-    /// is itself null until Accept happens — though by the time <see cref="IsAcceptedAssignment"/> is
-    /// true this should always be set).</summary>
+    /// <summary>When <see cref="IsAcceptedAssignment"/>, the in-game date the assignment was accepted; null otherwise.</summary>
     public string? AcceptedDate { get; set; }
 
-    /// <summary>Numeric in-game timestamp for <see cref="AssignedDate"/> when one was captured.
-    /// Null on a pre-v9 pin blob (those rows keep showing the baked identity string).
-    /// <c>0</c> is a real world-day-one value, not a missing sentinel.</summary>
+    /// <summary>Numeric timestamp for <see cref="AssignedDate"/>; null on a pre-v9 blob (those rows show the
+    /// baked string). <c>0</c> is a real value, not a missing sentinel.</summary>
     public double? AssignedTimestamp { get; set; }
 
-    /// <summary>Numeric in-game timestamp for <see cref="AcceptedDate"/> when one was captured.
-    /// Null on a pre-v9 pin blob, or when the source assignment never stamped one.</summary>
+    /// <summary>Numeric timestamp for <see cref="AcceptedDate"/>; null on a pre-v9 blob or when never stamped.</summary>
     public double? AcceptedTimestamp { get; set; }
 
-    /// <summary>Last-known <see cref="ScribeBlock.ExtraInfo"/> of the pinned task — an external mod's
-    /// opaque hover-detail string (add-external-mod-task-api). Snapshotted so the Pin Tab can render
-    /// the hover-info icon without resolving the (possibly unloaded) source document. Null when the
-    /// task carries none (the overwhelming majority of pins).</summary>
+    /// <summary>Last-known <see cref="ScribeBlock.ExtraInfo"/> (an external mod's opaque hover-detail
+    /// string), snapshotted for the Pin Tab's hover-info icon. Null for most pins.</summary>
     public string? ExtraInfo { get; set; }
 }

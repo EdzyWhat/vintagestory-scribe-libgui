@@ -4,42 +4,35 @@ namespace Scribe.Core;
 
 /// <summary>
 /// A fixed-column <c>ScribeDocument ⇄ TSV</c> codec — the spreadsheet-native clipboard lane for the
-/// Scriptorium's Import/Export section (add-scriptorium-import-export). Tab-separated (not comma-CSV) because
-/// that is the format Excel and Google Sheets parse straight into rows and columns on paste; comma text lands
-/// in one column until a manual "split" step.
+/// Scriptorium. Tab-separated because Excel and Google Sheets parse it straight into columns on paste.
 ///
 /// <para><b>Fixed columns, forever:</b> <c>Type · Done · Text · Special · Count · Depth</c>. Per-kind richness
-/// lives INSIDE the <c>Special</c> cell as a comma-separated payload the kind parses itself (a future map's
-/// <c>x,y,z,icon,color</c> is the worked example), never in new columns — so the table stays narrow and
-/// stable and old/new exports stay mutually loadable. Columns:</para>
+/// lives INSIDE the <c>Special</c> cell as a comma-separated payload, never in new columns, so old and new
+/// exports stay mutually loadable.</para>
 /// <list type="bullet">
-/// <item><b>Type</b> — the kind token (<c>title</c>/<c>note</c>/<c>task</c>/<c>tracker</c>/<c>link</c>/<c>craft</c>/
-/// <c>questobjective</c>; see <see cref="ScribeBlockKindToken"/>). <c>title</c> is a reserved ROW type, not a
-/// block: it carries the document title (in Text) as a leading row and produces no block.</item>
+/// <item><b>Type</b> — the kind token (see <see cref="ScribeBlockKindToken"/>). <c>title</c> is a reserved ROW
+/// type, not a block: it carries the document title (in Text) and produces no block.</item>
 /// <item><b>Done</b> — <c>x</c> / blank. Ignored for note/title.</item>
-/// <item><b>Text</b> — the row's human-readable label: the task text, a guide-link's title, or the document
-/// title on a title row.</item>
-/// <item><b>Special</b> — the machine reference: a tracker's item code, a link's target; a per-kind
-/// comma-separated payload for multi-field kinds (a <c>craft</c> packs <c>outputCode[,recipeSignature]</c>).</item>
-/// <item><b>Count</b> — the numeric modifier: a tracker's or craft's target quantity.</item>
-/// <item><b>Depth</b> — integer nesting, loose visual grouping only (no parent links).</item>
+/// <item><b>Text</b> — the human-readable label (task text, a guide-link's title, or the title row's title).</item>
+/// <item><b>Special</b> — the machine reference: a tracker's item code, a link's target, or a craft's
+/// <c>outputCode[,recipeSignature]</c>.</item>
+/// <item><b>Count</b> — a tracker's or craft's target quantity.</item>
+/// <item><b>Depth</b> — integer nesting (no parent links).</item>
 /// </list>
 ///
-/// <para><b>Row position is the sequence</b> — there is no order column; a block's place in the document is
-/// its row position after the header. <b>Import is loose</b> (degrade, never reject): an unknown Type becomes
-/// a Task, a malformed row is skipped, unknown trailing columns are ignored, and missing columns default. The
-/// header is matched by NAME (case-insensitive), so column order and extra columns are both tolerated.</para>
+/// <para>Row position is the sequence. Import is loose (degrade, never reject): an unknown Type becomes a
+/// Task, a malformed row is skipped, extra columns are ignored, missing columns default. The header is
+/// matched by NAME (case-insensitive), so column order is tolerated.</para>
 ///
-/// <para>Pure Core string logic (no VS API). Game-resolution of item/link references is the Mod layer's job;
-/// this codec only carries the reference strings. Every block gets a fresh <see cref="ScribeBlock.TaskId"/>,
-/// so an import can never carry a pin. See docs/CODEC-MIGRATION.md.</para>
+/// <para>Pure Core string logic; the Mod layer resolves item/link references. Every block gets a fresh
+/// <see cref="ScribeBlock.TaskId"/>, so an import never carries a pin. See docs/CODEC-MIGRATION.md.</para>
 /// </summary>
 public static class ScribeDocumentTsvCodec
 {
     private const char Delimiter = '\t';
     private const string LineEnding = "\n";
 
-    // Canonical header. Import matches by name, so this order is for humans; readers tolerate any order.
+    // Import matches by name, so this order is for humans.
     private const string ColType = "Type";
     private const string ColDone = "Done";
     private const string ColText = "Text";
@@ -52,7 +45,6 @@ public static class ScribeDocumentTsvCodec
         var sb = new StringBuilder();
         AppendRow(sb, ColType, ColDone, ColText, ColSpecial, ColCount, ColDepth);
 
-        // Title rides as a leading row so it round-trips with no special preamble syntax.
         AppendRow(sb, ScribeBlockKindToken.TitleRow, "", doc.Title, "", "", "");
 
         foreach (var block in doc.Blocks)
@@ -64,13 +56,8 @@ public static class ScribeDocumentTsvCodec
             {
                 ScribeBlockKind.Tracker => block.TargetItemCode ?? "",
                 ScribeBlockKind.Link => block.LinkTarget ?? "",
-                // A Craft packs its per-kind payload into the Special cell (comma-separated, per this
-                // codec's "richness lives in Special, never new columns" rule): the output item code
-                // and, when present, the grid-recipe signature. Both are comma-free by construction.
                 ScribeBlockKind.Craft => CraftSpecial(block),
-                // A QuestObjective's item code (when it resolves to one), Tracker-shaped — like LinkDescription,
-                // its own stable objective code (LinkTarget, the reconcile match key) is JSON-only and does not
-                // round-trip through this fixed-width lane (see TextFor's remarks on the same tradeoff).
+                // The objective's own match code (LinkTarget) is JSON-only and does not round-trip here.
                 ScribeBlockKind.QuestObjective => block.TargetItemCode ?? "",
                 _ => "",
             };
@@ -86,11 +73,9 @@ public static class ScribeDocumentTsvCodec
     }
 
     /// <summary>
-    /// Deserializes a TSV table. Fails safely (returns false, <paramref name="document"/> null) only when the
-    /// input has no recognizable header (no <c>Type</c> column) — otherwise it always produces a document,
-    /// degrading bad rows rather than rejecting. A <c>title</c> row sets the document title (if none is
-    /// present the title defaults, and the Mod apply layer leaves the target's title unchanged). Every block
-    /// gets a fresh <see cref="ScribeBlock.TaskId"/>. Never throws.
+    /// Deserializes a TSV table. Returns false (document null) only when there is no <c>Type</c> header;
+    /// otherwise it always produces a document, degrading bad rows. A <c>title</c> row sets the title (absent,
+    /// it defaults and the Mod apply layer leaves the target's title unchanged). Never throws.
     /// </summary>
     public static bool TryDeserialize(string? tsv, out ScribeDocument? document)
     {
@@ -100,7 +85,7 @@ public static class ScribeDocumentTsvCodec
         var records = ParseRecords(tsv);
         if (records.Count == 0) return false;
 
-        // Header → column index map (by name, case-insensitive). Requires a Type column to be a Scribe table.
+        // Header → column index map, by name. A Type column is required.
         var header = records[0];
         int idxType = HeaderIndex(header, ColType);
         if (idxType < 0) return false;
@@ -150,19 +135,16 @@ public static class ScribeDocumentTsvCodec
         return true;
     }
 
-    /// <summary>The Text-column value for a block: its label. A guide-page or quest Link keeps its captured
-    /// title in <see cref="ScribeBlock.LinkLabel"/> rather than Text, so surface that here; otherwise the
-    /// block's own Text (a task's text; empty for an item Tracker/Link whose name derives live from the
-    /// item). A quest Link's <see cref="ScribeBlock.LinkDescription"/> has no column in this fixed-width
-    /// format and does not round-trip through TSV (the lossless JSON codec carries it instead).</summary>
+    /// <summary>The Text-column value for a block. A guide-page or quest Link keeps its title in
+    /// <see cref="ScribeBlock.LinkLabel"/>, so surface that. A quest Link's <see cref="ScribeBlock.LinkDescription"/>
+    /// has no column and does not round-trip through TSV (the JSON codec carries it).</summary>
     private static string TextFor(ScribeBlock block)
     {
         if (block.Kind == ScribeBlockKind.Link
             && (ScribeLinkTarget.IsGuidePage(block.LinkTarget) || ScribeLinkTarget.IsQuest(block.LinkTarget))
             && !string.IsNullOrEmpty(block.LinkLabel))
             return block.LinkLabel!;
-        // A label-only QuestObjective (no resolvable item) keeps its captured display text in LinkLabel,
-        // mirroring a guide-page Link's degrade above.
+        // A label-only QuestObjective (no resolvable item) keeps its display text in LinkLabel.
         if (block.Kind == ScribeBlockKind.QuestObjective
             && string.IsNullOrEmpty(block.TargetItemCode) && !string.IsNullOrEmpty(block.LinkLabel))
             return block.LinkLabel!;
@@ -179,24 +161,20 @@ public static class ScribeDocumentTsvCodec
 
             case ScribeBlockKind.Link:
                 string? target = NullIfBlank(special);
-                // A guide-page or quest target has no item to name it live, so its Text IS its display label.
+                // A guide-page or quest target has no item to name it, so Text IS its display label.
                 string? label = (ScribeLinkTarget.IsGuidePage(target) || ScribeLinkTarget.IsQuest(target))
                     && !string.IsNullOrEmpty(text) ? text : null;
                 return new ScribeBlock(kind, text, done: done, depth: depth,
                     linkTarget: target, linkLabel: label);
 
             case ScribeBlockKind.Craft:
-                // Special = "outputCode" or "outputCode,recipeSignature" (see CraftSpecial). Split on the
-                // FIRST comma: everything before is the output item code, everything after is the signature.
+                // Special = "outputCode[,recipeSignature]"; split on the FIRST comma.
                 SplitCraftSpecial(special, out string? craftCode, out string craftSignature);
                 return new ScribeBlock(kind, text, done: done, depth: depth,
                     targetItemCode: craftCode, targetQuantity: count, recipeSignature: craftSignature);
 
             case ScribeBlockKind.QuestObjective:
-                // Tracker-shaped: an item code in Special resolves a real icon; otherwise Text is the
-                // captured fallback label (see TextFor). The objective's own match code (LinkTarget) is
-                // JSON-only and does not round-trip here — an imported row is a standalone reference, not
-                // reconciled against a live quest.
+                // Tracker-shaped: an item code in Special resolves an icon; otherwise Text is the fallback label.
                 string? questItemCode = NullIfBlank(special);
                 string? questLabel = questItemCode is null ? NullIfBlank(text) : null;
                 return new ScribeBlock(kind, "", done: done, depth: depth,
@@ -207,18 +185,15 @@ public static class ScribeDocumentTsvCodec
         }
     }
 
-    /// <summary>The Special-cell payload for a Craft block: its output item code, optionally followed by
-    /// <c>","</c> and its grid-recipe signature. Both are comma-free by construction, so the leading comma
-    /// unambiguously separates them (see <see cref="SplitCraftSpecial"/>). A Craft with no resolved recipe
-    /// signature exports just the code, exactly like a Tracker's Special.</summary>
+    /// <summary>The Special-cell payload for a Craft: the output item code, optionally followed by <c>","</c>
+    /// and the recipe signature. Both are comma-free by construction, so the first comma separates them.</summary>
     private static string CraftSpecial(ScribeBlock block)
     {
         string code = block.TargetItemCode ?? "";
         return string.IsNullOrEmpty(block.RecipeSignature) ? code : code + "," + block.RecipeSignature;
     }
 
-    /// <summary>Inverse of <see cref="CraftSpecial"/>: split a Craft Special cell on its FIRST comma into the
-    /// output item code (null when blank) and the recipe signature (empty when absent).</summary>
+    /// <summary>Inverse of <see cref="CraftSpecial"/>: splits on the FIRST comma into the code (null when blank) and signature (empty when absent).</summary>
     private static void SplitCraftSpecial(string special, out string? code, out string signature)
     {
         int comma = special.IndexOf(',');
@@ -232,7 +207,6 @@ public static class ScribeDocumentTsvCodec
         signature = special.Substring(comma + 1);
     }
 
-    // ---- header + cell helpers ----
 
     private static int HeaderIndex(List<string> header, string name)
     {
@@ -294,11 +268,9 @@ public static class ScribeDocumentTsvCodec
 
     /// <summary>
     /// Splits TSV text into records of RAW (still-escaped) fields, honoring RFC-4180-style quoting so a quoted
-    /// field may hold interior tabs and newlines. Quoting is only tracked to know where a tab/newline is
-    /// literal — every character (including the quotes and doubled quotes) is preserved verbatim, so each
-    /// field is exactly the token <see cref="ScribeTsvSafe.Escape"/> produced and
-    /// <see cref="ScribeTsvSafe.Unescape"/> is the single place that unquotes/un-doubles/un-defangs. Bare CR
-    /// is normalized away (CRLF → LF); a trailing newline does not produce a spurious empty record.
+    /// field may hold tabs and newlines. Every character (including quotes) is preserved verbatim; the
+    /// <see cref="ScribeTsvSafe.Unescape"/> call is the single place that unquotes. CRLF is normalized to LF
+    /// and a trailing newline does not produce an empty record.
     /// </summary>
     private static List<List<string>> ParseRecords(string text)
     {
@@ -347,8 +319,7 @@ public static class ScribeDocumentTsvCodec
             }
         }
 
-        // Finalize a trailing field/record only when the last row actually had content (so a file ending in a
-        // newline doesn't append an empty record).
+        // Finalize a trailing record only if the last row had content.
         fields.Add(sb.ToString());
         if (rowHasContent || fields.Count > 1 || (fields.Count == 1 && fields[0].Length > 0))
             records.Add(fields);

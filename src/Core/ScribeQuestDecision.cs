@@ -3,8 +3,7 @@ using System.Linq;
 
 namespace Scribe.Core;
 
-/// <summary>A player's recorded decision on one quest prompt: they either accepted it via Scribe (linked
-/// the quest, or marked its linked task done for a completion-prompt) or explicitly dismissed it.
+/// <summary>A player's recorded decision on one quest prompt: accepted via Scribe or explicitly dismissed.
 /// See <see cref="ScribeQuestDecisionSet"/> for the keying.</summary>
 public enum ScribeQuestDecision : byte
 {
@@ -12,11 +11,9 @@ public enum ScribeQuestDecision : byte
     Dismissed = 1,
 }
 
-/// <summary>One player's decision on a specific quest prompt, keyed by <see cref="Source"/> (the backend
-/// quest mod — <see cref="ScribeQuestSource"/>), <see cref="QuestCode"/>, and <see cref="IsCompletion"/>
-/// (an accept-prompt and that same quest's later completion-prompt are independent decisions — dismissing
-/// one must never suppress the other). Game-agnostic; the Mod layer owns persistence and network sync
-/// (fix-quest-prompt-persistence-and-auto-pin).</summary>
+/// <summary>One player's decision on a quest prompt, keyed by <see cref="Source"/> (see
+/// <see cref="ScribeQuestSource"/>), <see cref="QuestCode"/>, and <see cref="IsCompletion"/> (an
+/// accept-prompt and the same quest's completion-prompt are independent decisions). Game-agnostic.</summary>
 public sealed class ScribeQuestDecisionEntry
 {
     public string Source { get; set; } = "";
@@ -25,24 +22,19 @@ public sealed class ScribeQuestDecisionEntry
     public ScribeQuestDecision Decision { get; set; }
 }
 
-/// <summary>One player's whole set of quest-prompt decisions, keyed by
-/// <c>(Source, QuestCode, IsCompletion)</c>. Mirrors the shape of a per-player pin list
-/// (<see cref="ScribePinnedRef"/> + a plain <c>List</c>) but wraps its own add/lookup/remove so every
-/// caller (the Mod-side store, the client's synced cache) shares one correct implementation of the key
-/// match. Serialized by <see cref="ScribeQuestDecisionCodec"/>.</summary>
+/// <summary>One player's set of quest-prompt decisions, keyed by <c>(Source, QuestCode, IsCompletion)</c>.
+/// Wraps add/lookup/remove so the Mod-side store and the client's synced cache share one key match.
+/// Serialized by <see cref="ScribeQuestDecisionCodec"/>.</summary>
 public sealed class ScribeQuestDecisionSet
 {
-    /// <summary>Hard upper bound on the number of decisions a single player may hold, enforced on every
-    /// deserialize so a malformed or hostile payload cannot grow a persisted/synced set without limit.
-    /// Generous relative to any realistic vsquest/Progression Framework catalog size.</summary>
+    /// <summary>Hard cap on decisions per player, enforced on every deserialize against hostile payloads.</summary>
     public const int MaxEntriesPerPlayer = 2000;
 
     private readonly List<ScribeQuestDecisionEntry> _entries = new();
 
     public IReadOnlyList<ScribeQuestDecisionEntry> Entries => _entries;
 
-    /// <summary>Records (or overwrites) the decision for this exact key. Returns true if the set actually
-    /// changed (a new key, or an existing key's decision flipped).</summary>
+    /// <summary>Records or overwrites the decision for this key. Returns true if the set changed.</summary>
     public bool Set(string source, string questCode, bool isCompletion, ScribeQuestDecision decision)
     {
         var existing = Find(source, questCode, isCompletion);
@@ -71,9 +63,7 @@ public sealed class ScribeQuestDecisionSet
     public bool Remove(string source, string questCode, bool isCompletion)
         => _entries.RemoveAll(e => Matches(e, source, questCode, isCompletion)) > 0;
 
-    /// <summary>Drops every recorded decision — used when replacing this set wholesale from a fresh
-    /// authoritative push (the client's synced cache never merges; it always reflects the server's last
-    /// full send).</summary>
+    /// <summary>Drops every decision; the client's synced cache is replaced wholesale, never merged.</summary>
     public void Clear() => _entries.Clear();
 
     private ScribeQuestDecisionEntry? Find(string source, string questCode, bool isCompletion)
