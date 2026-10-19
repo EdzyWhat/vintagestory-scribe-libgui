@@ -1,6 +1,5 @@
 // Production multi-line editable field for the LibGUI lectern editor view
-// (migrate-editor-view-libgui). Promoted from the change-1 reference probe
-// (SpikeScribeMultilineField.cs, now deleted): LibGUI's stock TextField is single-line and
+// (LibGUI port of the native row input): LibGUI's stock TextField is single-line and
 // `internal`, so this REIMPLEMENTS a wrapping, auto-growing, focus-holding editable field on
 // LibGUI's PUBLIC API, mirroring LibGUI's own TextField/RenderTextField architecture:
 //   • ScribeMultilineFieldRender : RenderBox — wraps text to width, sizes height to line count
@@ -42,7 +41,7 @@ internal readonly record struct ScribeVisualLine(string Text, int Start);
 
 /// <summary>The render object: wraps + paints multi-line text, a selection highlight, and a caret,
 /// auto-sizing its height to the wrapped line count. Implements <see cref="IScribeEditableTextRender"/>
-/// (already had both members) so the field State can drive it or the cuneiform render object through
+/// so the field State can drive it or the cuneiform render object through
 /// one contract.</summary>
 internal sealed class ScribeMultilineFieldRender : Gui.Core.Framework.RenderBox, IScribeEditableTextRender
 {
@@ -51,10 +50,9 @@ internal sealed class ScribeMultilineFieldRender : Gui.Core.Framework.RenderBox,
     /// resolve different typefaces with different line metrics and a single-line row ends up a couple of
     /// pixels taller in one view than the other — which then also makes the pixel-based scroll-offset
     /// restore across a view switch land on a slightly different row. Passing "" here resolves to a
-    /// DIFFERENT system typeface than "sans-serif" (the ~2px read/edit mismatch we hit before), so the
-    /// setter coalesces null/empty to the "sans-serif" default. Since v1-release-checklist §6 the family is
-    /// no longer fixed: the player's task-font choice flows in here AND into the read row's TextStyle via
-    /// the same resolver (<c>ScribeTaskFont.Resolve</c>), keeping the two views on one family.</summary>
+    /// DIFFERENT system typeface than "sans-serif" (a ~2px read/edit mismatch), so the
+    /// setter coalesces null/empty to the "sans-serif" default. The player's task-font choice flows in
+    /// here AND into the read row's TextStyle via the same resolver (<c>ScribeTaskFont.Resolve</c>), keeping the two views on one family.</summary>
     private string fontFamily = "sans-serif";
 
     private string text = "";
@@ -89,7 +87,7 @@ internal sealed class ScribeMultilineFieldRender : Gui.Core.Framework.RenderBox,
     /// a live selection keeps the caret solid (the State pins this true), mirroring LibGUI's TextField.</summary>
     public bool CaretVisible { get => caretVisible; set => SetProperty(ref caretVisible, value, repaint: true); }
     public float FontSize { get => fontSize; set => SetProperty(ref fontSize, value, relayout: true); }
-    /// <summary>Task-text font family (v1-release-checklist §6). Coalesces null/empty to "sans-serif" so an
+    /// <summary>Task-text font family. Coalesces null/empty to "sans-serif" so an
     /// unset value keeps the built-in body face; changing it relayouts (family changes line metrics).</summary>
     public string FontFamily { get => fontFamily; set => SetProperty(ref fontFamily, string.IsNullOrEmpty(value) ? "sans-serif" : value, relayout: true); }
     public float PadX { get => padX; set => SetProperty(ref padX, value, relayout: true); }
@@ -101,7 +99,7 @@ internal sealed class ScribeMultilineFieldRender : Gui.Core.Framework.RenderBox,
 
     /// <summary>Point size to draw/wrap at so glyphs match the player's optical size. Layout height
     /// still uses <see cref="ScribeTaskFont.LineHeight"/> of the nominal size — optical must not go
-    /// into this field's laid-out height (peg-task-fonts-to-caudex).</summary>
+    /// into this field's laid-out height.</summary>
     private float DrawSize => ScribeTaskFont.EffectiveSize(fontFamily, fontSize);
 
     /// <summary>Glyph-only vertical nudge; caret and selection stay on the Caudex line-box.</summary>
@@ -268,7 +266,7 @@ internal sealed class ScribeMultilineFieldRender : Gui.Core.Framework.RenderBox,
 
     /// <summary>Caret vertical extent in LOCAL space (top + line height), matching the bar
     /// <see cref="PaintInternal"/> draws (<c>PadY + line * lineHeight</c>). Returns false before layout has
-    /// produced a line height. scroll-follow-caret-in-editor.</summary>
+    /// produced a line height.</summary>
     public bool TryGetCaretRect(out float localTop, out float height)
     {
         if (lineHeight <= 0f)
@@ -530,7 +528,7 @@ public sealed class ScribeMultilineField : StatefulWidget, IFocusable
     public string Placeholder { get; }
     public FocusNode? FocusNode { get; }
     public float FontSize { get; }
-    /// <summary>Task-text font family (v1-release-checklist §6); defaults to "sans-serif" (the built-in
+    /// <summary>Task-text font family; defaults to "sans-serif" (the built-in
     /// body face). Must match the read row's resolved family so the two views keep identical line metrics.</summary>
     public string FontFamily { get; }
     /// <summary>Internal horizontal padding for the field's text box (pixels). Fed from
@@ -570,16 +568,16 @@ public sealed class ScribeMultilineField : StatefulWidget, IFocusable
     /// consistently and typing does not reseed the letters already on screen. Ignored when
     /// <see cref="UseCuneiform"/> is false.</summary>
     public int CuneiformJitterSeed { get; }
-    /// <summary>Whole-character rotation in degrees for the cuneiform path (tune-tablet-jitter-add-rotation);
+    /// <summary>Whole-character rotation in degrees for the cuneiform path;
     /// 0 = upright. Ignored when <see cref="UseCuneiform"/> is false. Applied after jitter, at paint time.</summary>
     public float CuneiformRotation { get; }
     /// <summary>Whether newly-typed cuneiform text presses in stroke-by-stroke (per-letter progression).
     /// Ignored when <see cref="UseCuneiform"/> is false; off reproduces the instant reveal.</summary>
     public bool CuneiformProgression { get; }
-    /// <summary>Per-material outer glow behind the cuneiform strokes (add-tablet-clay-type-themes); default
+    /// <summary>Per-material outer glow behind the cuneiform strokes; default
     /// disabled. Ignored when <see cref="UseCuneiform"/> is false.</summary>
     public CuneiformGlow CuneiformGlow { get; }
-    /// <summary>Per-view cuneiform stroke-weight scale (adopt-glyph-forge-tablet-themes); 1 = base weight.
+    /// <summary>Per-view cuneiform stroke-weight scale; 1 = base weight.
     /// Ignored when <see cref="UseCuneiform"/> is false.</summary>
     public float CuneiformStrokeWeightScale { get; }
     public Action<string>? OnChanged { get; }
@@ -599,21 +597,21 @@ public sealed class ScribeMultilineField : StatefulWidget, IFocusable
     public Action? OnMaxLengthReached { get; }
     /// <summary>Fired when the caret MOVES by keyboard navigation (arrows / Home / End / word-jump) without
     /// changing the text — the one caret change that does NOT go through <see cref="OnChanged"/>. The editor
-    /// uses it to follow an off-screen caret with the scroll view (scroll-follow-caret-in-editor issue #1:
-    /// arrow keys weren't scrolling because <c>MoveCaret</c> never notified the dialog). NOT fired on a mouse
+    /// uses it to follow an off-screen caret with the scroll view (<c>MoveCaret</c> notifies the dialog through
+    /// this callback). NOT fired on a mouse
     /// click (that lands on a visible pixel and is handled by <see cref="OnPointerFocus"/> instead).</summary>
     public Action? OnCaretMoved { get; }
     /// <summary>Fired when this field is focused by a POINTER PRESS (a click into the row), after the caret is
     /// placed at the click point. The editor uses it to SUPPRESS the scroll-into-view on click: a click always
-    /// lands on a visible pixel, so the caret is already visible and auto-scrolling to the row top is unwanted
-    /// (scroll-follow-caret-in-editor issue #3). Distinct from programmatic focus (Tab/Enter via
+    /// lands on a visible pixel, so the caret is already visible and auto-scrolling to the row top is unwanted.
+    /// Distinct from programmatic focus (Tab/Enter via
     /// <c>FocusEditorRow</c>), which SHOULD scroll — hence the field, not the shared focus listener, is the seam.</summary>
     public Action? OnPointerFocus { get; }
     /// <summary>Jump focus to the FIRST row of the note, caret at its start — document-top navigation.
     /// Fired instead of the one-line <c>CaretVertical(-1)</c> move when Ctrl is held with Up (or with
     /// Home): on Windows that's the native Ctrl+Up / Ctrl+Home, and on macOS the dialog remaps Cmd+Up
     /// to Ctrl+Up first. The dialog commits this row, focuses row 0, and places its caret at the
-    /// document start (scroll-follow-caret-in-editor row-nav). null on surfaces with a single field
+    /// document start. null on surfaces with a single field
     /// (e.g. the title input).</summary>
     public Action? OnJumpToFirstRow { get; }
     /// <summary>Mirror of <see cref="OnJumpToFirstRow"/> — jump focus to the LAST row of the note, caret
@@ -635,14 +633,14 @@ internal sealed class ScribeMultilineFieldState : State<ScribeMultilineField>, I
     // ---- Caret blink (mirrors LibGUI's own TextField: a ticker toggles caretVisible on a fixed cadence,
     // reset to solid on any edit/caret move, paused while a selection is active or focus is lost). Lives
     // in the shared State so BOTH render paths — the normal field and the cuneiform tablet field — blink
-    // at the identical cadence (add-tablet-cuneiform-chrome task 8.1). ----
+    // at the identical cadence. ----
     /// <summary>Blink half-period in milliseconds, matching LibGUI <c>TextField.CursorBlinkMs</c>.</summary>
     private const double CaretBlinkMs = 500;
     private Ticker? caretTicker;
     private bool caretVisible = true;
     private DateTime caretLastToggle = DateTime.MinValue;
 
-    // ---- Cuneiform stroke-progression reveal (add-cuneiform-handwriting-feel). Only the newly-typed run
+    // ---- Cuneiform stroke-progression reveal. Only the newly-typed run
     // presses in; already-revealed text never replays, and non-append edits (deletion, mid-line change)
     // snap to fully revealed. Inactive unless UseCuneiform + CuneiformProgression are both on. ----
     /// <summary>The reveal schedule — a pure stroke-count model (no per-letter slot). Its single speed knob,
@@ -791,7 +789,7 @@ internal sealed class ScribeMultilineFieldState : State<ScribeMultilineField>, I
         }
         e.Handled = true;
 
-        // Typed-arrow substitution (add-arrow-substitution-and-cuneiform-glyphs): if this keystroke
+        // Typed-arrow substitution: if this keystroke
         // completes an ASCII arrow digraph (`->`/`<-`) with the character just before the caret, replace
         // the two-char run with the single Unicode arrow (`→`/`←`) instead of inserting. Only on typing,
         // never on paste; skipped while a selection is active (the "char before the caret" is ambiguous
@@ -992,8 +990,8 @@ internal sealed class ScribeMultilineFieldState : State<ScribeMultilineField>, I
         RestartCaretBlink(); // a moving caret shows solid, then resumes blinking (pauses if now selecting)
         MarkNeedsBuild();
         // Keyboard caret moves don't touch the text, so they never fire OnChanged — the editor's only
-        // scroll-follow trigger before this. Notify explicitly so an arrow/Home/End/word-jump that carries
-        // the caret off-screen scrolls it back into view (scroll-follow-caret-in-editor issue #1). Click-to-
+        // scroll-follow trigger. Notify explicitly so an arrow/Home/End/word-jump that carries
+        // the caret off-screen scrolls it back into view. Click-to-
         // place goes through OnFieldPress, not MoveCaret, so this stays keyboard-only.
         Widget.OnCaretMoved?.Invoke();
     }
@@ -1214,7 +1212,7 @@ internal sealed class ScribeMultilineFieldState : State<ScribeMultilineField>, I
     /// proxy wraps our render object as its single child; it may be the normal
     /// <see cref="ScribeMultilineFieldRender"/> or the cuneiform <see cref="ScribeCuneiformFieldRender"/>,
     /// so we resolve it by the shared <see cref="IScribeEditableTextRender"/> contract rather than a
-    /// concrete type — letting one State drive either render object (design D2/D-Q4).</summary>
+    /// concrete type — letting one State drive either render object.</summary>
     private static IScribeEditableTextRender? ResolveTextRender(RenderObject proxy)
     {
         if (proxy is IScribeEditableTextRender direct) return direct;
@@ -1273,8 +1271,7 @@ internal sealed class ScribeMultilineFieldState : State<ScribeMultilineField>, I
         RestartCaretBlink(); // a fresh click resets the caret solid (or stops the blink if it selected a range)
         MarkNeedsBuild();
         // A click focuses this row AND places the caret at a visible pixel — so the editor must NOT auto-scroll
-        // it into view (that yanked the tall row to its top even though the caret was already visible where the
-        // player clicked; scroll-follow-caret-in-editor issue #3). Programmatic focus (Tab/Enter) still scrolls
+        // it into view (the caret is already visible where the player clicked). Programmatic focus (Tab/Enter) still scrolls
         // because it goes through FocusEditorRow, not this press path.
         Widget.OnPointerFocus?.Invoke();
     }
@@ -1342,16 +1339,16 @@ internal sealed class ScribeMultilineFieldState : State<ScribeMultilineField>, I
                 selectionColor: colors.Primary with { W = 0.35f },
                 bundle: Widget.CuneiformBundle,
                 padX: Widget.PadX,
-                // Cuneiform-only top/bottom inset reduction (tablet-cuneiform-glyph-scale) — the normal
+                // Cuneiform-only top/bottom inset reduction — the normal
                 // (non-cuneiform) branch below keeps Widget.PadY unscaled; only this cuneiform branch
                 // reads tighter to match the smaller synthetic caret.
                 padY: Widget.PadY * CuneiformMetrics.FieldPadYScale,
                 // Focus box on the cuneiform (tablet) path, scoped to the INPUT — mirrors the normal path
-                // just below (scope-focus-affordance-to-input). At rest the fill+border are transparent so a
+                // just below. At rest the fill+border are transparent so a
                 // resting cuneiform row shows no box over the clay; on focus they light to SurfaceHigh +
                 // Primary. Thickness and corner stay CONSTANT (only the colors toggle) so the content box
                 // never reflows focus↔unfocus, keeping read/edit row heights in parity. The enclosing row
-                // Container no longer draws focus chrome, so a focused input on a PINNED row now reads as a
+                // Container draws no focus chrome, so a focused input on a PINNED row reads as a
                 // small bordered input inside the row's pinned wash — two distinct shapes.
                 boxColor: focusNode.HasFocus ? colors.SurfaceHigh : Vector4.Zero,
                 borderColor: focusNode.HasFocus ? (Widget.FocusBorderColor ?? colors.Primary) : Vector4.Zero,
