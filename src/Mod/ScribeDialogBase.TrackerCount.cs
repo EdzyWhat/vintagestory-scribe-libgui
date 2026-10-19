@@ -8,19 +8,19 @@ using Vintagestory.API.Config;   // GlobalConstants
 
 namespace Scribe;
 
-// Tracker count engine (add-tracker-link-tasks Group 4). While a Scribe surface is open in the read view,
+// Tracker count engine. While a Scribe surface is open in the read view,
 // this keeps every Tracker task's live CurrentQuantity in sync with the VIEWING player's carried inventory
-// (hotbar + backpack only — never block-stored or world items, D5). The count is derived client-side and
+// (hotbar + backpack only — never block-stored or world items). The count is derived client-side and
 // pushed through the server-authoritative path (ScribeSetTrackerQuantityMessage), so it persists and other
 // viewers converge, exactly like the Done flag. When a Tracker first reaches its target, the player's
-// tracker-completion setting is applied (complete / delete / nothing, D6/4.4).
+// tracker-completion setting is applied (complete / delete / nothing).
 //
 // Deliberately read-view-only: the editor renders off `scratch`, so mutating the live document there would
 // fight the editor's autosave flush (the scratch-vs-external-edit hazard). In the editor the player is
 // setting the target quantity, not watching progress — the read view is where the counter lives.
 public abstract partial class ScribeDialogBase
 {
-    /// <summary>Game-tick listener id for the ~1s edge-case poll (D5/4.2), registered for the dialog's
+    /// <summary>Game-tick listener id for the ~1s edge-case poll, registered for the dialog's
     /// whole lifetime. The poll is a cheap guarded no-op unless the open document has a Tracker AND the
     /// read view is showing, so it costs nothing for note/task-only documents. Backstops the
     /// <see cref="OnTrackerSlotModified"/> event path (which can miss e.g. an in-place stack merge or a
@@ -44,12 +44,12 @@ public abstract partial class ScribeDialogBase
 
     /// <summary>Start the Tracker count engine when the dialog opens: register the poll backstop, subscribe
     /// to carried-inventory changes, and do an immediate recompute so an already-satisfied Tracker reads
-    /// correctly the moment the surface opens (D5 — recompute on open).</summary>
+    /// correctly the moment the surface opens.</summary>
     public override void OnGuiOpened()
     {
         base.OnGuiOpened();
 
-        // Register the block inventory as OPEN *server-side* (add-scriptorium-inventory). LibGUI's
+        // Register the block inventory as OPEN *server-side*. LibGUI's
         // GuiDialogBlockEntityBase.OnGuiOpened opens the inventory only CLIENT-side (so move prediction
         // works) and never tells the server; its OnGuiClosed does send the paired 1001 close. Vanilla
         // containers open with a matching 1000 packet (BlockEntityOpenableContainer.toggleInventoryDialogClient)
@@ -102,7 +102,7 @@ public abstract partial class ScribeDialogBase
     /// <summary>The DocId of the document this dialog currently has open (any view), or <c>null</c> when the
     /// dialog is closed. The HUD's own live Tracker count engine reads this across every open Scribe dialog so
     /// it can DEFER for a doc a dialog holds — it treats such a doc as display-only and does NOT send a count
-    /// or fire the rising-edge completion for its pinned Trackers (add-tracker-link-tasks 7.10). Deferring for
+    /// or fire the rising-edge completion for its pinned Trackers. Deferring for
     /// the WHOLE time the dialog is open (not just its read view) is deliberate and covers two hazards at once:
     /// <list type="bullet">
     /// <item><b>Read view</b> — the dialog's own <see cref="RecomputeTrackers"/> is already driving the send +
@@ -115,7 +115,7 @@ public abstract partial class ScribeDialogBase
     /// A pinned Tracker whose document is NOT open in any dialog is the HUD's to drive.</summary>
     internal Guid? OpenDocumentId => IsOpened() ? host.Document.DocId : (Guid?)null;
 
-    /// <summary>The carried inventories a Tracker counts across: the player's own hotbar + backpack (D5).
+    /// <summary>The carried inventories a Tracker counts across: the player's own hotbar + backpack.
     /// Matches <see cref="ScribeModSystem.EnumerateCarriedSlots"/>'s scope so watch-set and count-set agree.</summary>
     private IEnumerable<IInventory> EnumerateTrackerWatchInventories()
     {
@@ -161,7 +161,7 @@ public abstract partial class ScribeDialogBase
         if (capi.World.Player is not { } player) return;
 
         // Both plain Trackers and Craft parents count the viewer's carried inventory against their target
-        // (add-crafting-tasks 9.2 — a Craft parent counts its recipe OUTPUT), so recount every count-tracked
+        // (a Craft parent counts its recipe OUTPUT), so recount every count-tracked
         // block. Craft ingredient CHILDREN are themselves plain Trackers (depth 1), so they're already
         // included; the Craft parent is the only kind this predicate widens over IsTracker.
         var trackers = host.Document.Blocks.Where(b => b.IsCarriedCountTracked).ToList();
@@ -190,10 +190,10 @@ public abstract partial class ScribeDialogBase
             block.CurrentQuantity = have;
             anyChange = true;
 
-            // Persist + converge through the server-authoritative path (like Done, D5/4.3).
+            // Persist + converge through the server-authoritative path (like Done).
             SendTrackerQuantity(block.TaskId, have);
 
-            // Rising edge only (unmet → met): apply the completion setting exactly once (4.4). Because we
+            // Rising edge only (unmet → met): apply the completion setting exactly once. Because we
             // skip unchanged counts above and only fire on the rising edge, a later shortfall can neither
             // re-fire the action nor un-complete a task, and a deleted Tracker simply vanishes from the next
             // recompute (no resurrection).
@@ -204,7 +204,7 @@ public abstract partial class ScribeDialogBase
         if (anyChange) RefreshReadView();
     }
 
-    /// <summary>Apply the player's tracker-completion setting when a Tracker fills up (D6/4.4):
+    /// <summary>Apply the player's tracker-completion setting when a Tracker fills up:
     /// <list type="bullet">
     /// <item><b>Complete</b> — issue the same edit as ticking the checkbox (<see cref="OnReadViewCompleteTask"/>),
     /// so it honors the player's own completion policy. Guarded by <c>!Done</c> because that path TOGGLES,
@@ -233,7 +233,7 @@ public abstract partial class ScribeDialogBase
         }
     }
 
-    /// <summary>Send a Tracker's freshly-counted quantity to the server (add-tracker-link-tasks 4.3). The
+    /// <summary>Send a Tracker's freshly-counted quantity to the server. The
     /// server clamps and writes it lock-free through the owning host, then resyncs viewers.</summary>
     private void SendTrackerQuantity(Guid taskId, int quantity)
     {

@@ -5,7 +5,7 @@ using Vintagestory.API.Client;   // ICoreClientAPI, GuiDialog
 
 namespace Scribe;
 
-// Quest objective progress engine (add-progression-framework-quest-objective-subtasks 5.4). While a
+// Quest objective progress engine. While a
 // Scribe surface is open in the read view, this keeps every QuestObjective child's live CurrentQuantity
 // in sync with Progression Framework's own cached per-objective progress (never carried inventory —
 // that's the Tracker/Craft engine in ScribeDialogBase.TrackerCount.cs, which a QuestObjective is
@@ -53,7 +53,7 @@ public abstract partial class ScribeDialogBase
         if (anyChange) RefreshReadView();
     }
 
-    /// <summary>Send a QuestObjective's freshly-read progress to the server (Task 6's message). The
+    /// <summary>Send a QuestObjective's freshly-read progress to the server (via its server message). The
     /// server clamps and writes it lock-free through the owning host, then resyncs viewers.</summary>
     private void SendQuestObjectiveProgress(Guid taskId, int quantity)
     {

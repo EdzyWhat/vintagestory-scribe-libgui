@@ -37,11 +37,11 @@ public abstract partial class ScribeDialogBase
     {
         base.OnRenderGUI(deltaTime);
 
-        // Sample the light reaching the player and shade the whole dialog to match (respect-local-illumination).
+        // Sample the light reaching the player and shade the whole dialog to match.
         // Read here on the render/main thread only (block-accessor reads off the relight thread are unsafe).
         // The sampler eases the shade toward its new value over ~100ms and quantizes the result to coarse
         // brightness+hue buckets, reporting whether that bucket CHANGED since last frame; only then do we
-        // reconcile the body so LibGUI re-records its SKPicture with the new ScribeGlobalTint config (D3).
+        // reconcile the body so LibGUI re-records its SKPicture with the new ScribeGlobalTint config.
         // During a light transition the bucket steps for a few frames (each a rebuild) then holds; on a static
         // scene it's stable → no rebuild, cache intact. RebuildBody marks the body dirty for the NEXT frame's
         // build (a frame-late tint update is imperceptible) and REUSES every row, so a live light change never
@@ -49,7 +49,7 @@ public abstract partial class ScribeDialogBase
         currentShade = lightSampler.Sample(deltaTime);
         if (currentShade.Changed) RebuildBody();
 
-        // Keep the window (hence the OuterArtBox art canvas) sized to the live Pixel Art Size (task 7.1).
+        // Keep the window (hence the OuterArtBox art canvas) sized to the live Pixel Art Size.
         // The base only sets the window Size in CreateWindowConfig, which TryOpen runs ONCE per open — so a
         // live W change re-lays-out the content tree (via ForceRebuild) but leaves the window's _layoutSize
         // at the opened W, clamping the art Container to the stale size while the inner SizedBoxes grow past
@@ -65,10 +65,9 @@ public abstract partial class ScribeDialogBase
             SyncLayoutSize();
         }
 
-        // Editor-row collapse cleanup is no longer the dialog's job (D0 / extract-animated-task-list §6.1):
-        // the editor now routes its rows through ScribeAnimatedList, which retires a completed ghost via its
-        // own deferred SetState (a local subtree reconcile, no cross-tree RebuildBody) — exactly as the Pin
-        // Tab and Read view already do. The container fires OnDepartureSettled → RequestClampToExtent so the
+        // Editor-row collapse cleanup is the container's job, not the dialog's: the editor routes its rows
+        // through ScribeAnimatedList, which retires a completed ghost via its own deferred SetState (a local
+        // subtree reconcile, no cross-tree RebuildBody) — exactly as the Pin Tab and Read view do. The container fires OnDepartureSettled → RequestClampToExtent so the
         // scroll extent still re-clamps once the row is gone.
 
         // Keep hover self-healing under a STATIONARY cursor, because LibGUI only recomputes hover on real
@@ -78,22 +77,21 @@ public abstract partial class ScribeDialogBase
         // insert, title-edit toggle — mounting a fresh tree where every element is hovered=false. The latch
         // re-dispatches a synthetic pointer-move for a few frames past either trigger (long enough for the
         // rebuilt tree to lay out on a later frame), so the row under the cursor regains its hover-gated
-        // delete/pin controls without a mouse wiggle (fix-list-collapse-stale-hover). No-op when idle.
-        // Both the editor's hand-wired collapse AND the container-driven collapses (extract-animated-task-list:
-        // Pin Tab, and reconcile-animating-surfaces §5.5: the read view) reflow the list every animating frame,
+        // delete/pin controls without a mouse wiggle. No-op when idle.
+        // The editor, Pin Tab, and read view collapses all reflow the list every animating frame,
         // so any of them arms the hover latch. The container owns no dialog-level state (RootElement /
         // RefreshHoverAtCursor are the dialog's), so this loop stays here, reading the same host-owned registries
-        // the containers animate against (open-question §2.7 resolution).
+        // the containers animate against.
         if (AnyRowAnimating) hoverRefreshLatch.Arm();
         hoverRefreshLatch.ArmIfRebuilt(RootElement);
         if (hoverRefreshLatch.Tick()) RefreshHoverAtCursor();
 
         // Keep the viewport pinned to the bottom WHILE an editor row collapses, so deleting the last row
-        // (or any row while scrolled to the bottom) closes the list up smoothly instead of snapping upward
-        // (reconcile-animating-surfaces §3.10). The collapse shrinks the content height a little each frame;
+        // (or any row while scrolled to the bottom) closes the list up smoothly instead of snapping upward.
+        // The collapse shrinks the content height a little each frame;
         // reconcile holds the scroll offset fixed across the repaint, so without this the offset stays put
         // and dead space opens below the last row, which the post-collapse re-clamp (pendingClampToExtent)
-        // then removes in one instant JumpTo — the jarring snap that was reported. Clamping the offset down
+        // then removes in one instant JumpTo — a jarring snap. Clamping the offset down
         // to the shrinking MaxScrollExtent every frame of the collapse makes it glide in lockstep with the
         // content, so the bottom edge tracks smoothly (the collapse's own EaseInOutCubic timing drives it —
         // no separate scroll animation needed). Acts ONLY when the offset is genuinely stranded past the
@@ -102,8 +100,7 @@ public abstract partial class ScribeDialogBase
         // base.OnRenderGUI ran BuildDirtyElements + layout above) so MaxScrollExtent reflects THIS frame's
         // collapsed height. pendingClampToExtent below remains as the final settle for the rare shrink not
         // covered by a live collapse (e.g. LibGUI's >50px wheel-slop clamp firing mid-collapse).
-        // Also pins the container-driven collapses (extract-animated-task-list: Pin Tab; reconcile-animating-
-        // surfaces §5.5: read view): removing the bottom pin/task while scrolled down eases the viewport up in
+        // Also pins the Pin Tab and read view collapses: removing the bottom pin/task while scrolled down eases the viewport up in
         // lockstep with the shrinking content instead of snapping. Same registry-AnyAnimating gate, same
         // no-op-when-in-bounds guard — the views never animate at once (only one is mounted), so OR-ing their
         // registries is safe.
@@ -117,11 +114,10 @@ public abstract partial class ScribeDialogBase
             }
         }
 
-        // A row (task OR note) lost focus while empty (add-empty-task-lifecycle; generalized to notes by
-        // add-note-kind-picker D3): remove it now, deferred out of the blur notification so we don't dispose
+        // A row (task OR note) lost focus while empty: remove it now, deferred out of the blur notification so we don't dispose
         // focus nodes mid focus-transition. Re-read from live scratch and re-check emptiness so a stale index
         // or a row that gained text in the meantime is a safe no-op (idempotent with the OnRowFocusChanged
-        // commit that also fires on a row→row move). DeleteEditorBlock handles the focus-to-above fixup (Q1)
+        // commit that also fires on a row→row move). DeleteEditorBlock handles the focus-to-above fixup
         // and the collapse animation.
         if (pendingEmptyRowRemoval is { } emptyIdx)
         {
@@ -134,8 +130,8 @@ public abstract partial class ScribeDialogBase
                 // freshly-inserted empty row (Enter / add-picker) catches a TRANSIENT blur when the
                 // ensure-visible SetState churns the subtree and its field remounts (the one-shot auto-focus
                 // is already consumed), so OnRowBlurred scheduled it here even though the user never left it.
-                // The trace signature was: insert-below N -> focus=N+1 -> delete N+1, the new row vanishing
-                // "a few frames" after Enter. Guard on live focus so only a real leave removes the row; the
+                // Without the guard the new row would vanish "a few frames" after Enter.
+                // Guard on live focus so only a real leave removes the row; the
                 // terminal PurgeEmptyRowsFromScratch on switch/close still guarantees no empty row persists.
                 bool stillFocused =
                     (focusedEditIndex == emptyIdx)
@@ -156,7 +152,7 @@ public abstract partial class ScribeDialogBase
         if (_pendingTitleEditRebuild)
         {
             _pendingTitleEditRebuild = false;
-            // In-place reconcile (§3.1): swaps the title slot between display Text and inline TextField
+            // In-place reconcile: swaps the title slot between display Text and inline TextField
             // (different widget types → the reconcile mounts the new one fresh, so _pendingTitleFocus's
             // Owner-check below still fires once it's live) while REUSING the editor rows beneath. The
             // deferral out of pointer dispatch is retained since this flag is armed from the pencil tap /
@@ -180,8 +176,8 @@ public abstract partial class ScribeDialogBase
             }
         }
 
-        // Re-home keyboard focus onto a REUSED editor row after an in-place reconcile
-        // (reconcile-animating-surfaces §3.1). base.OnRenderGUI above already ran BuildDirtyElements (the
+        // Re-home keyboard focus onto a REUSED editor row after an in-place reconcile.
+        // base.OnRenderGUI above already ran BuildDirtyElements (the
         // reconcile) + layout this frame, so the target row's field element is mounted and its focus node
         // has a live Owner. Deferred here rather than fired inside the mutation handler for the same reason
         // as pendingEnsureVisible: RequestFocus mid-pointer-dispatch (a delete/reorder/pin press) races the
@@ -196,8 +192,7 @@ public abstract partial class ScribeDialogBase
             pendingFocusRow = null;
         }
 
-        // Re-home keyboard focus onto a REUSED Pin Tab row after an in-place pin reconcile
-        // (reconcile-animating-surfaces §4.3) — the Pin Tab twin of the editor block above. base.OnRenderGUI
+        // Re-home keyboard focus onto a REUSED Pin Tab row after an in-place pin reconcile — the Pin Tab twin of the editor block above. base.OnRenderGUI
         // already ran the reconcile + layout this frame, so the target row's field element is mounted and its
         // dialog-owned node (keyed by TaskId) has a live Owner. Waits for a live Owner so it survives a
         // reconcile that arrives a frame late; one-shot. Only fires while still in the Pinned view.
@@ -270,11 +265,11 @@ public abstract partial class ScribeDialogBase
     }
 
     /// <summary>Scroll the editor so the focused field's CARET stays visible — following the caret, not
-    /// the whole row. The old path (<c>Scrollable.EnsureVisible(rowElement)</c>) targeted the full row, so
-    /// a row taller than the viewport satisfied both of EnsureVisible's guards and ping-ponged the offset
-    /// between the row's top and bottom on every keystroke. Here we scroll to the caret's one-line rect
+    /// the whole row. Targeting the full row (<c>Scrollable.EnsureVisible(rowElement)</c>) would let
+    /// a row taller than the viewport satisfy both of EnsureVisible's guards and ping-pong the offset
+    /// between the row's top and bottom on every keystroke. Instead we scroll to the caret's one-line rect
     /// instead, with a single winning outcome (bottom-align if below the view, top-align if above, else no
-    /// move), so a tall row can't oscillate. scroll-follow-caret-in-editor.</summary>
+    /// move), so a tall row can't oscillate.</summary>
     /// <param name="fieldElement">The focused editor field element (an <c>editorFocusNodes[idx].Owner</c>).</param>
     private void EnsureCaretVisible(Element fieldElement)
     {
@@ -308,8 +303,8 @@ public abstract partial class ScribeDialogBase
         if (viewportHeight <= 0f) return;
         float max = sharedScrollController.MaxScrollExtent;
 
-        // Keep the caret this far from the viewport edge rather than butting it exactly against the top/bottom
-        // (scroll-follow-caret-in-editor issue #2). On the first/last row the extra gap reveals the input's
+        // Keep the caret this far from the viewport edge rather than butting it exactly against the top/bottom.
+        // On the first/last row the extra gap reveals the input's
         // border instead of clipping it flush to the edge. The final Clamp to [0, max] absorbs the margin at
         // the ends — a top-row caret clamps back to offset 0 (row top + border visible), a bottom-row caret to
         // max — so the margin never scrolls PAST the content bounds.
@@ -357,15 +352,15 @@ public abstract partial class ScribeDialogBase
         {
             if (focusedEditIndex is { } closeIdx) NormalizeRowOnCommit(closeIdx);
             // Same empty-task cleanup as switch-to-read: closing with an abandoned empty task must not
-            // persist it (add-empty-task-lifecycle D5).
+            // persist it.
             PurgeEmptyRowsFromScratch();
             pendingEmptyRowRemoval = null;
             FlushIfDirty();
             StopAutosaveTick();
             DisposeFocusNodes();
         }
-        // Release the editor lock on EVERY close, not only when the client is still in editor mode
-        // (fix-transient-lectern-editor-lock 1.2). A player who acquired the lock and then switched to
+        // Release the editor lock on EVERY close, not only when the client is still in editor mode.
+        // A player who acquired the lock and then switched to
         // read/pins/history before closing would otherwise skip the release, leaking the server's
         // authoritative holder and locking the lectern out until block reload/restart. ReleaseLock is
         // idempotent + UID-guarded server-side, so this is a harmless no-op when we hold no lock.
@@ -387,14 +382,14 @@ public abstract partial class ScribeDialogBase
         // The dialog owns the shared scroll controller (see its field); dispose it once here rather
         // than in either view's State, which come and go with each view-switch ForceRebuild.
         sharedScrollController.Dispose();
-        // Editor collapse controllers (D0 / extract-animated-task-list §6.1) — the container owns its ghost
+        // Editor collapse controllers — the container owns its ghost
         // cache (dropped when its State unmounts on close), but the dialog owns this registry, so dispose it
         // here. Same ownership as the Pin Tab / Read view registries below.
         editorCollapseRegistry.Dispose();
         pinCollapseRegistry.Dispose();
-        // Read view collapse controllers (reconcile-animating-surfaces §5.5) — same ownership as the Pin Tab's.
+        // Read view collapse controllers — same ownership as the Pin Tab's.
         readCollapseRegistry.Dispose();
-        // Tracker count engine (add-tracker-link-tasks Group 4): unregister its poll/callback and unsubscribe
+        // Tracker count engine: unregister its poll/callback and unsubscribe
         // the carried-inventory events so a closed dialog stops counting.
         TeardownTrackerEngine();
         base.OnGuiClosed();
