@@ -8,7 +8,7 @@ using Vintagestory.API.Server;
 namespace Scribe;
 
 // Server-side entry point for another installed mod to create a task on a player's behalf
-// (add-external-mod-task-api) — Notice Board is the first caller. A direct in-process call, no
+// — Notice Board is one caller. A direct in-process call, no
 // networking: the caller already has the server-side ScribeModSystem instance (an optional soft
 // dependency) and calls TryCreateExternalTask straight away. Resolves the target the same
 // silent, no-picker way the Handbook "Add to Scribe" flow does (ResolveWriteableCarriedSlot in
@@ -48,7 +48,7 @@ public sealed partial class ScribeModSystem
     }
 
     /// <summary>Public, server-side entry point any other mod can call to create a task on
-    /// <paramref name="player"/>'s behalf (add-external-mod-task-api) — the whole public surface Scribe
+    /// <paramref name="player"/>'s behalf — the whole public surface Scribe
     /// exposes to external mods. Direct in-process call: no network round trip, so a caller that only
     /// holds Scribe as an optional soft dependency (<c>IsModEnabled</c>/null-checked) can call this straight
     /// after resolving Scribe's mod system. Requires no code from Scribe to support a caller's absence —

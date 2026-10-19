@@ -23,8 +23,7 @@ public sealed partial class ScribeModSystem
     /// <see cref="FindAllCarriedNotebookRecords"/>) as of the last <see cref="OnHistoryScanTick"/>
     /// firing. Populated ONLY by that tick, on its own cadence, so its value going into any given
     /// death is fixed before that death's own event dispatch begins — it cannot be invalidated by a
-    /// sibling <c>OnEntityDeath</c> subscriber that runs earlier in the same dispatch (see
-    /// fix-death-history-inventory-race design.md, "A periodic snapshot, not a live re-check").
+    /// sibling <c>OnEntityDeath</c> subscriber that runs earlier in the same dispatch.
     /// Consulted by the Death branch of <see cref="OnEntityDeath"/> to detect a document that was
     /// evicted by something else during the same death dispatch. <c>internal</c> (not
     /// <c>private</c>) solely so the integration suite can seed a snapshot directly rather than
@@ -60,8 +59,7 @@ public sealed partial class ScribeModSystem
     /// character slots, the mouse-cursor drag slot, the crafting grid, and any inventory a mod adds
     /// directly to the player's own inventory manager (e.g. a skill/ability bonus bag) — counts as
     /// carried automatically, without Scribe needing to recognize its <c>ClassName</c> in advance.
-    /// See <c>fix-carried-notebook-detection</c>'s design.md for the full rationale, including why a
-    /// name-only denylist (no type check) would be unsafe: a chest/oven/trader dialog a player merely
+    /// A name-only denylist (no type check) would be unsafe: a chest/oven/trader dialog a player merely
     /// has open nearby is also temporarily added to <c>InventoriesOrdered</c>, but as a plain
     /// <see cref="Vintagestory.API.Common.InventoryGeneric"/> (not an <c>InventoryBasePlayer</c>), so
     /// the type check is what excludes those without needing to know their names.</summary>
@@ -80,9 +78,8 @@ public sealed partial class ScribeModSystem
     /// keeps this safe: it excludes transiently-opened external containers (chests, ovens, traders —
     /// plain <see cref="Vintagestory.API.Common.InventoryGeneric"/>, temporarily added to
     /// <c>InventoriesOrdered</c> while their dialog is open) without needing to know their
-    /// <c>ClassName</c>s, while still excluding the creative inventory specifically (whose template
-    /// stacks the old allow-list-less "walk everything" logic once mutated, silently accumulating
-    /// phantom entries on every future copy).</summary>
+    /// <c>ClassName</c>s, while still excluding the creative inventory specifically (writing history into its
+    /// template stacks would put phantom entries on every future copy).</summary>
     private IEnumerable<NotebookHost> FindCarriedNotebooks(IServerPlayer player)
     {
         if (sapi is null) yield break;
@@ -187,7 +184,7 @@ public sealed partial class ScribeModSystem
         // Materialize the victim's carried-notebook list up front too (mirroring killerHosts above),
         // so we can gate ALL fact capture below on "does anyone relevant carry a Notebook"
         // before doing any of that work, and reuse this same list for the write loop further down.
-        // A document present in the victim's last-known snapshot (fix-death-history-inventory-race)
+        // A document present in the victim's last-known snapshot
         // ALSO counts as "relevant" even when the live scan comes up empty — that empty-live-scan
         // case is exactly the race this fallback exists to catch, so it must not be treated the
         // same as "nobody ever had a notebook".
@@ -234,10 +231,10 @@ public sealed partial class ScribeModSystem
         // A document that was in the victim's last-known on-person snapshot but was NOT among the
         // documents the live scan above just wrote to has been evicted by something else during this
         // same death dispatch (e.g. another mod's own OnEntityDeath handler moving it into a corpse
-        // before this one ran) — queue its Death entry instead of losing it. Never queue a document
+        // before this one ran) — queue its Death entry so it is not lost. Never queue a document
         // the live scan DID find (it was already written above; queuing it too would double-write).
         // Scoped to on-person documents only (NotebookHost, not the CarryOn-sourced
-        // CarryOnBridge.CarriedNotebookRef) — the snapshot itself is on-person-only, per design.md.
+        // CarryOnBridge.CarriedNotebookRef) — the snapshot itself is on-person-only.
         if (victimHasSnapshot)
         {
             var liveOnPersonDocIds = new HashSet<Guid>(
@@ -318,15 +315,12 @@ public sealed partial class ScribeModSystem
     };
 
     /// <summary>
-    /// Dual-purpose periodic sweep (10s — widened from the original storm-only tick's 5s,
-    /// fix-death-history-inventory-race): (1) the original storm rising-edge detection/write,
-    /// completely unchanged in scope (still walks <see cref="FindAllCarriedNotebookRecords"/>, so a
-    /// CarryOn-carried notebook keeps recording storms exactly as it always has); and (2) a shared
-    /// carried-document snapshot + pending-entry flush, added by this change. (2) is scoped to
+    /// Dual-purpose periodic sweep (every 10s): (1) storm rising-edge detection/write
+    /// (walks <see cref="FindAllCarriedNotebookRecords"/>, so a CarryOn-carried notebook records
+    /// storms too); and (2) a shared carried-document snapshot + pending-entry flush. (2) is scoped to
     /// <see cref="FindCarriedNotebooks"/> (on-person only) — the corpse-mod race this fallback exists
-    /// for can only evict on-person slots (see design.md), so there is no reason to also poll the
-    /// reflection-based CarryOn bridge here for every online player every firing. Renamed from
-    /// <c>OnStormTick</c> to reflect that it is no longer storm-only. <c>internal</c> (not
+    /// for can only evict on-person slots, so there is no reason to also poll the
+    /// reflection-based CarryOn bridge here for every online player every firing. <c>internal</c> (not
     /// <c>private</c>) solely so the integration suite can fire it directly rather than waiting out
     /// the real 10s interval, via the project's own <c>InternalsVisibleTo("Integration.Tests")</c>.
     /// </summary>
@@ -334,7 +328,7 @@ public sealed partial class ScribeModSystem
     {
         if (sapi is null) return;
 
-        // ── (1) Storm rising-edge detection — unchanged responsibility, unchanged scope ──
+        // ── (1) Storm rising-edge detection ──
         var stormSys = sapi.ModLoader.GetModSystem<Vintagestory.GameContent.SystemTemporalStability>();
         bool rising = false;
         string strengthToken = "";

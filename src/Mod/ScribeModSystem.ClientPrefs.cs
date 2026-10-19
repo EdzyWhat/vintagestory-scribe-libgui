@@ -16,8 +16,8 @@ namespace Scribe;
 public sealed partial class ScribeModSystem
 {
     /// <summary>Toggle the single standalone Scribe settings window open/closed. Called from both the HUD
-    /// gear and the Lectern gear so there is exactly ONE settings surface (scribe-themed-toggle); clicking
-    /// either gear a second time CLOSES it rather than being a no-op (refine-settings-and-window-chrome).
+    /// gear and the Lectern gear so there is exactly ONE settings surface; clicking
+    /// either gear a second time CLOSES it.
     /// Lazily builds the dialog on first use and reuses it thereafter. Client-only.</summary>
     public void OpenSettings()
     {
@@ -75,8 +75,7 @@ public sealed partial class ScribeModSystem
     /// <summary>DEV: this player's live block-box tuning knobs (<see cref="ScribeBoxTuning"/>). Falls back
     /// to a fresh default instance if queried before load / on a server, so it is never null — mirrors
     /// <see cref="GearTuning"/>. The server-side fallback is load-bearing: a dedicated server never calls
-    /// <see cref="StartClientSide"/>, so it always resolves the untouched default box (design.md Decision
-    /// 3's "never null-refs" note).</summary>
+    /// <see cref="StartClientSide"/>, so it always resolves the untouched default box.</summary>
     public ScribeBoxTuning BoxTuning => boxTuning ??= new ScribeBoxTuning();
 
     /// <summary>DEV: mutate the box tuning, persist it, and raise <see cref="BoxTuningChanged"/> so an open
@@ -116,8 +115,8 @@ public sealed partial class ScribeModSystem
 
     /// <summary>DEV: register the client-side <c>.scribelight</c> command — a one-shot readout of the ambient
     /// illumination the GUI shade is derived from at the player's current position (raw light in, held light,
-    /// curve output). Used to calibrate <see cref="ScribeBrightnessCurve"/> anchors against real in-game values
-    /// (respect-local-illumination — measure-don't-theorize). Client command, dot-prefix.</summary>
+    /// curve output). Used to calibrate <see cref="ScribeBrightnessCurve"/> anchors against real in-game values.
+    /// Client command, dot-prefix.</summary>
     private void RegisterScribeLightCommand(ICoreClientAPI api)
     {
         api.ChatCommands.Create("scribelight")
@@ -129,8 +128,8 @@ public sealed partial class ScribeModSystem
 
     /// <summary>DEV: register the client-side <c>.scribeprobe [code]</c> command — a one-shot dump of the
     /// crafting-recipe variants the probe derives for the held item (or a supplied code): each matched recipe's
-    /// output page code, signature, counting ingredients, and notes. The measure-don't-theorize instrument for
-    /// confirming variant identity resolves distinctly (fix-recipe-variant-identity D6), mirroring
+    /// output page code, signature, counting ingredients, and notes. Used to confirm that variant identity
+    /// resolves distinctly, mirroring
     /// <c>.scribelight</c>. Client command, dot-prefix; reads only the live registry (no state change).</summary>
     private void RegisterScribeProbeCommand(ICoreClientAPI api)
     {
@@ -149,8 +148,7 @@ public sealed partial class ScribeModSystem
     }
 
     /// <summary>DEV: register the client-side <c>.scribeguard</c> command — a one-shot readout of
-    /// <see cref="ScribeVanillaDialogGuard.IsAnyVanillaDialogOpen"/> (fix-libgui-click-draw-order-mismatch
-    /// 2.3-2.5 — measure-don't-theorize, mirroring <c>.scribelight</c>/<c>.scribeprobe</c>). Client
+    /// <see cref="ScribeVanillaDialogGuard.IsAnyVanillaDialogOpen"/>, mirroring <c>.scribelight</c>/<c>.scribeprobe</c>. Client
     /// command, dot-prefix; reads only the live dialog list (no state change).</summary>
     private void RegisterScribeGuardCommand(ICoreClientAPI api)
     {
@@ -223,17 +221,15 @@ public sealed partial class ScribeModSystem
     /// (<see cref="ScribeGearTexture.GreatWheel"/>) — a many-toothed "great wheel" in the small cog's blocky,
     /// uneven, negative-space style. Cached under a synthetic key in the same <c>backdropCache</c> so it is
     /// built at most once and disposed with everything else in <see cref="Dispose"/>; a caller must NOT
-    /// dispose it. This is a placeholder to be judged/tuned in-game (add-timer-gearworks art follow-up);
-    /// swapping to a real PNG later is a one-line change at the gearworks call site. Returns null on a pure
+    /// dispose it. This is a placeholder; swapping to a real PNG is a one-line change at the gearworks call site. Returns null on a pure
     /// server.</summary>
     public SKBitmap? GetProceduralGreatWheel()
     {
         if (capi is null) return null; // client-only
         backdropCache ??= new Dictionary<string, SKBitmap?>();
         // DEV .geartune: teeth + tooth-spacing are live-tunable, so key the cache on the (teeth, spacing) combo —
-        // each combo generates + caches once and is reused; changing a knob makes a fresh combo regenerate on the
-        // next rebuild rather than mutating the shared bitmap. Fold back to ScribeGearTexture.Teeth defaults when
-        // the .geartune tool is removed.
+        // each combo generates + caches once and is reused; changing a knob regenerates a fresh combo rather
+        // than mutating the shared bitmap.
         int teeth   = (int)GearTuning.WheelTeeth;
         int spacing = (int)GearTuning.WheelToothSpacing;
         string key = $"__procedural:great-wheel:{teeth}:{spacing}";
@@ -266,11 +262,9 @@ public sealed partial class ScribeModSystem
         // ScribePixelArtBackdrop wraps it once as an SKImage and DrawImages it; on a GPU canvas Skia only
         // caches the upload for an IMMUTABLE image source — a mutable one (SKBitmap.Decode returns mutable) is
         // re-uploaded on every draw because the pixels could change. These backdrop bitmaps are cached and
-        // never mutated after decode, so immutability is semantically correct and lets repeat opens reuse the
-        // resident texture. NOTE: this is a caching win, NOT the "white flash" fix — the flash was proven
-        // (fix-dialog-open-white-flash §4.1, 2026-08-13) to be bound to the dialog OPEN transition, not to the
-        // backdrop upload/draw (turning art on in an already-open dialog — the first draw of the session —
-        // does not flash). See VSAPI-NOTES "White flash". No GL code added.
+        // never mutated after decode, so immutability is correct and lets repeat opens reuse the resident
+        // texture. This is a caching win only; it is unrelated to the dialog-open "white flash"
+        // (see VSAPI-NOTES "White flash").
         bmp?.SetImmutable();
         backdropCache[key] = bmp;
         return bmp;
@@ -372,7 +366,7 @@ public sealed partial class ScribeModSystem
 
     /// <summary>Client-side: the UI sound player a Scribe dialog should install on its <c>BuildOwner</c>
     /// for THIS player's current <see cref="ScribePlayerSettings.MuteUiSounds"/> preference
-    /// (scribe-mute-ui-sounds) — the shared no-op <see cref="SilentSoundPlayer"/> when muted, else the
+    /// — the shared no-op <see cref="SilentSoundPlayer"/> when muted, else the
     /// stock LibGUI <see cref="SoundPlayer"/>. The silent player is stateless, so one shared instance is
     /// lazily built and reused across dialogs/rebuilds. Called from each Scribe dialog's ctor and its
     /// settings-change rebuild hook, so a live toggle re-installs the right player without a reopen.</summary>
