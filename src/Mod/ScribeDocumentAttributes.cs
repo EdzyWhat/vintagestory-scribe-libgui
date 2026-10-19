@@ -4,15 +4,9 @@ using Vintagestory.API.Common;
 namespace Scribe;
 
 /// <summary>
-/// Reads/writes a <see cref="ScribeDocument"/> onto an <see cref="ItemStack"/>'s saved+synced
-/// attributes, reusing the same codec and attribute key the block entity uses for its tree
-/// attributes. This is what lets a lectern's document survive break → re-place: breaking the block
-/// writes the serialized document (with its stable <c>DocId</c>/<c>TaskId</c>s) onto the dropped
-/// item; placing that item restores it. Because the ids ride inside the bytes, a re-placed lectern
-/// keeps the same identity and per-player pins keep resolving.
-///
-/// The dropped item despawning is the only true content-loss point (the bytes go with it). This
-/// same helper is the intended copy/paste-between-blocks mechanism on the roadmap.
+/// Reads/writes a <see cref="ScribeDocument"/> on an <see cref="ItemStack"/>'s saved+synced attributes using the same codec and key
+/// as the block entity, so a lectern's document (with its stable DocId/TaskIds) survives break and re-place and per-player pins
+/// keep resolving. Despawning the dropped item is the only true content-loss point.
 /// </summary>
 public static class ScribeDocumentAttributes
 {

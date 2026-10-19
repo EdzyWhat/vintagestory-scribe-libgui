@@ -19,35 +19,18 @@ using Vintagestory.API.Config;   // Lang
 namespace Scribe;
 
 /// <summary>
-/// A compact replacement for LibGUI's <see cref="FlatItemSlot"/> in the Scriptorium's Scribe-items-only
-/// inventory. It renders the same slot box + item stack, but swaps the
-/// stock item tooltip — a fixed 350px panel of name/description/durability/quantity, baked un-injectably into
-/// <c>ItemSlotGestureLayer</c> — for a small Scribe <b>document summary card</b> (name, title, per-kind
-/// counts, or a "No contents" state; see <see cref="BuildSummaryCard"/>).
-///
-/// <para><b>Why a bespoke slot.</b> The stock tooltip is not reachable while using <see cref="FlatItemSlot"/>
-/// (its content and 350px width are hard-coded), so the only way to control both the hover content and its
-/// size from mod code is to compose the slot ourselves out of LibGUI's public parts: <see cref="ItemSlotOverlay"/>
-/// for the item render, a <see cref="GestureDetector"/> forwarding to the existing <see cref="SlotController"/>,
-/// and our own <see cref="Tooltip"/>. Exactly one tooltip is produced (ours) — we deliberately do NOT embed a
-/// <see cref="FlatItemSlot"/>, which would bring its own.</para>
-///
-/// <para><b>Interaction model = click-to-grab / click-to-place only.</b> On press we forward
-/// <see cref="SlotController.ClickSlot"/> (the same call the stock gesture layer makes) which implements the
-/// vanilla model: left-click grabs/places against the mouse-held stack, right-click places-one/splits; the
-/// wheel forwards <see cref="SlotController.WheelSlot"/>. We intentionally omit
-/// <c>BeginDrag</c>/<c>DragEnterSlot</c>/<c>EndDrag</c> — click-hold-drag distribution is not the inventory
-/// mechanic here (a click grabs, a second click places). The Scribe-only accept filter is
-/// unaffected — it lives on the inventory's <c>CanHold</c> (server-authoritative) and on the controller's
-/// <see cref="SlotController.CanClickSlot"/> predicate, both of which <see cref="SlotController.ClickSlot"/>
-/// already honors.</para>
-///
-/// <para>The cosmetic hover-bounce/punch animation the stock slot plays is not reproduced.</para>
+/// A compact replacement for LibGUI's <see cref="FlatItemSlot"/> in the Scriptorium's Scribe-items-only inventory: same slot box
+/// and item stack, but with a small Scribe <b>document summary card</b> (see <see cref="BuildSummaryCard"/>) in place of the stock
+/// 350px tooltip baked into <c>ItemSlotGestureLayer</c>.
+/// <para>Composed from LibGUI's public parts (<see cref="ItemSlotOverlay"/>, a <see cref="GestureDetector"/> forwarding to the
+/// <see cref="SlotController"/>, our own <see cref="Tooltip"/>); it must not embed a <see cref="FlatItemSlot"/>, which would add its own tooltip.</para>
+/// <para>Click-to-grab / click-to-place only: press forwards <see cref="SlotController.ClickSlot"/> and the wheel forwards
+/// <see cref="SlotController.WheelSlot"/>; drag distribution is intentionally omitted. The Scribe-only accept filter lives on the
+/// inventory's <c>CanHold</c> and <see cref="SlotController.CanClickSlot"/>, which <c>ClickSlot</c> already honors.</para>
 /// </summary>
 internal sealed class ScribeDocumentSlot : StatelessWidget
 {
-    /// <summary>How long the pointer must rest on the slot before the summary card appears: 175ms, half the
-    /// stock item tooltip's 350ms, since the slot summary is the whole point of these slots.</summary>
+    /// <summary>Hover delay before the summary card appears (half the stock tooltip's 350ms).</summary>
     private static readonly TimeSpan CardDelay = TimeSpan.FromMilliseconds(175);
 
     private readonly ItemSlot? slot;
@@ -70,9 +53,8 @@ internal sealed class ScribeDocumentSlot : StatelessWidget
     {
         var themeSlot = Theme.Of(context).ItemSlotStyle;
 
-        // Mirror FlatItemSlot.FlatBackground's box so it still reads as a slot (its veiled parchment fill +
-        // faint border), minus the hover-highlight animation. Our slotStyle carries the semi-opaque veil as
-        // BackgroundColor (see GuiDialogScribeScriptorium.BuildWatermarkedSlot).
+        // Mirror FlatItemSlot.FlatBackground's box (veiled parchment fill + faint border) without the hover-highlight animation;
+        // slotStyle's BackgroundColor carries the veil.
         Vector4 fill = style.BackgroundColor ?? themeSlot.BackgroundColor ?? new Vector4(0f, 0f, 0f, 0.4f);
         Vector4 border = style.BorderColor ?? themeSlot.BorderColor ?? new Vector4(1f, 1f, 1f, 0.2f);
 
@@ -95,18 +77,13 @@ internal sealed class ScribeDocumentSlot : StatelessWidget
             onPress: OnPress,
             onWheel: OnWheel);
 
-        // Only a FILLED slot gets a hover card. An empty slot returns the bare gesture with NO Tooltip wrapper:
-        // a mounted-but-idle Tooltip would leave its already-shown bubble hanging after the item is grabbed.
-        // When the slot empties, the widget at this position changes type (ShadedTooltip → GestureDetector), so
-        // the reconciler unmounts the tooltip subtree and its overlay entry goes with it.
+        // Only a FILLED slot gets a hover card. An empty slot returns the bare gesture with no Tooltip: a mounted-idle Tooltip would
+        // leave its shown bubble hanging after the item is grabbed (the widget type change unmounts it).
         ItemStack? stack = slot?.Itemstack;
         bool hasItem = stack?.Collectible != null;
         if (!hasItem) return gesture;
 
-        // ShadedTooltip shades the summary-card bubble (Background/Border) AND its content by the live
-        // illumination shade, so the card tracks the body in low light instead of the bubble "sticking out"
-        // full-bright. It wraps content in ForHover internally, so we pass
-        // the raw card.
+        // ShadedTooltip shades the bubble and content by the live illumination shade; it wraps content in ForHover itself, so pass the raw card.
         return ScribeGlobalTint.ShadedTooltip(
             child: gesture,
             content: BuildSummaryCard(stack!, colors, controller.World),
@@ -132,8 +109,7 @@ internal sealed class ScribeDocumentSlot : StatelessWidget
             PointerButton.Middle => EnumMouseButton.Middle,
             _ => null,
         };
-        // Click-to-grab / click-to-place: ClickSlot moves the stack between the slot and the mouse-held
-        // cursor stack (right-click = place-one/split). No BeginDrag — drag-distribute is out of scope.
+        // ClickSlot moves the stack between slot and mouse-held cursor stack (right-click = place-one/split); no drag-distribute.
         if (button.HasValue) controller.ClickSlot(slot, button.Value);
     }
 
@@ -142,23 +118,13 @@ internal sealed class ScribeDocumentSlot : StatelessWidget
         if (slot != null && controller.WheelSlot(slot, e.Delta > 0f ? 1 : -1)) e.Handled = true;
     }
 
-    /// <summary>Build the compact summary card for a filled Scribe slot.
-    /// A pure read of the stack's stored document, reusable as an import/export preview:
+    /// <summary>Builds the summary card for a filled Scribe slot, a pure read of the stored document:
     /// <list type="bullet">
-    /// <item><b>No document</b> (freshly crafted, or opened but never edited): item name + a plain "No contents"
-    /// line. We deliberately do NOT say "not yet opened" — a document is only persisted on first edit, so an
-    /// opened-but-untouched item carries no bytes and is indistinguishable from a never-opened one; "No contents"
-    /// is the honest label for both. Also NOT a title placeholder + all-zero counts, which would imply an
-    /// opened-but-empty document.</item>
-    /// <item><b>Sealed Task Notice</b>: a Task Notice's document is
-    /// blocks-only and never carries a custom title, so the generic Title + per-kind-count lines below
-    /// would be meaningless. Shown instead: who assigned it and who it's addressed to, mirroring
-    /// <see cref="ItemScribeTaskNotice.GetHeldItemInfo"/>'s own "Addressed to" line and
-    /// <see cref="GuiDialogTaskNotice"/>'s "Assigned by" line — same lang keys, same formatting. A blank
-    /// Task Notice carries no document and falls through to the "No document" case above like any other
-    /// Scribe item.</item>
-    /// <item><b>Has a document</b> (any other Scribe item): item name, the document title (untitled
-    /// placeholder when it is the model default), and one line per present block kind with its count.</item>
+    /// <item><b>No document</b>: name + "No contents". A document persists only on first edit, so an opened-but-untouched item is
+    /// indistinguishable from a never-opened one.</item>
+    /// <item><b>Sealed Task Notice</b>: who assigned it and who it is addressed to (same lang keys as
+    /// <see cref="ItemScribeTaskNotice.GetHeldItemInfo"/> and <see cref="GuiDialogTaskNotice"/>); it has no custom title.</item>
+    /// <item><b>Other document</b>: name, title (untitled placeholder for the default), and one line per present block kind with its count.</item>
     /// </list></summary>
     internal static Widget BuildSummaryCard(ItemStack stack, ColorScheme colors, IWorldAccessor world)
     {
@@ -196,10 +162,7 @@ internal sealed class ScribeDocumentSlot : StatelessWidget
                 children: lines));
     }
 
-    /// <summary>Appends the "Assigned by …" and "Addressed to …" lines for a sealed Task Notice, in place
-    /// of the generic Title/count lines — see <see cref="BuildSummaryCard"/>'s remarks. Falls back to
-    /// nothing extra if the notice's first block somehow carries no assignment (defensive; shouldn't
-    /// happen for a notice <see cref="ItemScribeTaskNotice.IsSealed"/> already confirmed sealed).</summary>
+    /// <summary>Appends the "Assigned by" and "Addressed to" lines for a sealed Task Notice; adds nothing if the first block carries no assignment (defensive).</summary>
     private static void AppendTaskNoticeLines(List<Widget> lines, ScribeDocument doc, ColorScheme colors, IWorldAccessor world)
     {
         var assignment = doc.Blocks.Count > 0 ? doc.Blocks[0].Assignment : null;
@@ -215,9 +178,7 @@ internal sealed class ScribeDocumentSlot : StatelessWidget
         lines.Add(new Text(Lang.Get("scribe:scribe-tasknotice-addressed-to", recipientName), lineStyle));
     }
 
-    /// <summary>Append one "&lt;label&gt;: &lt;count&gt;" line per block kind that is present in the document
-    /// (omitting absent kinds), or a single "empty" line when an opened document has no blocks at all — so an
-    /// opened-but-empty document reads distinctly from a never-opened one.</summary>
+    /// <summary>Appends one "label: count" line per present block kind, or a single "empty" line when an opened document has no blocks.</summary>
     private static void AppendCountLines(List<Widget> lines, ScribeDocument doc, ColorScheme colors)
     {
         int tasks = 0, notes = 0, trackers = 0, links = 0;
