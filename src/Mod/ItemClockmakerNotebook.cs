@@ -61,7 +61,7 @@ public class ItemClockmakerNotebook : Item, IScribeDocumentItem
     {
         if (!firstEvent) return;
         // Ctrl+Shift+right-click: ground placement via base CollectibleBehaviors, matching ItemScribeNotebook
-        // and the vanilla spear convention (add-unified-quick-add-interaction). Requiring both modifiers keeps
+        // and the vanilla spear convention. Requiring both modifiers keeps
         // a Shift-only press off the base ground-storable gate (which keys on ShiftKey only).
         if (byEntity.Controls.CtrlKey && byEntity.Controls.ShiftKey)
         {
@@ -81,15 +81,14 @@ public class ItemClockmakerNotebook : Item, IScribeDocumentItem
         base.OnCreatedByCrafting(allInputSlots, outputSlot, byRecipe);
         // Derive the side from the crafting grid's own inventory rather than this.api: under
         // ImprovedHandbookRecipesFork's static-caching bug, this.api can hold the client's ICoreAPI
-        // even when the server is the one genuinely invoking this override (see
-        // clockmaker-carryover-loss-root-cause memory). outputSlot.Inventory is always the actual
+        // even when the server is the one genuinely invoking this override. outputSlot.Inventory is always the actual
         // InventoryCraftingGrid driving the call, so its Api reports the true invoking side.
         var craftApi = (outputSlot.Inventory as InventoryBase)?.Api;
         if (craftApi is not ICoreServerAPI sapi) return;
         if (outputSlot.Itemstack is null) return;
 
         // Carry the source Notebook's document + history onto the fresh Clockmaker's output so
-        // the upgrade keeps the same DocId, tasks/state, and chronicle instead of starting blank.
+        // the upgrade keeps the same DocId, tasks/state, and chronicle.
         // Locate the source by the presence of the document attribute (robust to grid position);
         // the current recipe has exactly one such input. Raw byte copies preserve the DocId
         // exactly and avoid a codec round-trip. When no source document is present, the output
@@ -129,7 +128,7 @@ public class ItemClockmakerNotebook : Item, IScribeDocumentItem
     }
 
     /// <summary>Open this carried Clockmaker's Notebook's Scribe dialog for the Handbook "Add to Scribe"
-    /// fallback (add-tracker-link-tasks 3.3). Delegates to the same <see cref="OpenNotebookDialog"/> the
+    /// fallback. Delegates to the same <see cref="OpenNotebookDialog"/> the
     /// right-click path uses.</summary>
     public ScribeDialogBase? OpenScribeDialog(ItemSlot slot, ICoreClientAPI capi)
         => OpenNotebookDialog(slot, capi);
@@ -142,14 +141,14 @@ public class ItemClockmakerNotebook : Item, IScribeDocumentItem
         // Tell the server we opened this notebook so it can record the one-time PickedUp entry
         // (opening the dialog is client-only; the server never sees it otherwise).
         modSystem.NotifyServerNotebookOpened(host.Document.DocId, slot);
-        // Remember this as the last-opened Scribe item (add-tracker-link-tasks 3.2).
+        // Remember this as the last-opened Scribe item.
         modSystem.NoteScribeItemDialogOpened(host.Document.DocId);
 
         var dialog = new GuiDialogClockmakerNotebook(host, capi);
         dialog.OnClosed += () => modSystem.UnregisterHost(host.Document.DocId);
         dialog.TryOpen();
         // Quick-add (Shift+right-click): enter the editor immediately (no server lock) and drop a fresh
-        // empty top task with the caret focused (add-unified-quick-add-interaction).
+        // empty top task with the caret focused.
         if (quickAdd)
         {
             dialog.EnterEditorMode(ScribeDocumentCodec.Serialize(host.Document));

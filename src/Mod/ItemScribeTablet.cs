@@ -21,8 +21,8 @@ namespace Scribe;
 ///
 /// <para>The document persists on the ItemStack exactly like the notebook — pure reuse of
 /// <see cref="ScribeDocumentAttributes"/> — via a <see cref="TabletHost"/> that caps the tier at 10 task
-/// blocks and 1 pin. Right-click opens the bespoke <see cref="GuiDialogScribeTablet"/> (add-tablet-dialog,
-/// Proposal C): an always-edit, no-tabs surface with the earthen theme, the clay/wax backdrop matching the
+/// blocks and 1 pin. Right-click opens the bespoke <see cref="GuiDialogScribeTablet"/>:
+/// an always-edit, no-tabs surface with the earthen theme, the clay/wax backdrop matching the
 /// item's material, and a cuneiform title banner over the inherited editable task list.</para>
 /// </summary>
 public class ItemScribeTablet : Item, IScribeDocumentItem
@@ -100,7 +100,7 @@ public class ItemScribeTablet : Item, IScribeDocumentItem
     {
         if (!firstEvent) return;
         // Ctrl+Shift+right-click: ground placement via base CollectibleBehaviors (including GroundStorable),
-        // following the vanilla spear convention (add-unified-quick-add-interaction). Checked BEFORE the
+        // following the vanilla spear convention. Checked BEFORE the
         // Shift branch because Ctrl+Shift also has ShiftKey set; taking it here keeps ground placement off
         // the plain-Shift gestures below.
         if (byEntity.Controls.CtrlKey && byEntity.Controls.ShiftKey)
@@ -109,9 +109,9 @@ public class ItemScribeTablet : Item, IScribeDocumentItem
             return;
         }
         // Shift+right-click (no Ctrl): quench a hard tablet against a water container if aimed at one; the
-        // quench takes precedence ONLY when the aimed-at block is a water-filled liquid container
-        // (tablet-clay-hardening). If NOT aimed at water, fall through to the unified quick-add gesture
-        // instead of ground placement (add-unified-quick-add-interaction) — aim is the discriminator.
+        // quench takes precedence ONLY when the aimed-at block is a water-filled liquid container.
+        // If NOT aimed at water, fall through to the unified quick-add gesture rather than ground
+        // placement — aim is the discriminator.
         if (byEntity.Controls.ShiftKey && TryQuench(slot, byEntity, blockSel))
         {
             handling = EnumHandHandling.PreventDefault;
@@ -154,11 +154,10 @@ public class ItemScribeTablet : Item, IScribeDocumentItem
 
     /// <summary>Parse a tablet stack's <c>material</c> variant into its base clay/wax material (the color the
     /// backdrop/theme/glow key off) and its life-cycle <see cref="TabletState"/>. State is carried by the
-    /// VARIANT, not a stack attribute (wire-tablet-clay-art-and-variants): the soft variant is the bare clay
+    /// VARIANT, not a stack attribute: the soft variant is the bare clay
     /// code (<c>clay-red</c>), and hardening/firing swap it to a <c>-hard</c>/<c>-fired</c> sibling
     /// (<c>clay-red-hard</c>/<c>clay-red-fired</c>). An unrecognized or absent variant resolves to red + wet,
-    /// so a legacy or malformed stack always yields a valid, editable state (clay-wax-tablet-item: "consumers
-    /// treat it as red + soft").</summary>
+    /// so a legacy or malformed stack always yields a valid, editable state.</summary>
     private static (string material, TabletState state) ResolveMaterialState(ItemStack? stack)
     {
         string variant = stack?.Collectible?.Variant?["material"] ?? "clay-red";
@@ -168,18 +167,17 @@ public class ItemScribeTablet : Item, IScribeDocumentItem
     }
 
     /// <summary>Whether a tablet stack is fired: derived from its <c>material</c> variant (a <c>-fired</c>
-    /// sibling), not a stack attribute (wire-tablet-clay-art-and-variants). A fired clay tablet is permanently
-    /// read-only (tablet-firing).</summary>
+    /// sibling), not a stack attribute. A fired clay tablet is permanently
+    /// read-only.</summary>
     public static bool ReadFired(ItemStack? stack) => ResolveMaterialState(stack).state == TabletState.Fired;
 
     /// <summary>Whether a tablet stack is hard (dried-but-unfired): derived from its <c>material</c> variant
     /// (a <c>-hard</c> sibling). A hard clay tablet is read-only but reversible — water exposure softens it
-    /// back to the wet variant (tablet-clay-hardening). Wax never hardens (no <c>-hard</c> variant).</summary>
+    /// back to the wet variant. Wax never hardens (no <c>-hard</c> variant).</summary>
     public static bool ReadHard(ItemStack? stack) => ResolveMaterialState(stack).state == TabletState.Hard;
 
     /// <summary>Whether a tablet stack may be edited: editable ⇔ its variant is a SOFT clay (or wax) state —
-    /// neither hard nor fired. The single resolve point the dialog and the document policy both key off
-    /// (tablet-firing Decision 5).</summary>
+    /// neither hard nor fired. The single resolve point the dialog and the document policy both key off.</summary>
     public static bool IsEditable(ItemStack? stack) => ResolveMaterialState(stack).state == TabletState.Wet;
 
     // ── Dry (wet → hard) via the native Harden transition ──────────────────────────────────────────
@@ -200,10 +198,10 @@ public class ItemScribeTablet : Item, IScribeDocumentItem
     }
 
     /// <summary>Carry the document through hardening. The base builds the fixed hardened output — the
-    /// <c>-hard</c> sibling variant, per <c>transitionedStack</c>, which now CARRIES the hard state itself —
+    /// <c>-hard</c> sibling variant, per <c>transitionedStack</c>, which carries the hard state itself —
     /// but does NOT copy the input stack's attributes, so a plain-JSON Harden would yield a BLANK hard tablet.
     /// We let base build the output, then copy the input's document/history bytes onto it. No attribute stamp:
-    /// the <c>-hard</c> variant is the hard state (wire-tablet-clay-art-and-variants). Only acts on
+    /// the <c>-hard</c> variant is the hard state. Only acts on
     /// <see cref="EnumTransitionType.Harden"/>; any other transition passes straight through.</summary>
     public override ItemStack? OnTransitionNow(ItemSlot slot, TransitionableProperties props)
     {
@@ -231,11 +229,11 @@ public class ItemScribeTablet : Item, IScribeDocumentItem
     }
 
     /// <summary>Carry the document through firing. Like <see cref="OnTransitionNow"/>, the firepit builds a
-    /// fixed smelted output — the <c>-fired</c> sibling variant, per <c>smeltedStack</c>, which now CARRIES
+    /// fixed smelted output — the <c>-fired</c> sibling variant, per <c>smeltedStack</c>, which carries
     /// the fired state itself — that drops the input's attributes, so we capture the input's bytes BEFORE
     /// <c>base.DoSmelt</c> (which decrements/clears the input slot), let base build the fired output, then
     /// copy the bytes onto it. No attribute stamp: the <c>-fired</c> variant is the (permanent, read-only)
-    /// fired state (wire-tablet-clay-art-and-variants). Firing a hard tablet smelts <c>clay-&lt;color&gt;-hard</c>
+    /// fired state. Firing a hard tablet smelts <c>clay-&lt;color&gt;-hard</c>
     /// → <c>clay-&lt;color&gt;-fired</c>, so the fired output is correct without any residual-state juggling.</summary>
     public override void DoSmelt(IWorldAccessor world, ISlotProvider cookingSlotsProvider, ItemSlot inputSlot, ItemSlot outputSlot)
     {
@@ -252,7 +250,7 @@ public class ItemScribeTablet : Item, IScribeDocumentItem
     }
 
     // ── Rehydrate (hard → wet) on water exposure, torch-style ──────────────────────────────────────
-    // A hard clay tablet softens back to wet when exposed to water (tablet-clay-hardening Decision 3),
+    // A hard clay tablet softens back to wet when exposed to water,
     // mirroring how a lit torch extinguishes: OnGroundIdle catches a dropped stack floating in water, and
     // OnHeldIdle catches the active held tablet while its holder swims. Both run server-authoritative and
     // ride the existing stack-attribute persistence — no new packet. Fired tablets never soften.
@@ -286,7 +284,7 @@ public class ItemScribeTablet : Item, IScribeDocumentItem
     }
 
     /// <summary>Deliberate-quench case: crouch + right-click a water-filled liquid container to soften a held
-    /// hard tablet, mirroring the vanilla metal-quench muscle memory (tablet-clay-hardening Decision 3/D3).
+    /// hard tablet, mirroring the vanilla metal-quench muscle memory.
     /// Returns <c>true</c> when the gesture is consumed (a water container WAS aimed at) so the caller sets
     /// <see cref="EnumHandHandling.PreventDefault"/> — this both stops the container's own fill/pour from also
     /// firing AND suppresses the crouch ground-storage passthrough for this one gesture. When the aimed-at
@@ -370,7 +368,7 @@ public class ItemScribeTablet : Item, IScribeDocumentItem
 
     /// <summary>Build a fresh tablet stack in the requested life-cycle <paramref name="target"/> state,
     /// carrying the source's document + history onto it — the single swap+carry seam shared by the natural
-    /// <see cref="Soften"/> path and the <c>/scribe tablet</c> dev command (add-tablet-state-dev-command D2).
+    /// <see cref="Soften"/> path and the <c>/scribe tablet</c> dev command.
     /// Resolves the base clay/wax material from <paramref name="current"/>, maps <paramref name="target"/> to
     /// the sibling <c>material</c> variant (<see cref="TabletState.Wet"/> → bare <c>clay-&lt;color&gt;</c>;
     /// <see cref="TabletState.Hard"/> → <c>-hard</c>; <see cref="TabletState.Fired"/> → <c>-fired</c>), and
@@ -412,16 +410,16 @@ public class ItemScribeTablet : Item, IScribeDocumentItem
             to.Attributes.SetBytes("scribeHistory", historyBytes);
     }
 
-    /// <summary>Open this carried Tablet's Scribe dialog for the Handbook "Add to Scribe" fallback
-    /// (add-tracker-link-tasks 3.3). Delegates to the same <see cref="OpenTabletDialog"/> the right-click
+    /// <summary>Open this carried Tablet's Scribe dialog for the Handbook "Add to Scribe" fallback.
+    /// Delegates to the same <see cref="OpenTabletDialog"/> the right-click
     /// path uses. A hard/fired (read-only) tablet still opens, but its editor-access request will no-op, so
     /// a Handbook append against it is a safe no-op — the resolver prefers an editable surface first.</summary>
     public ScribeDialogBase? OpenScribeDialog(ItemSlot slot, ICoreClientAPI capi)
         => OpenTabletDialog(slot, capi);
 
     /// <summary>A tablet can receive a Handbook append only while WET; a hardened or fired tablet is
-    /// read-only, so the "Add to Scribe" resolver skips it and tries the next carried Scribe item
-    /// (add-tracker-link-tasks feedback 6.2). Reuses the single <see cref="IsEditable"/> resolve point the
+    /// read-only, so the "Add to Scribe" resolver skips it and tries the next carried Scribe item.
+    /// Reuses the single <see cref="IsEditable"/> resolve point the
     /// dialog and document policy key off, so this can't drift from the actual editability.</summary>
     public bool IsSlotWriteable(ItemSlot slot) => IsEditable(slot.Itemstack);
 
@@ -439,11 +437,10 @@ public class ItemScribeTablet : Item, IScribeDocumentItem
     private ScribeDialogBase OpenTabletDialog(ItemSlot slot, ICoreClientAPI capi, bool quickAdd = false)
     {
         // The backdrop/theme/glow key off the tablet's BASE clay color (clay-red/blue/fire/wax) and its
-        // life-cycle state (wet/hard/fired) — BOTH now carried by the material variant, so a single parse
-        // yields both (wire-tablet-clay-art-and-variants). The item and its dialog agree on the mapping
-        // through ScribeBackdrops.ForTablet (add-tablet-dialog D6, add-tablet-clay-type-backdrops,
-        // add-tablet-firing-mechanic). An unknown variant resolves to red + wet. Note: pass the resolved
-        // BASE material, not Variant["material"] (which now includes the -hard/-fired suffix).
+        // life-cycle state (wet/hard/fired) — BOTH carried by the material variant, so a single parse
+        // yields both. The item and its dialog agree on the mapping through ScribeBackdrops.ForTablet.
+        // An unknown variant resolves to red + wet. Pass the resolved BASE material, not
+        // Variant["material"] (which includes the -hard/-fired suffix).
         var stack = slot.Itemstack;
         var (material, state) = ResolveMaterialState(stack);
         var host = new TabletHost(slot,
@@ -453,10 +450,10 @@ public class ItemScribeTablet : Item, IScribeDocumentItem
         // Tell the server we opened this tablet so it can record the one-time PickedUp entry
         // (opening the dialog is client-only; the server never sees it otherwise).
         modSystem.NotifyServerNotebookOpened(host.Document.DocId, slot);
-        // Remember this as the last-opened Scribe item (add-tracker-link-tasks 3.2).
+        // Remember this as the last-opened Scribe item.
         modSystem.NoteScribeItemDialogOpened(host.Document.DocId);
 
-        // The bespoke tablet dialog (Proposal C): earthen theme, no tabs, cuneiform title banner over the
+        // The bespoke tablet dialog: earthen theme, no tabs, cuneiform title banner over the
         // task list. The state (wet/hard/fired) drives both editability (only a WET tablet edits) and the
         // read-only empty-state message (dried vs fired), so it's threaded rather than a bare editable bool.
         var dialog = new GuiDialogScribeTablet(host, capi, material, state);
@@ -464,7 +461,7 @@ public class ItemScribeTablet : Item, IScribeDocumentItem
         dialog.TryOpen();
         // Quick-add (Shift+right-click off water): a WET tablet is always-edit — its ctor already entered
         // the editor before TryOpen built the tree — so just drop a fresh empty top task with the caret
-        // focused (add-unified-quick-add-interaction). On a HARD/FIRED (read-only) tablet the seam no-ops
+        // focused. On a HARD/FIRED (read-only) tablet the seam no-ops
         // (never in editor mode), so a stray Shift+right-click merely opens the read-only dialog.
         if (quickAdd) dialog.QuickAddTopTask();
         return dialog;

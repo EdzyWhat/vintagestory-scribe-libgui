@@ -24,8 +24,7 @@ namespace Scribe;
 /// The Task Notice's held-item review dialog (`task-notice-item` capability). A minimal standalone
 /// window — NOT a <see cref="ScribeDialogBase"/> subclass, since that base class's
 /// <see cref="IScribeDocumentHost"/> contract (editor write-through, lock, guestbook) is built for a real
-/// editable document surface and doesn't fit a locked, one-shot Accept/Decline letter (see the
-/// add-assignment-physical-delivery-mode design notes). Reuses <see cref="ScribeReadContent"/> for the
+/// editable document surface and doesn't fit a locked, one-shot Accept/Decline letter. Reuses <see cref="ScribeReadContent"/> for the
 /// body (read-only, completion/pin inert) exactly as every other Scribe surface renders its Task/Tracker/
 /// Link/Craft rows, and mirrors <see cref="ScribeInboxRow"/>'s Accept/Decline button shapes for the footer.
 ///
@@ -33,10 +32,10 @@ namespace Scribe;
 /// this dialog is open (Accept/Decline both consume the item and close the dialog), so there is no
 /// server-resync path to react to, unlike every editable Scribe surface.</para>
 ///
-/// <para><b>Chrome (refine-task-notice-ux Decision 3):</b> a custom title bar + 3-column inset frame
+/// <para><b>Chrome:</b> a custom title bar + 3-column inset frame
 /// visually matching <see cref="ScribeDialogBase.Layout"/>'s pattern (drag band, close button, symmetric
 /// side-margin columns), backed by the <see cref="ScribeBackdrops.TaskNoticePage"/> parchment/scroll
-/// backdrop instead of stock LibGUI <c>WindowFrame</c> chrome — implemented as NEW code local to this
+/// backdrop rather than stock LibGUI <c>WindowFrame</c> chrome. This code is local to this
 /// file, deliberately not shared with <see cref="ScribeDialogBase"/> (the two surfaces' underlying
 /// contracts, live host vs. frozen snapshot, differ enough that sharing would need its own abstraction
 /// layer anyway). Sized from the parchment art's own aspect ratio and a fraction of the player's Pixel
@@ -45,17 +44,16 @@ namespace Scribe;
 public sealed class GuiDialogTaskNotice : GuiBase
 {
     /// <summary>The parchment PNG's own aspect ratio (<c>H / W</c>) — a taller-than-wide scroll, unlike
-    /// the notebook/lectern family's near-square art (design.md Decision 3).</summary>
+    /// the notebook/lectern family's near-square art.</summary>
     private const float NoticeAspectH = 130f / 105f;
 
-    /// <summary>Tuned via <c>tools/task-notice-layout/index.html</c> against task 4.3's in-game look
-    /// (design.md Decision 3, Open Questions): the notice reads noticeably smaller than a full
-    /// Notebook/Lectern page — ~2/3 of the player's Pixel Art Size setting.</summary>
+    /// <summary>Tuned via <c>tools/task-notice-layout/index.html</c>: the notice reads noticeably
+    /// smaller than a full Notebook/Lectern page — ~2/3 of the player's Pixel Art Size setting.</summary>
     private const float SizeScale = 0.667f;
 
     /// <summary>Proportions tuned via <c>tools/task-notice-layout/index.html</c> for this dialog's
-    /// taller-than-wide scroll art (default <see cref="ScribeLayoutProportions"/> was authored for the
-    /// Lectern/Notebook's near-square page and left the notice under-using its space).</summary>
+    /// taller-than-wide scroll art (the default <see cref="ScribeLayoutProportions"/> is authored for the
+    /// Lectern/Notebook's near-square page).</summary>
     private static readonly ScribeLayoutProportions NoticeProportions = ScribeLayoutProportions.Default with
     {
         TitleBarFrac = 0.128f,
@@ -86,7 +84,7 @@ public sealed class GuiDialogTaskNotice : GuiBase
 
     public override string DialogCode => "scribetasknotice";
 
-    /// <summary>Matches the settings window's band (§ScribeSettingsDialog) — a held-item review dialog
+    /// <summary>Matches the settings window's band (ScribeSettingsDialog) — a held-item review dialog
     /// can open over a Lectern/Notebook/Tablet just as the settings gear can.</summary>
     public override double DrawOrder => 0.2;
 
@@ -103,7 +101,7 @@ public sealed class GuiDialogTaskNotice : GuiBase
     /// <summary>Window size applied once at open, derived from the same <c>W</c>/<c>H</c> the body layout
     /// uses. <see cref="WindowConfig.DragHandleHeight"/> covers the whole custom title band so
     /// <see cref="GuiBase"/>'s own drag handling moves the window — no grip-drag reimplementation needed,
-    /// since this title bar has no tooltip glyph to swallow the click (design.md Decision 3).</summary>
+    /// since this title bar has no tooltip glyph to swallow the click.</summary>
     protected override WindowConfig CreateWindowConfig()
     {
         var layout = ComputeLayout();
@@ -281,10 +279,10 @@ public sealed class GuiDialogTaskNotice : GuiBase
 
     private string ResolvePlayerName(string uid) => modSystem.ResolvePlayerName(uid);
 
-    /// <summary>Decline + Accept, restructured (refine-task-notice-ux 3.4) so the multi-candidate picker —
-    /// when shown — renders as its OWN full-width row ABOVE the Decline/Accept row, instead of stacked
-    /// inside one of that row's cells (the original overflow: a <c>Column</c> squeezed into the leftover
-    /// width next to Decline could push both buttons off the visible dialog area). Decline/Accept both
+    /// <summary>Decline + Accept. The multi-candidate picker — when shown — renders as its OWN
+    /// full-width row ABOVE the Decline/Accept row, not stacked inside one of that row's cells (a
+    /// <c>Column</c> squeezed into the leftover width next to Decline could push both buttons off the
+    /// visible dialog area). Decline/Accept both
     /// stay natural-width (a <c>Row</c> never stretches its children's cross-axis width) regardless of
     /// which Accept shape is showing.</summary>
     private Widget BuildActionSection(ColorScheme colors, ThemeData theme)
@@ -354,8 +352,8 @@ public sealed class GuiDialogTaskNotice : GuiBase
 
     /// <summary>If the acting player isn't the notice's recorded recipient, warns them via
     /// <see cref="GuiDialogTaskNoticeRedirectConfirm"/> before sending anything — confirming redirects
-    /// the assignment to them (design D3); Cancel leaves the notice untouched. The recipient-matches
-    /// path sends immediately, exactly as before this change.</summary>
+    /// the assignment to them; Cancel leaves the notice untouched. When the recipient matches, the
+    /// action is sent immediately.</summary>
     private void AcceptOnto(ScribeAcceptCandidate candidate)
     {
         var recordedRecipientUid = document.Blocks.FirstOrDefault()?.Assignment?.TargetPlayerUid;

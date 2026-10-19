@@ -5,16 +5,15 @@ using Scribe.Core;
 namespace Scribe;
 
 /// <summary>
-/// One kind the editor footer's add control can create (add-note-kind-picker, spec
-/// <c>task-kind-picker</c>): its stable id, the lang key for its menu/button label, and the delegate that
+/// One kind the editor footer's add control can create: its stable id, the lang key for its menu/button label, and the delegate that
 /// appends it to the scratch document. The picker builds its inline kind list and its primary-button label from the
 /// registry (<see cref="ScribeAddKinds"/>), and <see cref="ScribeDialogBase.OnClickAdd"/> dispatches to
 /// <see cref="Add"/> — so adding a future kind (Tracked/Linked) is one registry entry, with the footer
-/// widget and the other kinds untouched (design D2).
+/// widget and the other kinds untouched.
 ///
 /// <para>This lives in <c>src/Mod/</c>, not Core: <see cref="Add"/> references the mod's editing intent
-/// (and future kinds reach VS-API item pickers). The Core model already stores both block kinds; this
-/// is only the UI entry point that was missing.</para>
+/// (and future kinds reach VS-API item pickers). The Core model stores the block kinds; this
+/// is only the UI entry point.</para>
 /// </summary>
 /// <param name="Id">Stable identifier (not player-facing); used for equality/diagnostics.</param>
 /// <param name="LabelLangKey">Fully-qualified lang key for the label shown on the primary button and in
@@ -29,8 +28,8 @@ namespace Scribe;
 /// <param name="RequiresItemContext">True for kinds that only make sense against a specific item
 /// (Tracker/Link): they cannot be created from a bare footer click, only from a Handbook page's
 /// "Add to Scribe" link that supplies the item code. The editor footer detects this and dispatches a
-/// non-mutating guide action (open the explainer / point at the Handbook link) instead of adding a row
-/// (add-tracker-link-tasks 3.7). Task and Note are false — the ordinary immediate add.</param>
+/// non-mutating guide action (open the explainer / point at the Handbook link) rather than adding a row.
+/// Task and Note are false — the ordinary immediate add.</param>
 internal sealed record ScribeAddKind(
     string Id,
     string LabelLangKey,
@@ -38,16 +37,15 @@ internal sealed record ScribeAddKind(
     bool RequiresItemContext = false);
 
 /// <summary>
-/// The live registry of kinds the add picker offers, in menu order (add-note-kind-picker D2). Registers
+/// The live registry of kinds the add picker offers, in menu order. Registers
 /// five: the two freeform kinds <see cref="Task"/> and <see cref="Note"/>, plus the three item-bound kinds
-/// <see cref="Tracker"/>, <see cref="Craft"/>, and <see cref="Link"/> (added by add-tracker-link-tasks and
-/// add-crafting-tasks). A future kind is added by registering a new <see cref="ScribeAddKind"/> in
+/// <see cref="Tracker"/>, <see cref="Craft"/>, and <see cref="Link"/>. A future kind is added by registering a new <see cref="ScribeAddKind"/> in
 /// <see cref="Live"/>; the footer contract does not change.
 /// </summary>
 internal static class ScribeAddKinds
 {
-    /// <summary>A checkbox task — the historical "Add task" behavior. Counts against a finite tier's
-    /// 10-entry cap (scribe-document-policy) like every other kind; this is the DEFAULT add so one click
+    /// <summary>A checkbox task — the plain "Add task" behavior. Counts against a finite tier's
+    /// 10-entry cap like every other kind; this is the DEFAULT add so one click
     /// still adds a task. Ignores the item-code param (a task has no bound item).</summary>
     public static readonly ScribeAddKind Task = new(
         Id: "task",
@@ -64,7 +62,7 @@ internal static class ScribeAddKinds
         Add: (doc, _, at) => doc.InsertTextSection(at, ""));
 
     /// <summary>An item Tracker — a <see cref="ScribeBlockKind.Tracker"/> block bound to a specific item
-    /// code, whose <c>have/need</c> counter follows the viewer's carried inventory (add-tracker-link-tasks).
+    /// code, whose <c>have/need</c> counter follows the viewer's carried inventory.
     /// Counts against a finite tier's cap like every other kind. <see cref="ScribeAddKind.RequiresItemContext"/>
     /// is true: it can only be created from a Handbook page's "Add to Scribe" link (which supplies the item
     /// code), never from a bare footer click — so <see cref="ScribeAddKind.Add"/> is a no-op when the code is
@@ -76,7 +74,7 @@ internal static class ScribeAddKinds
         RequiresItemContext: true);
 
     /// <summary>An item Link — a <see cref="ScribeBlockKind.Link"/> block whose label opens the referenced
-    /// item's Handbook page on click (add-tracker-link-tasks). Counts against a finite tier's cap like every
+    /// item's Handbook page on click. Counts against a finite tier's cap like every
     /// other kind (the cap is "N of anything"). <see cref="ScribeAddKind.RequiresItemContext"/> is true for the
     /// same reason as <see cref="Tracker"/> — the item code comes from the Handbook link, so
     /// <see cref="ScribeAddKind.Add"/> no-ops on a null code.</summary>
@@ -87,7 +85,7 @@ internal static class ScribeAddKinds
         RequiresItemContext: true);
 
     /// <summary>A Crafting Task — a <see cref="ScribeBlockKind.Craft"/> parent bound to a recipe, whose
-    /// generated ingredient subtasks track progress toward crafting the output (add-crafting-tasks). Counts
+    /// generated ingredient subtasks track progress toward crafting the output. Counts
     /// against a finite tier's cap like every other kind. <see cref="ScribeAddKind.RequiresItemContext"/> is true:
     /// like Tracker/Link it can only be created from a Handbook page's "Add Crafting Task" link, which supplies
     /// the recipe SIGNATURE (not just an item code) via <c>ScribeDialogBase.TryAddCraftFromHandbook</c> →
@@ -104,8 +102,8 @@ internal static class ScribeAddKinds
     /// (Task → Item Tracker → Crafting Task → Link → Note). The first entry (<see cref="Task"/>) is the initial
     /// default for the primary button. The three item-bound kinds (<see cref="Tracker"/>,
     /// <see cref="Craft"/>, <see cref="Link"/>) <see cref="ScribeAddKind.RequiresItemContext"/>, so a footer
-    /// click on any of them dispatches a guide action (point at the Handbook link) rather than adding a row
-    /// (add-tracker-link-tasks 3.7). Adding a future kind is one registry entry here; the footer contract does
+    /// click on any of them dispatches a guide action (point at the Handbook link) rather than adding a row.
+    /// Adding a future kind is one registry entry here; the footer contract does
     /// not change.</summary>
     public static readonly IReadOnlyList<ScribeAddKind> Live = new[] { Task, Tracker, Craft, Link, Note };
 }

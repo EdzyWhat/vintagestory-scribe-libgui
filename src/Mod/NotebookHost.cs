@@ -39,14 +39,14 @@ public class NotebookHost : IScribeDocumentHost, IHistoryRecordable
         // A documentless stack gets an in-memory placeholder only — NOT written back here. Writing it
         // here would race the ambient OnHistoryScanTick sweep (and any other host construction) for
         // who gets to mint the stack's real DocId first; the two sides can disagree and leave the
-        // player's own client permanently proposing a DocId the server never adopted (task-loss-on-
-        // tablet-close). OnServerReceivedNotebookSave's own bootstrap branch is the only place a fresh
+        // player's own client permanently proposing a DocId the server never adopted.
+        // OnServerReceivedNotebookSave's own bootstrap branch is the only place a fresh
         // DocId is ever persisted onto a stack that doesn't have one yet.
         _document = ScribeDocumentAttributes.TryReadFrom(stack, out var doc) && doc is not null
             ? doc
             : new ScribeDocument();
         _history = HistoryStore.Deserialize(stack.Attributes.GetBytes("scribeHistory"));
-        // Read View filter pill + subtask-group collapse state (read-view-filter-and-collapse), the
+        // Read View filter pill + subtask-group collapse state, the
         // item-hosted counterpart of the block entity's tree-attribute fields. Absent attributes (a
         // never-opened item) default to All / fully-expanded via GetInt/GetBytes's own defaults.
         _readViewFilterCategory = (byte)stack.Attributes.GetInt("scribeReadViewFilter", 0);
@@ -68,15 +68,15 @@ public class NotebookHost : IScribeDocumentHost, IHistoryRecordable
     public ScribeDocument Document => _document;
 
     /// <summary>The <c>InventoryID</c> of the slot this host is bound to, so a client save packet can name
-    /// the EXACT slot it edited and the server writes back there rather than re-guessing by active hand
-    /// (add-tracker-link-tasks 7.16). Null when the slot isn't in a resolvable inventory (defensive — a
+    /// the EXACT slot it edited and the server writes back there rather than re-guessing by active hand.
+    /// Null when the slot isn't in a resolvable inventory (defensive — a
     /// held/carried item always is); the packet then omits identity and the server falls back to active
     /// hand. Client-side only in practice (a server-constructed host never sends a save packet).</summary>
     public string? SlotInventoryId => _slot.Inventory?.InventoryID;
 
     /// <summary>The slot index of <see cref="_slot"/> within <see cref="SlotInventoryId"/>, or -1 when the
     /// slot has no resolvable inventory. Pairs with <see cref="SlotInventoryId"/> to address the exact
-    /// save target (add-tracker-link-tasks 7.16).</summary>
+    /// save target.</summary>
     public int SlotId => _slot.Inventory?.GetSlotId(_slot) ?? -1;
 
     /// <summary>The notebook's history chronicle. Persisted in <c>ItemStack.Attributes["scribeHistory"]</c>
@@ -144,8 +144,8 @@ public class NotebookHost : IScribeDocumentHost, IHistoryRecordable
     public byte ReadViewFilterCategory => _readViewFilterCategory;
     public IReadOnlyCollection<Guid> CollapsedGroupIds => _collapsedGroupIds;
 
-    /// <summary>Overwrites this item's persisted Read View filter pill + collapsed-group set
-    /// (read-view-filter-and-collapse), driven by <see cref="ScribeSetReadViewStateMessage"/>. Writes
+    /// <summary>Overwrites this item's persisted Read View filter pill + collapsed-group set,
+    /// driven by <see cref="ScribeSetReadViewStateMessage"/>. Writes
     /// straight to the ItemStack and marks the slot dirty; unlike <see cref="Flush"/> this does not push a
     /// <see cref="ScribeNotebookSaveMessage"/> back — the sending client already applied the change
     /// optimistically to its own open dialog, and a Notebook/Tablet has exactly one viewer (the holder),
@@ -176,7 +176,7 @@ public class NotebookHost : IScribeDocumentHost, IHistoryRecordable
     }
 
     /// <summary>Set a Tracker's live <see cref="ScribeBlock.CurrentQuantity"/> by stable TaskId — the
-    /// item-surface write-through for the client count engine (add-tracker-link-tasks D5), mirroring
+    /// item-surface write-through for the client count engine, mirroring
     /// <see cref="SetTaskTextFromReader"/>. Routes through the Core clamp and only persists on a real
     /// change; a no-op / unknown id / non-Tracker returns false without flushing.</summary>
     public bool SetTrackerCurrentQuantityFromReader(Guid taskId, int qty)
@@ -190,8 +190,7 @@ public class NotebookHost : IScribeDocumentHost, IHistoryRecordable
     }
 
     /// <summary>Set a QuestObjective's live <see cref="ScribeBlock.CurrentQuantity"/> by stable TaskId — the
-    /// item-surface write-through for the client-side quest watcher
-    /// (add-progression-framework-quest-objective-subtasks), mirroring
+    /// item-surface write-through for the client-side quest watcher, mirroring
     /// <see cref="SetTrackerCurrentQuantityFromReader"/> but gated on <c>IsQuestObjective</c> and clamped
     /// into <c>[0, TargetQuantity]</c> via <see cref="ScribeDocument.SetQuestObjectiveProgress"/> — never
     /// overflow-visible like a Tracker's count. A no-op / unknown id / non-QuestObjective returns false
@@ -304,8 +303,7 @@ public class NotebookHost : IScribeDocumentHost, IHistoryRecordable
         // FlushHistory, not Flush: this only ever mutates _history, never _document. Flush would also
         // persist _document, which on a stack that had none yet would stamp a fresh DocId as a pure side
         // effect of AttachServerContext being called (e.g. from the ambient OnHistoryScanTick sweep) —
-        // racing the player's own client for who mints the item's real DocId first
-        // (task-loss-on-tablet-close).
+        // racing the player's own client for who mints the item's real DocId first.
         if (added) FlushHistory();
     }
 
@@ -362,7 +360,7 @@ public class NotebookHost : IScribeDocumentHost, IHistoryRecordable
         => Lang.Get("scribe:date-format", dayOfMonth, Lang.Get("month-" + monthName), year);
 
     /// <summary>Formats the calendar date for a stored <c>Calendar.TotalDays</c> timestamp, so live
-    /// History rows can rebuild <c>scribe:date-format</c> in the viewing client's locale instead of
+    /// History rows can rebuild <c>scribe:date-format</c> in the viewing client's locale rather than
     /// showing a server-baked date string. Same month/year/day-of-month math as
     /// <see cref="FormatDateDaysAgo"/> (clamped at 0).</summary>
     internal static string FormatDateFromTimestamp(IWorldAccessor world, double totalDays)
@@ -378,18 +376,18 @@ public class NotebookHost : IScribeDocumentHost, IHistoryRecordable
     }
 
     /// <summary>Formats the calendar date <paramref name="daysAgo"/> in-game days before now, so seeded
-    /// demo History/Guestbook entries span multiple days instead of all reading "today". Mirrors
+    /// demo History/Guestbook entries span multiple days rather than all reading "today". Mirrors
     /// <see cref="FormatDate"/> but derives month/year/day-of-month from <c>TotalDays - daysAgo</c>
     /// (clamped at 0 so it never underflows into a negative calendar). Display-only; plausibility, not
-    /// calendar exactness, is the bar (see design decision 5).</summary>
+    /// calendar exactness, is the bar.</summary>
     internal static string FormatDateDaysAgo(ICoreServerAPI sapi, int daysAgo)
         => FormatDateFromTimestamp(sapi.World, CalendarTotalDaysAgo(sapi, daysAgo));
 
     /// <summary>The raw <c>Calendar.TotalDays</c> value <paramref name="daysAgo"/> in-game days
     /// before now (clamped at 0), i.e. the sortable-timestamp counterpart of
     /// <see cref="FormatDateDaysAgo"/> — used by the demo seeder so a seeded <see cref="HistoryEntry"/>
-    /// carries a real <see cref="HistoryEntry.InGameTimestamp"/> matching its displayed date, instead
-    /// of defaulting to 0 and sorting as if it happened "now".</summary>
+    /// carries a real <see cref="HistoryEntry.InGameTimestamp"/> matching its displayed date, rather
+    /// than defaulting to 0 and sorting as if it happened "now".</summary>
     internal static double CalendarTotalDaysAgo(ICoreServerAPI sapi, int daysAgo)
         => Math.Max(0, sapi.World.Calendar.TotalDays - daysAgo);
 }

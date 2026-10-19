@@ -21,7 +21,7 @@ public interface IScribeDocumentItem
 {
     /// <summary>Open this carried item's Scribe dialog on the client and return it, so a caller can
     /// immediately act on the just-opened surface (the Handbook "Add to Scribe" fallback opens the last-used
-    /// Scribe item this way, then appends a Tracker/Link — add-tracker-link-tasks 3.3). Wires and registers
+    /// Scribe item this way, then appends a Tracker/Link). Wires and registers
     /// the host exactly as the item's own right-click open does, and records itself as the last-opened Scribe
     /// item. Returns the opened <see cref="ScribeDialogBase"/>, or <c>null</c> if it can't be opened on this
     /// side/state.</summary>
@@ -31,8 +31,8 @@ public interface IScribeDocumentItem
     /// stored document is editable right now. Notebooks are always writeable (the default); a Tablet is
     /// writeable only while wet — a hardened or fired tablet is read-only. The Handbook "Add to Scribe"
     /// resolver (<c>ScribeModSystem.AddFromHandbook</c>) skips non-writeable carried items and moves on to
-    /// the next one, so a Tracker/Link never lands on (and silently no-ops against) a read-only tablet
-    /// (add-tracker-link-tasks feedback 6.2). Default <c>true</c> for the always-writeable items.</summary>
+    /// the next one, so a Tracker/Link never lands on (and silently no-ops against) a read-only tablet.
+    /// Default <c>true</c> for the always-writeable items.</summary>
     bool IsSlotWriteable(ItemSlot slot) => true;
 
     /// <summary>The document-capacity/editability policy for the item currently in <paramref name="slot"/>
