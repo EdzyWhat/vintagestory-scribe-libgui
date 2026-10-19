@@ -4,18 +4,15 @@ using ProtoBuf;
 namespace Scribe;
 
 /// <summary>
-/// Client -&gt; server: persist this Scribe item/block instance's Read View filter pill + subtask-group
-/// collapse state, addressed by the document's stable <c>DocId</c> —
-/// never a block position or item slot, mirroring <see cref="ScribeSetTrackerQuantityMessage"/>. Both
-/// pieces of state always ride together (the dialog owns one combined write path — see
-/// <c>ScribeDialogBase.PersistReadViewState</c>), so this carries the FULL current state rather than a
-/// single delta.
+/// Client -&gt; server: persist this item/block's Read View filter pill + subtask-group collapse state,
+/// addressed by the document's <c>DocId</c>, never a block position or slot. Both pieces always ride
+/// together (one write path, <c>ScribeDialogBase.PersistReadViewState</c>), so this carries the FULL
+/// current state, not a delta.
 ///
-/// <see cref="DocId"/> is the raw 16-byte form of the <c>Guid</c> (protobuf-net's own <c>Guid</c> handling
-/// is version-fragile — matching the sibling task messages); each entry of <see cref="CollapsedGroupIds"/>
-/// is likewise a raw 16-byte TaskId. Best-effort write-through, lock-free (reuses
-/// <see cref="IScribeDocumentHost.SetReadViewStateFromReader"/>): a viewer preference, not a document edit,
-/// so no editor lock is required and an unresolvable document is a silent no-op.
+/// <see cref="DocId"/> and each <see cref="CollapsedGroupIds"/> entry are raw 16-byte <c>Guid</c>s
+/// (protobuf-net's own <c>Guid</c> handling is version-fragile). Best-effort and lock-free (see
+/// <see cref="IScribeDocumentHost.SetReadViewStateFromReader"/>): a viewer preference, not a document
+/// edit, so no editor lock is needed and an unresolvable document is a silent no-op.
 /// </summary>
 [ProtoContract]
 public sealed class ScribeSetReadViewStateMessage
@@ -28,7 +25,7 @@ public sealed class ScribeSetReadViewStateMessage
     [ProtoMember(2)]
     public byte FilterCategory { get; set; }
 
-    /// <summary>Every currently-collapsed subtask-group's parent TaskId, each as 16 raw bytes.</summary>
+    /// <summary>Every currently-collapsed subtask group's parent TaskId, each as 16 raw bytes.</summary>
     [ProtoMember(3)]
     public List<byte[]>? CollapsedGroupIds { get; set; }
 }

@@ -29,39 +29,35 @@ namespace Scribe;
 
 internal static class ScribeRowControlNudge
 {
-    /// <summary>The family Scribe's dialog TITLE text is drawn in: "Caudex", the mod's bundled humanist
-    /// serif, registered with LibGUI's Skia font registry in
-    /// <see cref="ScribeModSystem.RegisterCustomFonts"/>. Only the title (and
-    /// in-dialog buttons) uses unscaled Caudex; task-row text uses the player's selected face, laid out
-    /// against Caudex's line-box (see <see cref="TextLineHeight"/>). If registration fails the family
-    /// falls back to a system face via <c>TextLayoutHelper</c>, so the title still renders.</summary>
+    /// <summary>Family of the dialog TITLE text: "Caudex", the bundled serif registered in
+    /// <see cref="ScribeModSystem.RegisterCustomFonts"/>. Only the title and in-dialog buttons use
+    /// unscaled Caudex; task-row text uses the player's face laid out against Caudex's line-box (see
+    /// <see cref="TextLineHeight"/>). If registration fails, <c>TextLayoutHelper</c> falls back to a system face.</summary>
     internal const string TitleFontFamily = "Caudex";
 
-    /// <summary>Measured single-line input height at the style's current <em>nominal</em> font size: the
-    /// Caudex-pegged "Ag" line height plus the field's top+bottom internal padding — mirroring
-    /// <c>ScribeMultilineFieldRender.PerformLayout</c>'s <c>lineCount * lineHeight + PadY*2</c> for one
-    /// line. Independent of the selected task font.</summary>
+    /// <summary>Single-line input height at the style's nominal font size: the Caudex-pegged "Ag" line
+    /// height plus the field's top+bottom padding, mirroring <c>ScribeMultilineFieldRender.PerformLayout</c>
+    /// for one line. Independent of the selected task font.</summary>
     private static float SingleLineInputHeight(ScribeRowStyle style)
         => TextLineHeight(style.FontSize) + style.FieldPadY * 2f;
 
-    /// <summary>The bare "Ag" line height at <paramref name="fontSize"/> — always Caudex's Skia line-box
-    /// not the selected family's native Y. Used to cap a Tracker/Link icon's
-    /// LAYOUT height to a single text line so an oversized (row-height-neutral) icon paints larger without
-    /// growing the row (see <see cref="ScribeLinkIcon"/>). Read reserved
-    /// height and the editor field must agree on this number.</summary>
+    /// <summary>The bare "Ag" line height at <paramref name="fontSize"/>, always Caudex's Skia line-box.
+    /// Caps a Tracker/Link icon's LAYOUT height to one text line so an oversized icon paints larger
+    /// without growing the row (see <see cref="ScribeLinkIcon"/>). The read view's reserved height and the
+    /// editor field must agree on this number.</summary>
     public static float TextLineHeight(float fontSize) => ScribeTaskFont.LineHeight(fontSize);
 
     /// <summary>One line of an item-row NAME: cuneiform's ratio-boosted line on the tablet path, else the
-    /// Latin "Ag" line. Used to tell a wrapping name from a single-line one so we can center short names
-    /// on the icon without centering a wrapped block (which would lift the first line above the icon).</summary>
+    /// Latin "Ag" line. Distinguishes a wrapping name from a single-line one, so short names center on the
+    /// icon without lifting the first line of a wrapped block above it.</summary>
     public static float ItemNameLineHeight(ScribeRowStyle style)
         => style.UseCuneiform
             ? style.FontSize * CuneiformMetrics.LineHeightRatio * CuneiformMetrics.GlyphDrawScale
             : TextLineHeight(style.FontSize);
 
-    /// <summary>The visual band shared by an item row's icon, short label, and leading controls.
-    /// Static VS Quest objectives use their bullseye/item-specific footprint instead of the ordinary
-    /// item-icon footprint, keeping every caller centered against the art that is actually rendered.</summary>
+    /// <summary>The visual band shared by an item row's icon, short label, and leading controls. Static
+    /// VS Quest objectives use their bullseye/item-specific footprint so every caller centers against
+    /// the art actually rendered.</summary>
     public static float ItemVisualBandHeight(
         ScribeRowStyle style, string? linkTarget = null,
         bool isStaticVsQuestObjective = false, ItemStack? displayStack = null)
@@ -78,10 +74,8 @@ internal static class ScribeRowControlNudge
     }
 
     /// <summary>Extra downward optical offset for item-row checkbox/grip, in ems of
-    /// <see cref="ScribeRowStyle.FontSize"/>. Applied after centering on the icon band so a "smidge"
-    /// tracks text size (≈1.5px at 15pt, ≈2.8px on a tablet cuneiform line) instead of a fixed pixel
-    /// nudge. Raise/lower this one constant to tune; Task/Note rows stay at geometric center of the
-    /// one-line field (set <see cref="TaskControlOpticalNudgeEm"/> if those also read high).</summary>
+    /// <see cref="ScribeRowStyle.FontSize"/>, applied after centering on the icon band so it tracks text
+    /// size rather than being a fixed pixel nudge.</summary>
     // TEMPORARY EXPERIMENT (Option 2, tools/row-leading-slot-alignment).
     internal const float ItemControlOpticalNudgeEm = 0f;
 
@@ -89,38 +83,19 @@ internal static class ScribeRowControlNudge
     /// rows. 0 keeps them geometrically centered on the one-line field.</summary>
     internal const float TaskControlOpticalNudgeEm = 0f;
 
-    /// <summary>Down-nudge for the drag grip and the task checkbox (both <see cref="ScribeRowStyle.CheckboxSize"/>
-    /// tall). On a Task/Note row this centers them on a one-line text field. On an item row the name/stepper
-    /// sit in the (taller) icon band, so the same Latin-field formula leaves the controls a smidge high —
-    /// center on that icon band instead, then add a font-relative optical offset. Both paths scale with
-    /// <see cref="ScribeRowStyle.FontSize"/> (<see cref="ScribeRowStyle.ControlSize"/> / icon size track it).
-    /// <para>A Quest Link row is the one item-row exception: its leading slot
-    /// holds the quest-marker icon, not the item icon that feeds the tall <c>iconBand</c> formula below, and
-    /// its name already centers on <see cref="ItemNameLineHeight"/> (the read/editor/pinned views each
-    /// re-derive their <c>bandHeight</c> for a quest row via that same helper). So a
-    /// Quest Link's <paramref name="linkTarget"/> routes the icon's own band onto that SAME
-    /// <see cref="ItemNameLineHeight"/> value the text uses — cuneiform-aware on the tablet, not the plain
-    /// Latin line — while it still gets the item-row's <see cref="ItemControlOpticalNudgeEm"/> nudge (not the
-    /// task-row one). Using the Latin-only <see cref="TextLineHeight"/> here would leave the icon's band
-    /// shorter than the tablet's actual cuneiform text line, riding high against the row's top edge.</para></summary>
-    // TEMPORARY EXPERIMENT (Option 2 / Technique B / HeightNeutral, tools/row-leading-slot-alignment):
-    // overrides the doc comment above. The leading control always centers on the SAME band its row's
-    // icon/counter/name actually center on (BuildItemContent/BuildItemEditorContent's `bandHeight`),
-    // no manual iconBand guess -- matching HUD's ScribeLinkIcon.HeightNeutral philosophy while staying
-    // correct per row kind:
-    //  - Plain Task/Note: ScribeMultilineFieldRender PadY-insets the text, so the band is the padded
-    //    field height (SingleLineInputHeight), not bare line height.
-    //  - Quest Link: its band is ItemNameLineHeight (cuneiform-aware on the tablet) -- its icon renders
-    //    in this SAME leading slot, not inline, so there's no separate icon band to match, and it must
-    //    agree with the text's own band rather than the plain Latin TextLineHeight (otherwise the icon
-    //    rides high above the shorter cuneiform text line).
-    //  - Tracker/Craft/Link: the inline icon/counter/name center on ScribeLinkIcon.VisualSize (the
-    //    REAL per-icon-kind visual band, item vs book-glyph) -- centering the checkbox on bare
-    //    TextLineHeight would leave it riding high above the (taller) icon band. VisualSize branches
-    //    per icon kind, so a book-glyph Link's checkbox is sized off the book glyph, not the item
-    //    icon's scale.
-    // Can go negative when CheckboxSize exceeds its band; that's by design (control overflows
-    // above/below the line rather than growing the row).
+    /// <summary>Top offset for the drag grip and task checkbox (both
+    /// <see cref="ScribeRowStyle.CheckboxSize"/> tall): centers them on the band their row's content
+    /// actually centers on, plus a font-relative optical nudge. May go negative when the checkbox exceeds
+    /// its band; the control then overflows rather than growing the row.</summary>
+    // TEMPORARY EXPERIMENT (Option 2 / Technique B / HeightNeutral, tools/row-leading-slot-alignment).
+    // The band per row kind:
+    //  - Plain Task/Note: the padded field height (SingleLineInputHeight), since
+    //    ScribeMultilineFieldRender PadY-insets the text.
+    //  - Quest Link: ItemNameLineHeight (cuneiform-aware on the tablet). Its icon renders in this same
+    //    leading slot, so it must agree with the text's band, not the Latin TextLineHeight, or it rides
+    //    high against a shorter band on the tablet.
+    //  - Tracker/Craft/Link: ScribeLinkIcon.VisualSize (the real per-icon-kind band, item vs book glyph);
+    //    centering on bare TextLineHeight would leave the checkbox riding high above the taller icon.
     public static float CheckboxAndGripTop(
         ScribeRowStyle style, bool itemRow = false, string? linkTarget = null,
         bool isStaticVsQuestObjective = false, ItemStack? displayStack = null)
@@ -139,25 +114,18 @@ internal static class ScribeRowControlNudge
         return centered + style.FontSize * nudgeEm;
     }
 
-    /// <summary>Opacity multiplier applied to a muted/disabled checkbox's tick, border, and background
-    /// — matches the 45%-opacity dim <see cref="ScribeInboxRow.BuildAcceptControl"/>
-    /// already uses for a disabled Accept button's label, the existing "can't tap this" convention.</summary>
+    /// <summary>Opacity multiplier for a muted/disabled checkbox's tick, border and background; matches
+    /// the 45% dim <see cref="ScribeInboxRow.BuildAcceptControl"/> uses for a disabled Accept label.</summary>
     private const float DisabledCheckboxOpacity = 0.45f;
 
-    /// <summary>Build a task-row completion checkbox, applying the row style's optional tick-color override
-    /// (<see cref="ScribeRowStyle.CheckTickColor"/>). When it is null (every surface
-    /// except the chalkboard) the ambient theme's <c>CheckboxStyle</c> is used unchanged, so the tick keeps
-    /// its usual accent. When set, ONLY the tick's <c>CheckColor</c> is overridden — the box background,
-    /// border, and focus behavior all stay the resolved theme defaults (we copy <c>Theme.Of(context)</c>'s
-    /// style and change one field), so the chalkboard's completed-task tick reads chalk-white to match its
-    /// row text without hardcoding white in this shared widget. Used by the read, editor, and pinned rows so
-    /// their ticks can't drift.
+    /// <summary>Builds a task-row completion checkbox. When <see cref="ScribeRowStyle.CheckTickColor"/> is
+    /// set, ONLY the tick's <c>CheckColor</c> is overridden on a copy of the theme's style; null leaves
+    /// the ambient <c>CheckboxStyle</c> unchanged. Shared by read, editor and pinned rows so their ticks
+    /// cannot drift.
     ///
-    /// <para>A null <paramref name="onChanged"/> yields an inert (frozen) checkbox — <c>onChanged</c>
-    /// is null — and its tick, border, and background are muted to <see cref="DisabledCheckboxOpacity"/>
-    /// so "can't click this" is visible instead of inferred (the Task Notice's read-only rows), taking
-    /// priority over <see cref="ScribeRowStyle.CheckTickColor"/> (a live-only
-    /// concern — the two never apply to the same row).</para></summary>
+    /// <para>A null <paramref name="onChanged"/> yields an inert checkbox with tick, border and
+    /// background muted to <see cref="DisabledCheckboxOpacity"/> (the Task Notice's read-only rows),
+    /// taking priority over <see cref="ScribeRowStyle.CheckTickColor"/>.</para></summary>
     public static Checkbox BuildTaskCheckbox(
         BuildContext context, ScribeRowStyle style, bool value, Action<bool>? onChanged)
     {
@@ -186,16 +154,12 @@ internal static class ScribeRowControlNudge
             style: resolvedStyle);
     }
 
-    /// <summary>The row's leading-slot control: the quest-marker icon for a Quest
-    /// Link row, or the ordinary completion checkbox (<see cref="BuildTaskCheckbox"/>, unchanged) for every
-    /// other row. A Quest Link's checkbox is misleading — toggling it has no effect on the referenced quest —
-    /// so its row shows the quest-marker icon in the checkbox's slot instead, sized to the same
-    /// <see cref="ScribeRowStyle.CheckboxSize"/> footprint so the row's leading column doesn't reflow. Colored
-    /// via <see cref="ScribeRowStyle.QuestLinkColor"/> (falling back to <see cref="ScribeTheme.QuestLinkAccent"/>),
-    /// mirroring how a plain Link's icon resolves <see cref="ScribeRowStyle.LinkColor"/>. Used by every surface
-    /// with a real completion checkbox (Read, Editor, Pinned, HUD) so the quest-vs-plain branch lives in exactly
-    /// one place; the Assignment-stage row's checkbox is a row-SELECTION control, not completion, so it does not
-    /// route through this helper.</summary>
+    /// <summary>The row's leading-slot control: the quest-marker icon for a Quest Link row (its checkbox
+    /// would mislead, since toggling it does not affect the quest), else the ordinary
+    /// <see cref="BuildTaskCheckbox"/>. The icon uses the same <see cref="ScribeRowStyle.CheckboxSize"/>
+    /// footprint so the leading column does not reflow, colored by <see cref="ScribeRowStyle.QuestLinkColor"/>
+    /// or <see cref="ScribeTheme.QuestLinkAccent"/>. Used by Read, Editor, Pinned and HUD; the
+    /// Assignment-stage row's checkbox is a SELECTION control and does not use it.</summary>
     public static Widget BuildLeadingControl(
         BuildContext context, ScribeRowStyle style, string? linkTarget, bool value, Action<bool>? onChanged)
     {
@@ -208,16 +172,12 @@ internal static class ScribeRowControlNudge
         return BuildTaskCheckbox(context, style, value, onChanged);
     }
 
-    /// <summary>The grip glyph's insets in a row: the vertical centering top-nudge (kept, same as the
-    /// checkbox), plus a NEGATIVE right inset that cancels the Row's <see cref="ScribeRowStyle.CheckboxTextGap"/>
-    /// which would otherwise sit as a trailing margin between the grip and the next control. With
-    /// the trailing gap zeroed the grip sits flush against the checkbox and the text column reclaims that
-    /// width. Used identically for the editor/pin grips AND the read/frozen grip-column spacers so read and
-    /// editor rows stay column-aligned across a view switch.
-    /// <para>Threads <paramref name="linkTarget"/> into <see cref="CheckboxAndGripTop"/> the same way the
-    /// leading-slot control itself does — the grip
-    /// sits in the SAME leading column as the checkbox/quest-icon, so it must center on the same band or it
-    /// visibly drifts from the icon/text on a Quest Link row.</para></summary>
+    /// <summary>The grip glyph's insets: the vertical top-nudge shared with the checkbox, plus a NEGATIVE
+    /// right inset cancelling the Row's <see cref="ScribeRowStyle.CheckboxTextGap"/> so the grip sits flush
+    /// against the checkbox. Used identically for editor/pin grips and the read/frozen grip-column spacers
+    /// so rows stay column-aligned across a view switch. <paramref name="linkTarget"/> is threaded into
+    /// <see cref="CheckboxAndGripTop"/> because the grip shares the leading column with the checkbox/quest
+    /// icon and must center on the same band.</summary>
     public static EdgeInsets GripInsets(
         ScribeRowStyle style, bool itemRow = false, string? linkTarget = null,
         bool isStaticVsQuestObjective = false, ItemStack? displayStack = null)
@@ -225,17 +185,12 @@ internal static class ScribeRowControlNudge
             top: CheckboxAndGripTop(style, itemRow, linkTarget, isStaticVsQuestObjective, displayStack),
             right: -style.CheckboxTextGap);
 
-    /// <summary>Absolute top offset (from the row's top edge) that centers a floating pin/delete button's
-    /// DRAWN box on the row's first rendered text line. The button box is <see cref="ScribeRowButton.BoxShrink"/>
-    /// px shorter than <see cref="ScribeRowStyle.ControlSize"/>; that line sits <c>RowVerticalPadding</c>
-    /// below the row top (the row's own vertical padding), so the button's box centers on the line's vertical
-    /// midpoint. Computed so it tracks the font scale.
-    /// <para>A plain Task/Note row's first line is the padded one-line input field
-    /// (<see cref="SingleLineInputHeight"/>, matching <see cref="CheckboxAndGripTop"/>'s Task/Note band). An
-    /// item row's (<paramref name="itemRow"/>) first line is its NAME, which uses the shared cuneiform-aware
-    /// <see cref="ItemNameLineHeight"/> — the same band that already centers quest markers and grips on a
-    /// cuneiform tablet — so a floating Pin/Delete/Unpin button follows the row's real text line instead of
-    /// a Latin-only measurement.</para></summary>
+    /// <summary>Absolute top offset (from the row's top edge) centering a floating pin/delete button's
+    /// DRAWN box (<see cref="ScribeRowButton.BoxShrink"/> px shorter than
+    /// <see cref="ScribeRowStyle.ControlSize"/>) on the row's first text line, which sits
+    /// <c>RowVerticalPadding</c> below the top. A plain Task/Note row's first line is the padded input
+    /// field (<see cref="SingleLineInputHeight"/>); an item row's (<paramref name="itemRow"/>) is its NAME
+    /// at the cuneiform-aware <see cref="ItemNameLineHeight"/>.</summary>
     public static float FloatingButtonTop(ScribeRowStyle style, bool itemRow = false)
     {
         float boxHeight = style.ControlSize - ScribeRowButton.BoxShrink;
@@ -245,21 +200,17 @@ internal static class ScribeRowControlNudge
     }
 }
 
-// ============================================================================
-// Shared per-row control primitives
-// ============================================================================
+// ── Shared per-row control primitives ──
 
-/// <summary>A bare (non-interactive) VS icon glyph rendered by registered <c>CustomIcons</c> code via
-/// <see cref="VsIcon"/>. Used for the grip, whose pointer handling lives in a wrapping
-/// <see cref="GestureDetector"/> rather than the glyph itself.
+/// <summary>A bare (non-interactive) VS icon glyph drawn by registered <c>CustomIcons</c> code via
+/// <see cref="VsIcon"/>; pointer handling lives in a wrapping <see cref="GestureDetector"/>.
 ///
-/// <para>NOTE: this deliberately uses <see cref="VsIcon"/> (icon-by-code) rather than LibGUI's
-/// <see cref="Icon"/>/<see cref="IconButton"/> (SVG-by-path). <see cref="Icon"/> loads its SVG through
-/// <c>SkiaAssetLoader.LoadSvg</c>, which calls <c>Assets.TryGet</c> WITHOUT <c>loadAsset: true</c> — and
-/// VS nulls out every non-patched asset's <c>Data</c> after startup, so that path would fail to draw
-/// our icons. <see cref="VsIcon"/> routes through <c>IconUtil.DrawIconInt</c> → the mod's self-healing
-/// <c>CustomIcons</c> delegate (which re-resolves the asset on demand), which is why the icons were
-/// registered that way (see <c>ScribeModSystem.RegisterSvgIcon</c> / VSAPI-NOTES.md).</para></summary>
+/// <para>Deliberately <see cref="VsIcon"/> (icon-by-code), not LibGUI's <see cref="Icon"/>/<see cref="IconButton"/>
+/// (SVG-by-path): <see cref="Icon"/> loads via <c>SkiaAssetLoader.LoadSvg</c>, which calls
+/// <c>Assets.TryGet</c> without <c>loadAsset: true</c>, and VS nulls every non-patched asset's <c>Data</c>
+/// after startup, so our icons would fail to draw. <see cref="VsIcon"/> goes through
+/// <c>IconUtil.DrawIconInt</c> to the mod's self-healing <c>CustomIcons</c> delegate (see
+/// <c>ScribeModSystem.RegisterSvgIcon</c> / VSAPI-NOTES.md).</para></summary>
 internal sealed class ScribeVsIconGlyph : StatelessWidget
 {
     private readonly string iconName;
@@ -276,22 +227,17 @@ internal sealed class ScribeVsIconGlyph : StatelessWidget
     public override Widget Build(BuildContext context) => new VsIcon(iconName, size, color);
 }
 
-/// <summary>Shared inventory-slot styling for a Scribe writing-station's watermarked/restricted slots
-/// — extracted from <see cref="GuiDialogScribeAssignmentDesk.BuildNoticeSlot"/>
-/// so the Assignment Desk's supply/output slots and the Inbox block's own restricted slots render
-/// identically (same size, border, background veil, and watermark technique) without duplicating the
-/// magic numbers in a third place. The watermark (a <see cref="ScribeVsIconGlyph"/> painted UNDER the
-/// slot, muted by the slot's own semi-opaque veil fill on top — see <see cref="GuiDialogScribeScriptorium.BuildWatermarkedSlot"/>
-/// for why under-layering beats over-layering) is optional: passing <c>null</c> for
-/// <paramref name="watermarkIcon"/> renders the same size/border/background with no glyph at all, for a
-/// fully-open slot.</summary>
+/// <summary>Shared styling for a writing-station's watermarked/restricted inventory slots, so the
+/// Assignment Desk and the Inbox block render identically. The watermark (a <see cref="ScribeVsIconGlyph"/>)
+/// is painted UNDER the slot and muted by the slot's semi-opaque veil fill (see
+/// <see cref="GuiDialogScribeScriptorium.BuildWatermarkedSlot"/> for why under beats over); a null
+/// <paramref name="watermarkIcon"/> renders a fully-open slot with no glyph.</summary>
 internal static class ScribeInventorySlotStyle
 {
-    /// <summary>Slot edge length in pixels — matches <see cref="GuiDialogScribeAssignmentDesk.SlotSize"/>
-    /// (and, transitively, the Scriptorium's own inventory slots).</summary>
+    /// <summary>Slot edge length in pixels; matches <see cref="GuiDialogScribeAssignmentDesk.SlotSize"/>.</summary>
     public const float SlotSize = 48f;
 
-    /// <summary>The watermark glyph's size as a fraction of <see cref="SlotSize"/> — matches
+    /// <summary>Watermark glyph size as a fraction of <see cref="SlotSize"/>; matches
     /// <see cref="GuiDialogScribeAssignmentDesk.WatermarkScale"/>.</summary>
     private const float WatermarkScale = 0.66f;
 
@@ -315,29 +261,23 @@ internal static class ScribeInventorySlotStyle
     }
 }
 
-/// <summary>The assignment marker icon for an accepted player-to-player assignment
-/// (the Accepted state), shown after the checkbox on Read, Editor, and Pin Tab rows
-/// so an assigned task is recognizable everywhere it renders — a Tablet's rows inherit it for
-/// free, since it reuses the same Read/Editor row widgets rather than a per-surface copy. UNLIKE the
-/// grip glyph's zero-opacity reserved-width spacer, this column is only added (and only then takes up
-/// width/gap) for a row that actually is an accepted assignment — callers must gate the
-/// <c>children.Add(...)</c> call on the row's own <c>IsAcceptedAssignment</c> flag rather than call this
-/// unconditionally, so an ordinary row's layout is untouched. Dedicated rolled-scroll glyph
-/// (<c>scribeassignment</c>). Hovering it
-/// shows a two-line tooltip (assigner + assigned date; accepted date) when that data is supplied.</summary>
+/// <summary>The marker icon (<c>scribeassignment</c> glyph, or a raster stamp) for an accepted
+/// player-to-player assignment, shown after the checkbox on Read, Editor and Pin Tab rows (tablets
+/// inherit it via the same row widgets). Unlike the grip's zero-opacity reserved-width spacer, this column
+/// takes width only when added, so callers must gate <c>children.Add(...)</c> on the row's
+/// <c>IsAcceptedAssignment</c>. Hovering shows a two-line tooltip (assigner + assigned date; accepted
+/// date) when that data is supplied.</summary>
 internal static class ScribeAssignedTaskIcon
 {
-    /// <summary>The full-color raster stamp asset.
-    /// Resolved once per dialog rebuild by whichever caller owns <c>modSystem</c>
-    /// (<see cref="ScribeModSystem.GetGuiTextureBitmap"/>, self-caching) and passed down as
-    /// <c>stampBitmap</c> so this row-widget file stays API-free.</summary>
+    /// <summary>The full-color raster stamp asset, resolved once per dialog rebuild by the caller owning
+    /// <c>modSystem</c> (<see cref="ScribeModSystem.GetGuiTextureBitmap"/>) and passed down as
+    /// <c>stampBitmap</c> so this file stays API-free.</summary>
     public static readonly AssetLocation Asset = new("scribe", "textures/gui/scribe-assigned-stamp.png");
 
-    /// <summary><paramref name="context"/>/<paramref name="currentShade"/> are only used to build the
-    /// hover tooltip (via <see cref="ScribeGlobalTint.ShadedTooltip"/>, matching every other row/nav
-    /// tooltip's illumination-correct shading), so they're only required when a caller also passes
-    /// <paramref name="assignerName"/> — a null <paramref name="assignerName"/> (a legacy pin snapshot
-    /// with no provenance yet) renders the plain icon with no tooltip at all, never crashing.</summary>
+    /// <summary><paramref name="context"/>/<paramref name="currentShade"/> build the hover tooltip (via
+    /// <see cref="ScribeGlobalTint.ShadedTooltip"/>) and are required only with
+    /// <paramref name="assignerName"/>; a null name (a legacy pin snapshot with no provenance) renders the
+    /// plain icon with no tooltip.</summary>
     public static Widget Build(ScribeRowStyle style, Vector4 color, bool itemRow = false, SKBitmap? stampBitmap = null,
         BuildContext? context = null, ScribeAmbientLightSampler.Shade? currentShade = null,
         string? assignerName = null, string? assignedDate = null, string? acceptedDate = null)
@@ -373,23 +313,19 @@ internal static class ScribeAssignedTaskIcon
     }
 }
 
-/// <summary>An external mod's opaque hover-detail marker, shown after the
-/// checkbox/assignment marker on Read, Editor, and Pin Tab rows for any block carrying a non-empty
-/// <see cref="Scribe.Core.ScribeBlock.ExtraInfo"/>, regardless of kind. Deliberately parallel to, not
-/// derived from, <see cref="ScribeAssignedTaskIcon"/> — ExtraInfo is an independent field, not a reuse of
-/// ScribeAssignment. Never referenced by <c>HudScribePins.cs</c>, so it
-/// never appears in the HUD. The tooltip shows the caller's <c>extraInfo</c> string verbatim (Scribe
-/// never interprets or reformats it) rather than a lang-keyed template, since the content is opaque by
-/// contract.</summary>
+/// <summary>An external mod's opaque hover-detail marker, shown after the checkbox/assignment marker on
+/// Read, Editor and Pin Tab rows for any block with a non-empty <see cref="Scribe.Core.ScribeBlock.ExtraInfo"/>.
+/// Parallel to, not derived from, <see cref="ScribeAssignedTaskIcon"/> (ExtraInfo is an independent
+/// field). Never used by the HUD. The tooltip shows <c>extraInfo</c> verbatim since its content is opaque
+/// by contract.</summary>
 internal static class ScribeExternalInfoIcon
 {
-    /// <summary>The raster stamp asset for this marker, distinct from <see cref="ScribeAssignedTaskIcon.Asset"/>.</summary>
+    /// <summary>The raster stamp asset for this marker.</summary>
     public static readonly AssetLocation Asset = new("scribe", "textures/gui/scribe-external-stamp.png");
 
-    /// <summary><paramref name="context"/>/<paramref name="currentShade"/> are only used to build the
-    /// hover tooltip (matching every other row/nav tooltip's illumination-correct shading), so they're
-    /// only required when a caller also passes a non-empty <paramref name="extraInfo"/> — a null/empty
-    /// value renders no icon at all (the caller gates this call on that already; see the doc above).</summary>
+    /// <summary><paramref name="context"/>/<paramref name="currentShade"/> build the hover tooltip and are
+    /// required only with a non-empty <paramref name="extraInfo"/>; the caller gates this call on a
+    /// non-empty value.</summary>
     public static Widget Build(ScribeRowStyle style, Vector4 color, bool itemRow = false, SKBitmap? stampBitmap = null,
         BuildContext? context = null, ScribeAmbientLightSampler.Shade? currentShade = null,
         string? extraInfo = null)
@@ -414,37 +350,28 @@ internal static class ScribeExternalInfoIcon
     }
 }
 
-/// <summary>Builds the leading icon for a Tracker/Link row. Normally an <see cref="ItemStackDisplay"/> of the
-/// referenced item; but a guide-page Link (a <c>"page:"</c>-prefixed <see cref="ScribeLinkTarget"/>) has no
-/// item to draw, so it renders the generic <c>scribebook</c> glyph tinted <paramref name="bookColor"/>
-/// instead. Shared by the read view, editor, Pin Tab, and HUD so a guide-page
-/// Link looks identical everywhere. A Tracker or item Link (<paramref name="linkTarget"/> null or a bare
-/// collectible code) always takes the item path.
+/// <summary>Builds the leading icon for a Tracker/Link row: an <see cref="ItemStackDisplay"/> of the
+/// referenced item, or, for a guide-page or quest Link (no item to draw), the <c>scribebook</c> glyph
+/// tinted <paramref name="bookColor"/>. Shared by read, editor, Pin Tab and HUD.
 ///
-/// <para>Both size tweaks are relative to the caller's nominal
-/// <c>iconSize</c>: the item icon grows <see cref="ItemIconScale"/> and the <c>scribebook</c> glyph
-/// shrinks to <see cref="BookGlyphScale"/>. Crucially the result is rendered ROW-HEIGHT-NEUTRAL —
-/// its layout box is capped to a single text line (<paramref name="lineHeight"/>) and the larger art paints
-/// centered over it, overflowing above/below without growing the row, so a Tracker/Link row matches a
-/// single-line Task/Text row.</para></summary>
+/// <para>The item icon grows by <see cref="ItemIconScale"/> and the book glyph shrinks to
+/// <see cref="BookGlyphScale"/>. The result is ROW-HEIGHT-NEUTRAL: its layout box is capped to one text
+/// line (<paramref name="lineHeight"/>) and the larger art paints centered over it, so a Tracker/Link row
+/// matches a single-line Task/Text row.</para></summary>
 internal static class ScribeLinkIcon
 {
-    /// <summary>Item-icon growth: the referenced item reads a touch larger than the nominal row
-    /// control size.</summary>
+    /// <summary>Item-icon growth over the nominal row control size.</summary>
     private const float ItemIconScale = 1.1f;
 
-    /// <summary>Guide-page book-glyph shrink: the <c>scribebook</c> glyph is visually heavy at the
-    /// full control size, so it renders smaller than the item icon.</summary>
+    /// <summary>Guide-page book-glyph shrink; the glyph is visually heavy at full control size.</summary>
     // TEMPORARY EXPERIMENT (Option 2, tools/row-leading-slot-alignment).
     private const float BookGlyphScale = 0.65f;
 
-    /// <summary>Static VS Quest criterion marker scale. The bullseye has a dense outer ring, so it uses
-    /// the same compact footprint as the guide-page book glyph.</summary>
+    /// <summary>Static VS Quest criterion marker scale; the bullseye's dense outer ring uses the same
+    /// compact footprint as the book glyph.</summary>
     private const float ObjectiveGlyphScale = 0.65f;
 
-    /// <summary>True for a Link whose row has no item to draw an <see cref="ItemStackDisplay"/> for — a
-    /// guide-page or quest Link — so it renders the shared book glyph instead (a quest Link is exactly as
-    /// item-less as a guide-page Link).</summary>
+    /// <summary>True for a Link with no item to draw (guide-page or quest), which renders the book glyph.</summary>
     private static bool IsBookGlyph(string? linkTarget)
         => ScribeLinkTarget.IsGuidePage(linkTarget) || ScribeLinkTarget.IsQuest(linkTarget);
 
@@ -462,14 +389,13 @@ internal static class ScribeLinkIcon
         Widget art = guidePage
             ? new ScribeVsIconGlyph("scribebook", visual, bookColor)
             : new ItemStackDisplay(stack, width: visual, height: visual, renderSize: 48);
-        // Window item rows top-align the icon with the stepper/name, so the icon must occupy its
-        // real visual height in layout (otherwise HeightNeutral overflows above the row). HUD still
-        // uses the height-neutral wrap so a pin row matches a single text line.
+        // Window item rows top-align the icon with the stepper/name, so the icon must occupy its real
+        // visual height in layout (HeightNeutral would overflow above the row). The HUD wraps it.
         return heightNeutral ? HeightNeutral(art, visual, lineHeight) : art;
     }
 
-    /// <summary>Build a static VS Quest objective icon: its resolved inventory item when available,
-    /// otherwise the dedicated bullseye marker. The marker avoids the guide-page book metaphor.</summary>
+    /// <summary>Builds a static VS Quest objective icon: the resolved item when available, else the
+    /// dedicated bullseye marker (avoiding the guide-page book metaphor).</summary>
     public static Widget BuildObjective(ItemStack? stack, float iconSize, Vector4 markerColor,
         float lineHeight, bool heightNeutral = true)
     {
@@ -480,13 +406,12 @@ internal static class ScribeLinkIcon
         return heightNeutral ? HeightNeutral(art, visual, lineHeight) : art;
     }
 
-    /// <summary>Wrap a <paramref name="visual"/>-px-square icon so it occupies only <paramref name="lineHeight"/>
-    /// of vertical LAYOUT space while painting at full size, centered on that line. A single-child
-    /// <see cref="Stack"/> is sized by a <see cref="SizedBox"/> spacer to
-    /// <c>visual × lineHeight</c>; the icon is a <see cref="Positioned"/> child with both <c>Width</c> and
-    /// <c>Height</c> set — which <c>RenderStack</c> forces to exactly that size (min = max) — offset up by half
-    /// the overflow so it centers. <c>RenderStack.Paint</c> does not clip, so the top/bottom overflow shows.
-    /// If the icon already fits a line (never, at current scales) it is returned unwrapped.</summary>
+    /// <summary>Wraps a <paramref name="visual"/>-px-square icon so it takes only
+    /// <paramref name="lineHeight"/> of vertical LAYOUT space while painting full size, centered on the
+    /// line. A <see cref="SizedBox"/> spacer sizes a <see cref="Stack"/> to <c>visual × lineHeight</c>; the
+    /// icon is a <see cref="Positioned"/> child with both <c>Width</c> and <c>Height</c> set (which
+    /// <c>RenderStack</c> forces exactly), offset up by half the overflow. <c>RenderStack.Paint</c> does
+    /// not clip, so the overflow shows. An icon that already fits a line is returned unwrapped.</summary>
     private static Widget HeightNeutral(Widget art, float visual, float lineHeight)
     {
         if (visual <= lineHeight) return art;
@@ -500,19 +425,18 @@ internal static class ScribeLinkIcon
 }
 
 /// <summary>
-/// Vertically centers a child inside <see cref="BandHeight"/> when the child is still a single line,
-/// and leaves a wrapping child top-aligned at its natural height. Item rows stay
-/// <c>CrossAxisAlignment.Start</c> so a wrapped name does not float the icon/checkbox into the middle
-/// of the block; this wrapper is how a short name still sits on the icon's horizon without growing
-/// the row (the band is already the icon's height).
+/// Vertically centers a child inside <see cref="BandHeight"/> when it is a single line, and leaves a
+/// wrapping child top-aligned at its natural height. Item rows stay <c>CrossAxisAlignment.Start</c> so a
+/// wrapped name does not float the icon into the middle of the block; this lets a short name sit on the
+/// icon's horizon without growing the row.
 /// </summary>
 internal static class ScribeCenterIfShort
 {
-    /// <summary>Always-center (counter, stepper): treat the child as short so it sits in the icon band.</summary>
+    /// <summary>Always-center (counter, stepper): treats the child as short.</summary>
     public static Widget InBand(Widget child, float bandHeight)
         => new ScribeCenterIfShortWidget(oneLineHeight: float.MaxValue, bandHeight, child);
 
-    /// <summary>Center when the child is ≤ one line; top-align when it wraps.</summary>
+    /// <summary>Centers when the child is at most one line; top-aligns when it wraps.</summary>
     public static Widget Name(Widget child, ScribeRowStyle style, float bandHeight)
         => new ScribeCenterIfShortWidget(ScribeRowControlNudge.ItemNameLineHeight(style), bandHeight, child);
 }
@@ -559,9 +483,8 @@ internal sealed class ScribeCenterIfShortRender : RenderProxyBox
         var child = Children[0];
         child.Layout(Constraints);
         bool wrapped = child.Size.Y > OneLineHeight * 1.4f;
-        // Use the child's own width. A Row gives non-flex children a bounded MaxWidth equal to the
-        // leftover row — claiming that leftover made the stepper/counter as wide as the row and
-        // zeroed the icon + name.
+        // Use the child's own width. A Row gives non-flex children a MaxWidth equal to the leftover row;
+        // claiming that made the stepper/counter as wide as the row and zeroed the icon + name.
         // Expanded names already pass a tight width, so child.Size.X is the flex slot in that case.
         float height = (wrapped || BandHeight <= child.Size.Y) ? child.Size.Y : BandHeight;
         child.X = 0f;
@@ -570,32 +493,21 @@ internal sealed class ScribeCenterIfShortRender : RenderProxyBox
     }
 }
 
-/// <summary>An item NAME label for Tracker/Link/Craft rows, shared by the read and editor views so the
-/// referenced item's name renders the same way in both. On the tablet cuneiform path
-/// (<see cref="ScribeRowStyle.UseCuneiform"/> + a loaded <see cref="ScribeRowStyle.CuneiformBundle"/>) it draws
-/// the name as cuneiform strokes — matching how Task/Text rows route through the cuneiform renderer — so a
-/// tablet's Tracker/Link names aren't the lone plain-font holdout. The
-/// cuneiform strokes WRAP to width via the shared <see cref="ScribeCuneiformFieldRenderWidget"/> (display-
-/// only, SingleLine off), since a single-line CuneiformText would clip a long name
-/// mid-word. Off that path (Lectern/Notebook, or cuneiform disabled/asset-missing) it falls back to a wrapping
-/// <see cref="Text"/>, so a name is never blank. The em size and ink track the readable label, and the
-/// per-material glow is passed through so the strokes lift off the clay backdrop like the row text does.</summary>
+/// <summary>An item NAME label for Tracker/Link/Craft rows, shared by read and editor views. On the
+/// tablet cuneiform path (<see cref="ScribeRowStyle.UseCuneiform"/> + a loaded
+/// <see cref="ScribeRowStyle.CuneiformBundle"/>) it draws cuneiform strokes that WRAP to width via
+/// <see cref="ScribeCuneiformFieldRenderWidget"/> (display-only; a single-line CuneiformText would clip
+/// a long name mid-word). Otherwise it falls back to a wrapping <see cref="Text"/>, so a name is never blank.</summary>
 internal static class ScribeItemLabel
 {
     public static Widget Build(string label, Vector4 color, ScribeRowStyle style)
     {
         if (style.UseCuneiform && style.CuneiformBundle is { } bundle)
         {
-            // Display-only wrapping cuneiform renderer, mirroring the read-view note
-            // usage in ScribeReadContent. A single-line CuneiformText ignores MaxWidth, so
-            // a long item name would clip mid-word on the tablet; ScribeCuneiformFieldRenderWidget with SingleLine
-            // left at its default (false) wraps to width like the non-cuneiform Text branch below. No caret/
-            // selection (this is a label, not a field): caret/selection are zeroed and hidden. Jitter is seeded
-            // from the label so the strokes are deterministic frame-to-frame (no TaskId is available here — the
-            // seed only needs to be stable, not unique). Inner pad is 0: the item row applies a right
-            // FieldPadX only (the stepper sits flush with the Task field box). Notebook names are a
-            // bare Text with no pad. Matching Task-row FieldPadY here would drop tablet names ~6px below
-            // the checkbox/stepper horizon (the taller cuneiform line is LineHeightRatio, not extra pad).
+            // Display-only: caret and selection are zeroed and hidden. Jitter is seeded from the label so
+            // strokes are stable frame-to-frame (no TaskId here; the seed only needs stability). Inner pad
+            // is 0: the item row applies only a right FieldPadX, and matching Task-row FieldPadY would drop
+            // tablet names ~6px below the checkbox/stepper horizon.
             return new ScribeCuneiformFieldRenderWidget(
                 text: label,
                 caret: 0,
@@ -626,15 +538,12 @@ internal static class ScribeItemLabel
     }
 }
 
-/// <summary>The Tracker "N / N" have/need counter, shared by the read view, Pin Tab, and HUD so all three
-/// render it identically. Emphasis is INVERTED from the naive reading:
-/// an in-progress (unsatisfied) count is the thing you're still working on, so it reads STRONG
-/// (<paramref name="strongColor"/> + bold); a satisfied count reads FADED (<paramref name="mutedColor"/>,
-/// normal weight) with a faint strikethrough drawn over just the number, marking it done. The strikethrough
-/// is a custom thin-line overlay (a <see cref="Positioned"/> <see cref="Container"/> spanning the counter's
-/// width, centered on its text line) because LibGUI's <c>TextDecoration</c> has no strikethrough — only
-/// <c>None</c>/<c>Underline</c>. The line strikes ONLY the counter: it lives inside this widget, which sizes
-/// to the "N / N" text, not the row.</summary>
+/// <summary>The Tracker "N / N" have/need counter, shared by read view, Pin Tab and HUD. Emphasis is
+/// INVERTED: an unsatisfied count is still being worked on, so it reads STRONG
+/// (<paramref name="strongColor"/> + bold); a satisfied count reads FADED (<paramref name="mutedColor"/>)
+/// with a faint strikethrough over just the number. The strikethrough is a custom thin-line overlay
+/// because LibGUI's <c>TextDecoration</c> has only <c>None</c>/<c>Underline</c>; it lives inside this
+/// widget, which sizes to the "N / N" text, not the row.</summary>
 internal static class ScribeTrackerCounterText
 {
     public static Widget Build(int current, int target, bool satisfied, Vector4 strongColor,
@@ -646,11 +555,8 @@ internal static class ScribeTrackerCounterText
 
         Vector4 inkColor = satisfied ? mutedColor : strongColor;
 
-        // On the tablet cuneiform path the counter's digits + slash render as cuneiform strokes to match the
-        // rest of the tablet. Cuneiform is stroke-based, so it carries no
-        // bold weight — the strong/muted color distinction (and the satisfied strikethrough below) is what
-        // conveys emphasis. Off the path (or bundle not loaded) it stays the readable Text with the inverted
-        // strong/bold vs. muted treatment.
+        // On the tablet cuneiform path the counter renders as cuneiform strokes, which carry no bold
+        // weight, so the strong/muted color (and the strikethrough below) conveys emphasis.
         Widget text;
         if (cuneiform is { UseCuneiform: true, CuneiformBundle: { } bundle } cs)
         {
@@ -692,12 +598,11 @@ internal static class ScribeTrackerCounterText
     }
 }
 
-/// <summary>A floating per-row action button (delete / pin) with real button chrome: a bordered,
-/// solid-background square with theme-derived resting/hover/press fills, wrapping a <see cref="VsIcon"/>
-/// glyph. It reads as a proper button, so it
-/// floats legibly ON TOP of the row's text via the row's Stack. Uses <see cref="VsIcon"/> (icon-by-code)
-/// for the glyph — NOT LibGUI's <see cref="IconButton"/>/<see cref="Icon"/>, whose SVG-by-path
-/// <c>LoadSvg</c> fails on our post-startup-unloaded assets (see <see cref="ScribeVsIconGlyph"/>).</summary>
+/// <summary>A floating per-row action button (delete / pin): a bordered, solid-background square with
+/// theme-derived resting/hover/press fills wrapping a <see cref="VsIcon"/> glyph, so it floats legibly ON
+/// TOP of the row's text. Uses <see cref="VsIcon"/> (icon-by-code), not LibGUI's
+/// <see cref="IconButton"/>/<see cref="Icon"/>, whose SVG loading fails on post-startup-unloaded assets
+/// (see <see cref="ScribeVsIconGlyph"/>).</summary>
 internal sealed class ScribeRowButton : StatefulWidget
 {
     public ScribeRowButton(string iconName, Vector4 iconColor, float size, Action onTap, float iconScale = 1f, BoxShadow[]? boxShadows = null, Vector4? activeColor = null, Gui.Widgets.Framework.Key? key = null)
@@ -715,35 +620,27 @@ internal sealed class ScribeRowButton : StatefulWidget
     public string IconName { get; }
     public Vector4 IconColor { get; }
     /// <summary>Nominal control-column side length (matches the grip/checkbox column). The DRAWN box is
-    /// <see cref="BoxShrink"/> px smaller in each dimension (see <see cref="BoxShrink"/>); the glyph is
-    /// still sized from this nominal value so shrinking the box doesn't shrink the icon.</summary>
+    /// <see cref="BoxShrink"/> px smaller per dimension; the glyph is still sized from this value.</summary>
     public float Size { get; }
     public Action OnTap { get; }
 
-    /// <summary>Multiplier applied to the GLYPH only (not the box), so an icon can read a touch larger while
-    /// its button box stays the same size as its neighbors (e.g. the pin +10%). The padding split absorbs
-    /// the difference, keeping the glyph centered — mirroring how <see cref="Size"/> vs the drawn box keeps
-    /// the icon fixed when the box shrinks. Default 1 = unchanged.</summary>
+    /// <summary>Multiplier on the GLYPH only (not the box), e.g. the pin +10%; the padding split keeps it
+    /// centered. Default 1 = unchanged.</summary>
     public float IconScale { get; }
 
-    /// <summary>Optional drop/inner shadow(s) painted with the button's box (forwarded to
-    /// <c>BoxStyle.BoxShadows</c>). Null = no shadow (the per-row delete/pin buttons); the enlarged sidebar
-    /// nav buttons pass one so they read as raised chrome over the notebook art.</summary>
+    /// <summary>Optional shadow(s) painted with the box (forwarded to <c>BoxStyle.BoxShadows</c>). Null =
+    /// none; the sidebar nav buttons pass one to read as raised chrome.</summary>
     public BoxShadow[]? BoxShadows { get; }
 
-    /// <summary>Optional "active tab" fill color. Null = the normal neutral
-    /// <c>SurfaceHigh</c> resting/hover/press behavior with the passed <see cref="IconColor"/> glyph. When
-    /// set, the button reads as the currently-selected tab: its box fills with this color, its glyph is
-    /// forced to <see cref="ScribeRowConstants.NavActiveGlyph"/> (cream) for contrast, and hover brightens
-    /// the fill by +10 HSV Brightness (via <see cref="ScribeRowConstants.ShiftBrightness"/>). Only the
-    /// sidebar nav buttons pass this; every other caller leaves it null and is unchanged.</summary>
+    /// <summary>Optional "active tab" fill. Null = neutral <c>SurfaceHigh</c> behavior with
+    /// <see cref="IconColor"/>. When set the box fills with this color, the glyph is forced to
+    /// <see cref="ScribeRowConstants.NavActiveGlyph"/> for contrast, and hover brightens the fill by +10
+    /// HSV Brightness. Only the sidebar nav buttons pass it.</summary>
     public Vector4? ActiveColor { get; }
 
-    /// <summary>How much smaller (px, each dimension) the button's drawn chrome is than its nominal
-    /// <see cref="Size"/>. The icon
-    /// glyph is computed from the full <see cref="Size"/> and kept fixed, so this only tightens the
-    /// padding/box around it — it shrinks the SKIN, not the SVG. Exposed so the row that lays the buttons
-    /// out can position the pin against the actual (shrunk) box width.</summary>
+    /// <summary>How much smaller (px, each dimension) the drawn chrome is than <see cref="Size"/>. The
+    /// glyph stays sized from the full <see cref="Size"/>, so this only tightens the surrounding padding.
+    /// Exposed so the row laying out the buttons can position the pin against the actual box width.</summary>
     public const float BoxShrink = 2f;
 
     public override State CreateState() => new ScribeRowButtonState();
@@ -758,14 +655,9 @@ internal sealed class ScribeRowButtonState : State<ScribeRowButton>
     {
         var colors = Theme.Of(context).ColorScheme;
 
-        // Solid (opaque) background from the theme's raised-surface tone, brightening resting -> hover ->
-        // press so the button reads as interactive. SurfaceHigh is the raised-element tone; nudge it up
-        // for hover/press. Kept opaque (W=1) so it fully covers the row text it floats over.
-        //
-        // ACTIVE TAB: when ActiveColor is set this button is the current tab,
-        // so it fills with the thematic color instead of SurfaceHigh, and its glyph is forced to cream for
-        // contrast. Hover brightens the fill by +10 HSV Brightness (reusing ShiftBrightness); press darkens
-        // it slightly (-6 V) for the same tactile feedback the neutral path gives via the RGB lift.
+        // Opaque (W=1) so the button fully covers the row text it floats over. Neutral path: SurfaceHigh
+        // lifted for hover/press. ACTIVE TAB path: fills with ActiveColor (hover +10 HSV V, press -6 V)
+        // and forces the glyph to cream for contrast.
         Vector4 bg;
         Vector4 glyphColor = Widget.IconColor;
         if (Widget.ActiveColor is Vector4 active)
@@ -785,15 +677,12 @@ internal sealed class ScribeRowButtonState : State<ScribeRowButton>
                 1f);
         }
 
-        // The glyph is sized from the FULL nominal Size so shrinking the box below leaves the icon
-        // untouched. Shrinking the drawn box by BoxShrink then tightens the padding
-        // that surrounds the glyph — the "skin", not the SVG. IconScale then grows just the glyph
-        // (the box is unchanged), with the padding split below re-centering it.
+        // The glyph is sized from the FULL nominal Size so shrinking the box leaves the icon untouched;
+        // IconScale grows just the glyph, and the padding split re-centers it.
         float pad = MathF.Max(3f, Widget.Size * 0.18f); // small padding; glyph fills the rest
         float glyph = (Widget.Size - pad * 2f) * Widget.IconScale;
 
-        // Drawn box is BoxShrink px smaller in each dimension; the padding absorbs the difference so the
-        // glyph stays centered at its nominal size. Half the shrink comes off each side of the padding.
+        // The drawn box is BoxShrink smaller; the padding absorbs the difference to keep the glyph centered.
         float box = Widget.Size - ScribeRowButton.BoxShrink;
         float drawnPad = MathF.Max(0f, (box - glyph) / 2f);
 
