@@ -2,7 +2,7 @@ using Scribe.Core;
 
 namespace Scribe.Core.Tests;
 
-// Owned-run scan (refine-crafting-tasks-1-3-2): a parent is any depth-0 row plus the contiguous
+// Owned-run scan: a parent is any depth-0 row plus the contiguous
 // depth-1 rows under it. Kind-agnostic. The first non-depth-1 row ends the run.
 public class ScribeOwnedRunTests
 {

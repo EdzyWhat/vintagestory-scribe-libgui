@@ -77,7 +77,7 @@ public class ScribePinCodecTests
         AssertPinEqual(pins[1], restored[1]);
     }
 
-    // ---- v2: Kind + LinkTarget (add-tracker-link-tasks 5.5) ----
+    // ---- v2: Kind + LinkTarget ----
 
     [Fact]
     public void List_RoundTrip_PreservesKindAndLinkTarget()
@@ -105,7 +105,7 @@ public class ScribePinCodecTests
     [Fact]
     public void TryDeserialize_V1Bytes_KindAndLinkTarget_AreUpgraded()
     {
-        // Hand-build a v1 SPIN blob (no Kind/LinkTarget fields) exactly as the pre-5.5 codec wrote it, and
+        // Hand-build a v1 SPIN blob (no Kind/LinkTarget fields) exactly as the v1 codec wrote it, and
         // assert the migration defaults them (Kind→Task, LinkTarget→null) rather than merely deserializing.
         var docId = Guid.NewGuid();
         var taskId = Guid.NewGuid();
@@ -139,7 +139,7 @@ public class ScribePinCodecTests
         Assert.Equal(0, pin.CurrentQuantity);
     }
 
-    // ---- v3: Tracker snapshot fields (add-tracker-link-tasks 7.8) ----
+    // ---- v3: Tracker snapshot fields ----
 
     [Fact]
     public void List_RoundTrip_PreservesTrackerFields()
@@ -169,7 +169,7 @@ public class ScribePinCodecTests
     public void TryDeserialize_V2Bytes_TrackerFields_AreDefaulted()
     {
         // Hand-build a v2 SPIN blob (Kind + LinkTarget present, but no v3 Tracker fields) exactly as the
-        // pre-7.8 codec wrote it, and assert the progressive read stops after LinkTarget and defaults the
+        // v2 codec wrote it, and assert the progressive read stops after LinkTarget and defaults the
         // Tracker fields (TargetItemCode→null, TargetQuantity→1, CurrentQuantity→0) rather than mis-reading
         // trailing bytes. Kind/LinkTarget from the v2 payload must still round-trip.
         var docId = Guid.NewGuid();
@@ -203,7 +203,7 @@ public class ScribePinCodecTests
         Assert.Equal(0, pin.CurrentQuantity);
     }
 
-    // ---- v4: guide-page Link label snapshot (add-tracker-link-tasks 7.6) ----
+    // ---- v4: guide-page Link label snapshot ----
 
     [Fact]
     public void List_RoundTrip_PreservesLinkLabel()
@@ -234,7 +234,7 @@ public class ScribePinCodecTests
     [Fact]
     public void TryDeserialize_V3Bytes_LinkLabel_IsDefaulted()
     {
-        // Hand-build a v3 SPIN blob (Tracker fields present, but no v4 LinkLabel) exactly as the pre-7.6
+        // Hand-build a v3 SPIN blob (Tracker fields present, but no v4 LinkLabel) exactly as the v3
         // codec wrote it, and assert the progressive read stops after the Tracker fields and defaults
         // LinkLabel→null rather than mis-reading trailing bytes. Kind/LinkTarget/Tracker fields must still
         // round-trip.
@@ -273,7 +273,7 @@ public class ScribePinCodecTests
         Assert.Equal(0, pin.Depth);   // v3 blob has no v5 Depth → defaulted to 0
     }
 
-    // ---- v5: subtask depth snapshot (add-crafting-tasks / task-subtasks 5.1) ----
+    // ---- v5: subtask depth snapshot ----
 
     [Fact]
     public void List_RoundTrip_PreservesDepth()
@@ -373,7 +373,7 @@ public class ScribePinCodecTests
         Assert.Equal(1, Assert.Single(restored!).Depth);
     }
 
-    // ---- v6: accepted-assignment marker (add-assignment-and-quest-support 9.3) ----
+    // ---- v6: accepted-assignment marker ----
 
     [Fact]
     public void List_RoundTrip_PreservesIsAcceptedAssignment()
@@ -432,7 +432,7 @@ public class ScribePinCodecTests
         Assert.False(Assert.Single(restored!).IsAcceptedAssignment); // defaulted by the progressive read
     }
 
-    // ---- v7: assignment marker tooltip provenance (assignment-icon-and-tab-defaults) ----
+    // ---- v7: assignment marker tooltip provenance ----
 
     [Fact]
     public void List_RoundTrip_PreservesAssignmentProvenance()
@@ -673,8 +673,7 @@ public class ScribePinCodecTests
 
     // ---- Player-preference defaults + normalize guards ----
     //
-    // Settings are no longer a codec blob — they persist as client-local JSON (add-pinned-task-hud
-    // settings-storage pivot), so there is no serialize/deserialize round-trip to cover here. What
+    // Settings are not a codec blob — they persist as client-local JSON, so there is no serialize/deserialize round-trip to cover here. What
     // survives in Core are the default values and the clamp/normalize guards applied when loading the
     // (hand-editable, untrusted) config; those are exercised directly below.
 
@@ -731,7 +730,7 @@ public class ScribePinCodecTests
         Assert.True(settings.HudCollapsed);                              // untouched field preserved
     }
 
-    // ---- HUD position preferences (add-pinned-task-hud 4.4) ----
+    // ---- HUD position preferences ----
 
     [Fact]
     public void Settings_DefaultInstance_AnchorsTopLeftAt250Wide()
