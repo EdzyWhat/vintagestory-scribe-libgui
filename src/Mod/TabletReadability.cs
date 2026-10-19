@@ -3,42 +3,26 @@ using OpenTK.Mathematics;   // Vector4
 namespace Scribe;
 
 /// <summary>
-/// The single <c>(material, state)</c>-keyed source of truth for how tablet cuneiform text is made
-/// readable over its clay backdrop. One bundle carries every readability
-/// dimension for one tablet view: the body <see cref="BodyInk"/> (the theme's <c>OnSurface</c>/<c>OnBackground</c>
-/// ink), the <see cref="LinkInk"/> for Link/Tracker/Craft row names (the <c>ScribeRowStyle.LinkColor</c>), a
-/// per-view <see cref="StrokeWeightScale"/> multiplier on the cuneiform stroke weight, and the outer
-/// <see cref="Glow"/> halo (color/strength/blur/offset).
+/// The <c>(material, state)</c>-keyed source of truth for tablet cuneiform readability over its clay
+/// backdrop. One bundle per view: the body <see cref="BodyInk"/> (theme <c>OnSurface</c>/<c>OnBackground</c>),
+/// the <see cref="LinkInk"/> for Link/Tracker/Craft row names (<c>ScribeRowStyle.LinkColor</c>), a
+/// <see cref="StrokeWeightScale"/> multiplier on cuneiform stroke weight, and the outer <see cref="Glow"/> halo.
 ///
-/// <para>One bundle per view replaces separate per-dimension switches (theme, link, glow, stroke).
-/// <see cref="GuiDialogScribeTablet"/> resolves the bundle
-/// ONCE per build and decomposes it into those existing seams, so a view is internally consistent by
-/// construction and can never drift across the four dimensions again.</para>
+/// <para><see cref="GuiDialogScribeTablet"/> resolves the bundle once per build and decomposes it into the
+/// existing seams, so a view stays internally consistent.</para>
 ///
-/// <para>Values are BAKED from the glyph-forge tool's 10 readability exports (the authoring record, not a
-/// shipped asset), in the manner of the jitter/reveal constants. They are NOT a persisted user setting and no
-/// JSON is loaded at runtime. <c>src/Core/</c> is untouched: the stroke-weight scale is applied Mod-side at
-/// paint time, so Core keeps emitting its base stroke weights.</para>
+/// <para>Values are baked constants from glyph-forge readability exports, not a user setting or runtime
+/// JSON. The stroke-weight scale is applied Mod-side at paint time; Core keeps emitting base weights.</para>
 /// </summary>
 internal readonly record struct TabletReadability(
     Vector4 BodyInk, Vector4 LinkInk, float StrokeWeightScale, CuneiformGlow Glow)
 {
-    // ---------------------------------------------------------------------------------------------------
-    // The 10 baked view bundles (glyph-forge exports). RGB channels are 0–1; the glow's alpha channel is the
-    // glow STRENGTH and its blur/offset are fractions of the em.
+    // The 10 baked view bundles. RGB channels are 0–1; the glow's alpha is its STRENGTH and its blur/offset
+    // are fractions of the em.
     //
-    // IMPORTANT — each cell is authored INDEPENDENTLY. The table permits any (material, state) cell to differ
-    // from any other, including two views in the same state. This is DATA, NOT A RULE: each wet clay carries
-    // its OWN tinted glow, and the stroke-weight scale runs wet 1.2 / hard 1.0 / fired 0.95 (wet heaviest,
-    // fired lightest), because nothing here factors "wet" or "state" into a shared constant that would couple
-    // the cells. The only coincidences are the hard/fired glow offsets (~0.04–0.05) and offset
-    // X == offset Y in every export; wet + wax offsets stay near-zero. Do not "simplify" any apparent overlap
-    // into a shared field — a retune may diverge it.
-    //
-    // Provenance: BlueFired, RedHard, RedFired, FireHard, and FireFired hold values from an earlier
-    // glyph-forge export than the other five cells; the five cells from the later, partial export still
-    // need in-game verification.
-    // ---------------------------------------------------------------------------------------------------
+    // Each cell is authored INDEPENDENTLY: this is data, not a rule. Do not "simplify" apparent overlap
+    // (glow tints, stroke scale wet 1.2 / hard 1.0 / fired 0.95, offset X == Y) into shared constants; a
+    // retune may diverge them.
 
     private static readonly TabletReadability BlueWet = new(
         BodyInk: new Vector4(0.176f, 0.180f, 0.184f, 1f),
@@ -94,19 +78,16 @@ internal readonly record struct TabletReadability(
         StrokeWeightScale: 0.95f,
         Glow: new CuneiformGlow(new Vector4(0.804f, 0.725f, 0.659f, 0.70f), 0.110f, 0.04f, 0.04f));
 
-    // Wax has only a wet life-cycle state (no hardened/fired), so it authors just this one bundle; the state
-    // arm below always resolves wax to it regardless of the requested state.
+    // Wax has only a wet state, so it has just this bundle.
     private static readonly TabletReadability WaxWet = new(
         BodyInk: new Vector4(0.408f, 0.322f, 0.231f, 1f),
         LinkInk: new Vector4(0.604f, 0.455f, 0.137f, 1f),
         StrokeWeightScale: 1.0f,
         Glow: new CuneiformGlow(new Vector4(0.965f, 0.949f, 0.898f, 0.28f), 0.215f, 0.01f, 0.01f));
 
-    /// <summary>Resolve the readability bundle for a tablet's <paramref name="material"/> variant and drying
-    /// <paramref name="state"/>. <c>clay-blue</c>/<c>clay-red</c>/<c>clay-fire</c> each have their own wet/hard/
-    /// fired bundles; <c>wax</c> resolves to its single wet bundle for any state (it has no hardened/fired
-    /// form); any unrecognized material rides the <c>clay-fire</c> bundle for the SAME state (mirroring the
-    /// theme/backdrop fallback, so theme, backdrop, and readability always agree).</summary>
+    /// <summary>Resolves the bundle for a tablet's <paramref name="material"/> and <paramref name="state"/>.
+    /// <c>wax</c> always resolves to its wet bundle; unrecognized materials use the <c>clay-fire</c> bundle
+    /// for the same state, matching the theme/backdrop fallback.</summary>
     public static TabletReadability For(string? material, TabletState state) => material switch
     {
         "clay-blue" => state switch { TabletState.Hard => BlueHard, TabletState.Fired => BlueFired, _ => BlueWet },

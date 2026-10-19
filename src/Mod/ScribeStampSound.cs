@@ -5,20 +5,13 @@ using Vintagestory.API.MathTools;
 namespace Scribe;
 
 /// <summary>
-/// The one-shot stamp-thump cue shared by every <see cref="ScribeStamp"/> flourish — the Scriptorium's
-/// Copy/Import/Export stamps and the Assignment Desk's "Submitted to Player" stamp
-/// — extracted so the sound-load boilerplate isn't duplicated per
-/// dialog. Wire it to <see cref="ScribeStamp.OnDescend"/> so it plays only when the flourish is actually
-/// mounted and seen by this client.
+/// The one-shot stamp-thump cue shared by every <see cref="ScribeStamp"/> flourish. Wire it to
+/// <see cref="ScribeStamp.OnDescend"/> so it plays only when the flourish is mounted and seen.
 ///
-/// <para>Non-load-bearing (mirrors <see cref="ScribeAlarmSound"/> and the stamp bitmap): a null
-/// <c>LoadSound</c> logs one warning and no-ops. <see cref="EnumSoundType.Sound"/> routes it through the
-/// base-game "Sound Effects" volume; <c>DisposeOnFinish</c> self-cleans the ~0.6s clip.</para>
-/// <para>Volume is FIXED at unity: the final loudness (the "alarm-volume-140" level the author calibrated
-/// to in-game) is baked into the mono <c>stamp.ogg</c> (+16.9 dB / 7× the source, ~ −14 dBFS peak), so
-/// unity plays it at exactly that level and stays within the engine's safe [0,1] range.
-/// <see cref="EnumSoundType.Sound"/> still routes it through the base-game "Sound Effects" slider — that
-/// is the intended, retained volume tie.</para>
+/// <para>Non-load-bearing: a null <c>LoadSound</c> logs one warning and no-ops. <see cref="EnumSoundType.Sound"/>
+/// routes it through the base-game "Sound Effects" volume; <c>DisposeOnFinish</c> self-cleans the clip.</para>
+/// <para>Volume is FIXED at unity: the final loudness is baked into <c>stamp.ogg</c>, which stays within
+/// the engine's safe [0,1] range.</para>
 /// </summary>
 internal static class ScribeStampSound
 {

@@ -3,28 +3,22 @@ using ProtoBuf;
 namespace Scribe;
 
 /// <summary>
-/// Client → server: copy the <see cref="Scribe.Core.ScribeDocument"/> stored on the Scriptorium's
-/// Original (source) inventory slot onto its Duplicate (target) slot — the Transcribe view's
-/// "stamp to copy" gesture. Addressed by the Scriptorium's block
-/// <b>position</b> (X/Y/Z), not a DocId: the copy operates on whole items in a specific block's
-/// inventory, so the server resolves the <see cref="BlockEntityScriptorium"/> at that position and
-/// reads/writes its slots directly.
+/// Client → server: copy the <see cref="Scribe.Core.ScribeDocument"/> on the Scriptorium's Original slot
+/// onto its Duplicate slot. Addressed by block <b>position</b> (X/Y/Z), not a DocId; the server resolves the
+/// <see cref="BlockEntityScriptorium"/> there and reads/writes its slots directly.
 ///
-/// <para>The copy is server-authoritative: the client only requests it. The server clones the source
-/// document with a FRESH identity (<see cref="Scribe.Core.ScribeDocument.CloneWithNewIdentity"/>) so
-/// the two items never share <c>DocId</c>/<c>TaskId</c>s, writes it onto the target item via
-/// <see cref="ScribeDocumentAttributes.WriteTo"/>, marks the slot/BE dirty, and lets the standard
-/// inventory sync propagate the result back to every viewer.</para>
+/// <para>Server-authoritative: the server clones the source with a FRESH identity
+/// (<see cref="Scribe.Core.ScribeDocument.CloneWithNewIdentity"/>) so the two items never share
+/// <c>DocId</c>/<c>TaskId</c>s, writes it via <see cref="ScribeDocumentAttributes.WriteTo"/>, marks dirty,
+/// and lets inventory sync propagate.</para>
 ///
-/// <para><see cref="AllowOverwrite"/> gates replacing a non-empty target: the client's two-press
-/// confirm UX sets it true only on the confirming press, and the server re-checks it defensively
-/// (an overwrite of a non-empty target with the flag false is a no-op) so a stale/hostile packet can
-/// never silently clobber contents.</para>
+/// <para><see cref="AllowOverwrite"/> gates replacing a non-empty target; the client sets it only on the
+/// confirming press and the server re-checks it, so a stale/hostile packet can't clobber contents.</para>
 /// </summary>
 [ProtoContract]
 public sealed class ScribeTranscribeCopyMessage
 {
-    /// <summary>The Scriptorium block position — the three coordinates of its <c>BlockPos</c>.</summary>
+    /// <summary>The Scriptorium's <c>BlockPos</c> coordinates.</summary>
     [ProtoMember(1)] public int X { get; set; }
     [ProtoMember(2)] public int Y { get; set; }
     [ProtoMember(3)] public int Z { get; set; }
@@ -35,14 +29,11 @@ public sealed class ScribeTranscribeCopyMessage
     /// <summary>Inventory slot index of the Duplicate (target) item.</summary>
     [ProtoMember(5)] public int TargetSlot { get; set; }
 
-    /// <summary>True only on the confirming press: permits overwriting a target that already has
-    /// contents. When false, a non-empty target is left untouched (server-side defensive gate). Ignored when
-    /// <see cref="Append"/> is set — appending is non-destructive, so there is nothing to overwrite-gate.</summary>
+    /// <summary>True only on the confirming press: permits overwriting a non-empty target (otherwise left
+    /// untouched). Ignored when <see cref="Append"/> is set, since appending is non-destructive.</summary>
     [ProtoMember(6)] public bool AllowOverwrite { get; set; }
 
-    /// <summary>Copy MODE . When false (default) the copy REPLACES the
-    /// target document (guarded by <see cref="AllowOverwrite"/>). When true the source's tasks are APPENDED onto
-    /// the target's existing document instead — non-destructive, so it needs no overwrite confirm. The server
-    /// re-checks the target's capacity against target-count + source-count either way.</summary>
+    /// <summary>Copy mode. False (default) REPLACES the target (guarded by <see cref="AllowOverwrite"/>); true
+    /// APPENDS the source's tasks to the target's document. The server re-checks capacity either way.</summary>
     [ProtoMember(7)] public bool Append { get; set; }
 }

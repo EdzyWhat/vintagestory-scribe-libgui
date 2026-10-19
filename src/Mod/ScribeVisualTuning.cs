@@ -1,23 +1,14 @@
 namespace Scribe;
 
 /// <summary>
-/// Author-facing client-local tuning knobs for two purely-cosmetic rendering subsystems, plus one layout toggle:
-/// <see cref="ScribeAmbientLightSampler"/>'s quantization/smoothing
-/// (<see cref="BrightnessSteps"/>, <see cref="HueSteps"/>, <see cref="TintStrength"/>,
-/// <see cref="SmoothingTau"/>), <see cref="ScribeAssignmentParticleEmitter"/>'s detection/color/density
-/// knobs (<see cref="DetectionRadius"/>, <see cref="RainbowRatio"/>, <see cref="CountMultiplier"/>,
-/// <see cref="SeedBurstMultiplier"/>), and whether a dialog tab's header renders its Row 2 subtitle line
-/// (<see cref="ShowSubtitleRow"/>). Persisted to
-/// <see cref="ScribeModSystem.VisualTuningConfigFileName"/> via the engine's own
-/// <c>LoadModConfig&lt;T&gt;</c>/<c>StoreModConfig</c> (the same mechanism already used for
-/// <see cref="ScribeGearTuning"/>/<see cref="Scribe.Core.ScribePlayerSettings"/>), so a config-library mod
-/// reading the shared <c>configlib-patches.json</c> manifest format (ConfigKit, ConfigLib) can optionally
-/// provide a settings GUI that edits the same file — no assembly reference, no <c>IsModEnabled</c> check,
-/// no new mod dependency of any kind. An absent/never-touched config file yields the defaults below.
+/// Client-local cosmetic tuning knobs: <see cref="ScribeAmbientLightSampler"/> quantization/smoothing,
+/// <see cref="ScribeAssignmentParticleEmitter"/> detection/color/density, and the tab-header subtitle row
+/// toggle. Persisted to <see cref="ScribeModSystem.VisualTuningConfigFileName"/> via
+/// <c>LoadModConfig&lt;T&gt;</c>/<c>StoreModConfig</c> (as <see cref="ScribeGearTuning"/> does), so a
+/// config-library mod can edit the same file with no assembly reference or dependency. A missing file yields
+/// the defaults below.
 ///
-/// <para>Not a player-facing feature: not documented in the handbook, not surfaced in Scribe Settings. Not
-/// live-reloaded — loaded once at client startup, matching <see cref="ScribeGearTuning"/>'s precedent; a
-/// config-library edit takes effect on next relaunch.</para>
+/// <para>Not player-facing and not live-reloaded: loaded once at client startup, so edits apply on relaunch.</para>
 /// </summary>
 public sealed class ScribeVisualTuning
 {
