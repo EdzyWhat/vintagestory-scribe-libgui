@@ -26,9 +26,8 @@ namespace Scribe;
 
 public abstract partial class ScribeDialogBase
 {
-    /// <summary>Guestbook tab content: a read-only (except own note) three-column visitor table.
-    /// Virtual so the Desk or other future blocks can override if needed; the default reads from
-    /// <see cref="IScribeDocumentHost.Guestbook"/> and needs no override for standard blocks.</summary>
+    /// <summary>Guestbook tab content: a three-column visitor table, read-only except the player's own note.
+    /// Virtual so other blocks can override; reads from <see cref="IScribeDocumentHost.Guestbook"/>.</summary>
     protected virtual Widget BuildVisitorsContent()
     {
         var colors      = ResolveTheme(modSystem.MySettings.PixelArtDisplay).ColorScheme;
@@ -38,17 +37,14 @@ public abstract partial class ScribeDialogBase
         float noteSize  = bodySize * 0.8f;
         string taskFont = modSystem.MySettings.TaskFontFamily;
         var headerStyle = new TextStyle { FontFamily = ScribeRowControlNudge.TitleFontFamily, Weight = FontWeight.Bold, FontSize = bodySize, Color = colors.OnSurface };
-        // Visitor names inherit the tab's pegged layout size; date/note are intentionally smaller so
-        // they set LayoutSize at their own nominal.
+        // Visitor names inherit the tab's layout size; date/note are smaller and set their own.
         var bodyStyle   = new TextStyle { Color = colors.OnSurface };
         var dateStyle   = new TextStyle { FontSize = ScribeTaskFont.LayoutSize(taskFont, dateSize), Color = colors.OnSurface with { W = colors.OnSurface.W * 0.8f } };
         var myName = capi.World.Player.PlayerName;
 
         var entries = host.Guestbook.Entries;
 
-        // Keep one focus node per own editable entry, so each note field is caret-isolated and
-        // receives its own keystrokes (a single shared node made every field paint a caret at once
-        // and routed input to just one row). Mirrors SyncPinFocusNodes.
+        // One focus node per own entry so each note field is caret-isolated. Mirrors SyncPinFocusNodes.
         SyncGuestbookFocusNodes();
 
         // Newest-first display (entries are stored oldest-first in the store).
@@ -64,16 +60,14 @@ public abstract partial class ScribeDialogBase
                 string entryDate = entry.InGameDate; // capture for the blur send
                 noteSlot = new Expanded(
                     new ScribeMultilineField(
-                        // Stable per-row identity keyed on the entry's natural key so LibGUI can tell the
-                        // otherwise-identical sibling note fields apart and route focus/state to the right one.
+                        // Stable per-row identity so LibGUI routes focus/state to the right sibling field.
                         key: new ValueKey<string>(GuestbookNoteKey(entry)),
                         initialText: entry.Note,
                         focusNode: _guestbookNoteFocusNodes[GuestbookNoteKey(entry)],
                         fontSize: noteSize,
                         fontFamily: ScribeTaskFont.Resolve(modSystem.MySettings.TaskFontFamily),
                         padY: 6f,
-                        // Same focus-border seam the task rows use: chalk-white on the chalkboard, Primary
-                        // elsewhere — so the guestbook note field never outlines in the disliked forest green.
+                        // Same focus-border seam as the task rows.
                         focusBorderColor: InputFocusBorderColor(colors),
                         maxLength: GuestbookStore.MaxNoteLength,
                         onChanged: text => current = text,
@@ -124,8 +118,7 @@ public abstract partial class ScribeDialogBase
                 })));
         }
 
-        // 8-unit top padding lives INSIDE the scroll region so the durable divider above sits flush
-        // against the viewport and this breathing room scrolls away with the content.
+        // Top padding lives inside the scroll region so the divider above sits flush against the viewport.
         Widget body = entries.Count == 0
             ? new Center(child: ScribeTaskFont.OffsetWrap(taskFont, bodySize,
                 new Text(Lang.Get("scribe:scribe-guestbook-empty"), bodyStyle)))
@@ -134,10 +127,7 @@ public abstract partial class ScribeDialogBase
                     child: new Padding(EdgeInsets.Only(top: 8f), child: new Column(children: rows.ToArray(), mainAxisSize: MainAxisSize.Min))))
               { AutoHide = false };
 
-        // Shared Row 2 subtitle + Row 3 (the "Visitor / Note" column headers) + the durable divider
-        // — Guest Book is the ONE exception with an EXTRA leading divider
-        // directly above its column headers (the ledger-style flourish), on top of the durable divider
-        // below them.
+        // Column headers; Guest Book alone has an extra leading divider above them.
         Widget columnHeaders = new Row(children: new Widget[]
         {
             new Expanded(new Padding(EdgeInsets.Only(left: 10f), new Text(Lang.Get("scribe:scribe-guestbook-col-visitor"), headerStyle)), flex: 3),
@@ -148,13 +138,8 @@ public abstract partial class ScribeDialogBase
             modSystem.VisualTuning.ShowSubtitleRow,
             columnHeaders, hasLeadingDivider: true);
 
-        // Root the Guestbook tab subtree in the player's Task Text Font + window-scaled base size
-        // Visitor names/dates/other-players' notes inherit the family
-        // here. headerStyle keeps its explicit Caudex (TitleFontFamily) — a non-default
-        // family wins over the inherited one under Merge. The own-note ScribeMultilineField keeps its
-        // explicit task font (custom RenderBox that doesn't read DefaultTextStyle).
-        // The top inset is 4 to keep the gap between the title bar and the Row 2 subtitle tight;
-        // left/right/bottom are 10 like every other tab.
+        // Roots the tab in the Task Text Font; headerStyle keeps its explicit title family, and the own-note field
+        // keeps its explicit task font (custom RenderBox that doesn't read DefaultTextStyle).
         return ScribeTextDefaults.Wrap(modSystem.MySettings.TaskFontFamily, bodySize, new Padding(
             EdgeInsets.Ltrb(10, 4, 10, 10),
             new Column(
@@ -168,10 +153,8 @@ public abstract partial class ScribeDialogBase
                 })));
     }
 
-    /// <summary>Stable identity string for one of the local player's own guestbook entries: the natural
-    /// key <c>(PlayerName, InGameDate)</c> joined by a NUL, which can't appear in a player name or a
-    /// formatted date, so distinct entries never collide. Keys both the row's <see cref="ValueKey{T}"/>
-    /// and its <see cref="_guestbookNoteFocusNodes"/> node.</summary>
+    /// <summary>Stable identity for an own guestbook entry: <c>(PlayerName, InGameDate)</c> joined by a NUL, which
+    /// can't appear in either. Keys the row's <see cref="ValueKey{T}"/> and its focus node.</summary>
     private static string GuestbookNoteKey(GuestbookEntry entry) => $"{entry.PlayerName}\0{entry.InGameDate}";
 
     /// <summary>Viewer-locale calendar date when the entry carries a real timestamp; otherwise the
@@ -181,10 +164,8 @@ public abstract partial class ScribeDialogBase
             ? NotebookHost.FormatDateFromTimestamp(capi.World, ts)
             : entry.InGameDate;
 
-    /// <summary>Keep <see cref="_guestbookNoteFocusNodes"/> in sync with the local player's OWN entries:
-    /// add a node for each new own-entry, dispose+drop nodes for entries that are gone, and reuse the rest
-    /// so a caret survives a Guestbook rebuild. Mirrors <see cref="SyncPinFocusNodes"/>; no focus listener
-    /// is needed because each note commits independently on its own blur (there is no row→row commit).</summary>
+    /// <summary>Keeps <see cref="_guestbookNoteFocusNodes"/> in sync with the local player's own entries (add new,
+    /// dispose gone, reuse the rest so a caret survives a rebuild). Mirrors <see cref="SyncPinFocusNodes"/>.</summary>
     private void SyncGuestbookFocusNodes()
     {
         var myName = capi.World.Player.PlayerName;
