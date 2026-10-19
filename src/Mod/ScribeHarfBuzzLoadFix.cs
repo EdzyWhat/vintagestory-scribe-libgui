@@ -10,66 +10,40 @@ using Vintagestory.API.Common;
 
 namespace Scribe;
 
-/// <summary>Bounded classification of the current process's ability to attempt the glibc
-/// <c>RTLD_DEEPBIND</c> isolation (platform gating, tested independently of the actual
-/// native/Harmony machinery in <c>ScribeHarfBuzzLoadFixTests</c>).</summary>
+/// <summary>Whether this process can attempt glibc <c>RTLD_DEEPBIND</c> isolation (platform gating only).</summary>
 internal enum HarfBuzzPlatformSupport
 {
-    /// <summary>Not Linux (macOS, Windows) — the symbol-interposition bug this fix targets doesn't
-    /// apply; always a silent no-op.</summary>
+    /// <summary>Not Linux; the bug does not apply, so the fix is a silent no-op.</summary>
     NotLinux,
 
-    /// <summary>Linux, but not glibc — <c>RTLD_DEEPBIND</c> is a glibc extension, so isolation is
-    /// skipped and logged as unavailable rather than silently claiming protection.</summary>
+    /// <summary>Linux without glibc; <c>RTLD_DEEPBIND</c> is a glibc extension, so isolation is skipped and logged.</summary>
     UnsupportedLibc,
 
-    /// <summary>Linux + glibc — isolation is attempted (its own success/failure is determined later,
-    /// when the Harmony patch is applied and, at first HarfBuzz call, when the native library is
-    /// actually resolved).</summary>
+    /// <summary>Linux + glibc; isolation is attempted.</summary>
     GlibcLinux,
 }
 
 /// <summary>
-/// Harmony-patches LibGUI's own <c>Gui.NativeLibraryLoader.Register()</c> to install an
-/// <c>RTLD_DEEPBIND</c>-isolated resolver for the bundled HarfBuzzSharp native library, instead of
-/// letting it register its own unisolated one — isolating its internal symbol lookups from a system
-/// libharfbuzz already resident in the process (confirmed via coredumpctl backtrace on KDE Plasma:
-/// <c>hb_font_create</c> in the bundled <c>.so</c> landing in the system's <c>.so</c> instead,
-/// corrupting the heap until <c>free()</c> aborts — GTK and Qt desktops can both preload a system
-/// HarfBuzz the same way, so this isn't KDE-specific).
+/// Harmony-patches LibGUI's <c>Gui.NativeLibraryLoader.Register()</c> to install an <c>RTLD_DEEPBIND</c>-isolated
+/// resolver for the bundled HarfBuzzSharp native library, isolating its symbol lookups from a system
+/// libharfbuzz already resident in the process (otherwise <c>hb_font_create</c> in the bundled <c>.so</c> can
+/// land in the system's <c>.so</c> and corrupt the heap; GTK and Qt desktops can both preload HarfBuzz).
 ///
-/// <para><b>Deterministic replacement, not a startup-order race.</b> The fix does not race
-/// <c>gui</c>'s own loader; it Harmony-patches
-/// <c>Gui.NativeLibraryLoader.Register()</c> — an <c>internal</c>, parameterless, single-purpose
-/// method (confirmed by decompiling the shipped <c>Gui.dll</c>: its entire body registers exactly
-/// one <see cref="NativeLibrary.SetDllImportResolver(System.Reflection.Assembly, System.Runtime.InteropServices.DllImportResolver)"/>
-/// call for the HarfBuzzSharp assembly, guarded by its own idempotency flag) — with a
-/// <c>Prefix</c> that installs Scribe's own isolated resolver and skips <c>gui</c>'s original,
-/// unisolated one. This applies regardless of mod load order: independently discovered and shipped
-/// by a community member (Seralth, <c>github.com/Seralth/harfbuzzfix</c>) against the same upstream
-/// report this repo's maintainer filed (<c>ripls56/vslibgui#2</c>) — reimplemented here from
-/// first-hand analysis of the shipped <c>Gui.dll</c> rather than his source (his repo carries no
-/// license), but the technique is his to credit.</para>
+/// <para><b>Deterministic replacement, not a startup-order race.</b> <c>Register()</c> is an internal,
+/// parameterless method whose whole body registers one <see cref="NativeLibrary.SetDllImportResolver(System.Reflection.Assembly, System.Runtime.InteropServices.DllImportResolver)"/>
+/// call for the HarfBuzzSharp assembly. A <c>Prefix</c> installs Scribe's isolated resolver and skips
+/// <c>gui</c>'s original, regardless of mod load order. The technique was independently shipped by Seralth
+/// (<c>github.com/Seralth/harfbuzzfix</c>); this is reimplemented from analysis of the shipped <c>Gui.dll</c>.</para>
 ///
-/// <para><b>Fails closed at every step.</b> Because <c>Register()</c> is <c>internal</c> — an
-/// implementation detail of <c>gui</c>, not a contract — a future <c>gui</c> release could rename,
-/// remove, or restructure it. If the type or method can't be found, or applying the Harmony patch
-/// throws, this logs a warning and returns: <c>gui</c>'s original <c>Register()</c> then runs
-/// completely unpatched, exactly as if this fix weren't installed. If the <c>Prefix</c> itself
-/// fails (e.g. the isolated resolver can't be registered for an unexpected reason), it returns
-/// <c>true</c> so Harmony still runs <c>gui</c>'s original method afterward, rather than leaving the
-/// HarfBuzzSharp assembly with no resolver registered at all. A user is never worse off than not
-/// having this fix installed.</para>
+/// <para><b>Fails closed at every step.</b> <c>Register()</c> is an internal detail of <c>gui</c> and may be
+/// renamed or restructured. If the type or method is missing, or patching throws, this logs a warning and
+/// <c>gui</c>'s original runs unpatched. If the <c>Prefix</c> itself fails it returns <c>true</c>, so Harmony
+/// still runs <c>gui</c>'s original rather than leaving no resolver registered.</para>
 ///
-/// <para><b>A standalone <see cref="ModSystem"/>, not a <see cref="ScribeModSystem"/> partial.</b>
-/// Vintage Story auto-discovers every <see cref="ModSystem"/> in a mod's assembly, so a second small
-/// ModSystem class alongside <see cref="ScribeModSystem"/> is a normal, supported pattern — and it
-/// keeps this fix's lifecycle (its own <see cref="Harmony"/> instance, patched/unpatched here) fully
-/// isolated from Scribe's own startup sequence (a low <c>ExecuteOrder</c> on <see cref="ScribeModSystem"/>
-/// would drag Scribe's whole <c>StartClientSide</c> ahead of <c>gui</c>'s). The patch is applied in
-/// <see cref="StartPre"/>, which runs before ANY mod's <c>StartClientSide</c> — the patch only
-/// needs to be IN PLACE before <c>gui</c>'s <c>StartClientSide</c> calls <c>Register()</c>, so there is
-/// no <c>ExecuteOrder</c> tuning involved.</para>
+/// <para><b>A standalone <see cref="ModSystem"/>, not a <see cref="ScribeModSystem"/> partial</b>, so its
+/// lifecycle (own <see cref="Harmony"/> instance) is isolated from Scribe's startup. The patch is applied in
+/// <see cref="StartPre"/>, which runs before any mod's <c>StartClientSide</c>, so it is in place before
+/// <c>gui</c> calls <c>Register()</c> and needs no <c>ExecuteOrder</c> tuning.</para>
 /// </summary>
 public sealed class ScribeHarfBuzzLoadFix : ModSystem
 {
@@ -90,8 +64,6 @@ public sealed class ScribeHarfBuzzLoadFix : ModSystem
         var support = ClassifyPlatform(OperatingSystem.IsLinux(), PlatformConfiguration.IsGlibc);
         if (support == HarfBuzzPlatformSupport.NotLinux)
         {
-            // This bug is glibc + a system HarfBuzz already loaded process-wide; not a cross-platform
-            // concern. No-op elsewhere, including macOS/Windows.
             return;
         }
 
@@ -145,16 +117,14 @@ public sealed class ScribeHarfBuzzLoadFix : ModSystem
         base.Dispose();
     }
 
-    /// <summary>Pure platform-gating decision, taking the two live checks as parameters so it's
-    /// testable without an actual glibc/non-glibc Linux host.</summary>
+    /// <summary>Pure platform-gating decision; the live checks are parameters so it is testable anywhere.</summary>
     internal static HarfBuzzPlatformSupport ClassifyPlatform(bool isLinux, bool isGlibc) =>
         !isLinux ? HarfBuzzPlatformSupport.NotLinux
         : !isGlibc ? HarfBuzzPlatformSupport.UnsupportedLibc
         : HarfBuzzPlatformSupport.GlibcLinux;
 
-    /// <summary>Harmony prefix for <c>Gui.NativeLibraryLoader.Register()</c>. Returning <c>false</c>
-    /// skips gui's original (unisolated) body entirely; returning <c>true</c> lets it run normally as
-    /// a fail-safe fallback.</summary>
+    /// <summary>Harmony prefix for <c>Register()</c>. <c>false</c> skips gui's original body; <c>true</c> is
+    /// the fail-safe fallback that lets it run.</summary>
     private static bool RegisterPrefix()
     {
         try
@@ -188,9 +158,7 @@ public sealed class ScribeHarfBuzzLoadFix : ModSystem
         isolatedResolverRegistered = true;
     }
 
-    /// <summary>The isolated resolver: deep-bind <c>dlopen</c> the bundled library by name, falling back
-    /// to the runtime's normal (unflagged) resolution if that fails — matching gui's own resolver's
-    /// fallback shape, just with isolation attempted first.</summary>
+    /// <summary>Deep-bind <c>dlopen</c> of the bundled library, falling back to the runtime's normal resolution.</summary>
     private static IntPtr ResolveNativeLibrary(string name, string nativeDir)
     {
         string fileName = (name.StartsWith("lib", StringComparison.Ordinal) ? "" : "lib") + name + ".so";
@@ -205,8 +173,7 @@ public sealed class ScribeHarfBuzzLoadFix : ModSystem
         return fallback;
     }
 
-    /// <summary>Locates the bundled <c>native/&lt;rid&gt;/native/</c> directory relative to the loaded
-    /// HarfBuzzSharp assembly.</summary>
+    /// <summary>Locates the bundled <c>native/&lt;rid&gt;/native/</c> directory next to the HarfBuzzSharp assembly.</summary>
     private static string? FindNativeDir(Assembly assembly)
     {
         string? assemblyDir = Path.GetDirectoryName(assembly.Location);
@@ -219,13 +186,9 @@ public sealed class ScribeHarfBuzzLoadFix : ModSystem
             : null;
     }
 
-    /// <summary>Deliberately NOT <see cref="RuntimeInformation.RuntimeIdentifier"/> — decompiling the
-    /// shipped <c>Gui.dll</c> shows <c>Gui.NativeLibraryLoader.GetRid()</c> (which resolves this exact
-    /// same <c>native/&lt;rid&gt;/native/</c> layout for the same assembly, in the normal, unpatched
-    /// case) manually maps <see cref="RuntimeInformation.ProcessArchitecture"/> instead; Seralth's
-    /// independently-shipped <c>harfbuzzfix</c> does the same. <c>RuntimeIdentifier</c> can return a
-    /// longer, distro-qualified RID that doesn't match the flat folder name the native asset actually
-    /// ships under — this mirrors the known-correct mapping rather than that fragile API.</summary>
+    /// <summary>Deliberately NOT <see cref="RuntimeInformation.RuntimeIdentifier"/>, which can return a
+    /// distro-qualified RID that does not match the flat folder name the native asset ships under. This mirrors
+    /// gui's own <c>GetRid()</c> mapping from <see cref="RuntimeInformation.ProcessArchitecture"/>.</summary>
     internal static string GetLinuxRid(Architecture architecture) => architecture switch
     {
         Architecture.Arm => "linux-arm",

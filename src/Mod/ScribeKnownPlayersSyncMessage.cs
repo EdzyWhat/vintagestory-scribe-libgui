@@ -3,13 +3,10 @@ using ProtoBuf;
 namespace Scribe;
 
 /// <summary>
-/// Server → client: broadcasts the FULL known-players registry to every online player
-/// — the one shared/broadcast-shaped message on
-/// this channel, as opposed to the per-player-only pushes.
-/// The payload is a <see cref="Scribe.Core.ScribeKnownPlayersStore.Serialize"/> blob, decoded
-/// client-side with <see cref="Scribe.Core.ScribeKnownPlayersStore.LoadFrom"/>. Sent on join and
-/// re-broadcast to every online player whenever a new/updated entry is upserted, so an already-open
-/// Assignment Desk dialog picks up a newly-joined player without a reopen.
+/// Server → client: broadcasts the full known-players registry to every online player (the one
+/// broadcast-shaped message on this channel). Decoded with
+/// <see cref="Scribe.Core.ScribeKnownPlayersStore.LoadFrom"/>. Sent on join and re-broadcast on every upsert,
+/// so an open Assignment Desk dialog sees new players.
 /// </summary>
 [ProtoContract]
 public sealed class ScribeKnownPlayersSyncMessage
