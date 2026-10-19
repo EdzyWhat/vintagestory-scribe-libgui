@@ -7,8 +7,7 @@ namespace Scribe;
 /// task's stable identity <c>(DocId, TaskId)</c> — never a block position. Mirrors
 /// <see cref="ScribeSetTrackerQuantityMessage"/>'s shape exactly, but is deliberately a SEPARATE message
 /// (rather than reusing that one) so a QuestObjective's write-through never shares a path with the
-/// Tracker/Craft carried-inventory engine (add-progression-framework-quest-objective-subtasks design.md
-/// Decision — the two Mod-layer hosts already gate their Tracker write-through inconsistently
+/// Tracker/Craft carried-inventory engine (the two Mod-layer hosts already gate their Tracker write-through inconsistently
 /// (<c>IsTracker</c> vs. the broader <c>IsCarriedCountTracked</c>); widening either risked an unintended
 /// behavior change to Tracker/Craft, so this is a few lines of duplication in exchange for zero risk).
 ///

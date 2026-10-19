@@ -42,7 +42,7 @@ public sealed class ScribeSetPinMessage
 
     /// <summary>Client-supplied task-kind snapshot (the <see cref="Scribe.Core.ScribeBlockKind"/> byte),
     /// parallel to <see cref="SnapshotText"/> — used when the server can't resolve the task from a
-    /// registered host, so a pinned Link still reaches the HUD as a Link (add-tracker-link-tasks 5.5).
+    /// registered host, so a pinned Link still reaches the HUD as a Link.
     /// Defaults to 0 (<c>Task</c>) for an old client that never sets it.</summary>
     [ProtoMember(6)]
     public byte SnapshotKind { get; set; }
@@ -54,7 +54,7 @@ public sealed class ScribeSetPinMessage
 
     /// <summary>Client-supplied target-item-code snapshot for a Tracker task (null otherwise), parallel to
     /// <see cref="SnapshotText"/> — the collectible the pinned Tracker counts and whose icon/name the HUD
-    /// and Pin Tab render (add-tracker-link-tasks 7.8).</summary>
+    /// and Pin Tab render.</summary>
     [ProtoMember(8)]
     public string? SnapshotTargetItemCode { get; set; }
 
@@ -65,26 +65,25 @@ public sealed class ScribeSetPinMessage
     public int SnapshotTargetQuantity { get; set; }
 
     /// <summary>Client-supplied current-quantity snapshot for a Tracker task (the "have" side of the
-    /// have/need counter), parallel to <see cref="SnapshotText"/> (add-tracker-link-tasks 7.8).</summary>
+    /// have/need counter), parallel to <see cref="SnapshotText"/>.</summary>
     [ProtoMember(10)]
     public int SnapshotCurrentQuantity { get; set; }
 
     /// <summary>Client-supplied link-label snapshot for a guide-page Link task (null otherwise), parallel
     /// to <see cref="SnapshotText"/> — the guide's display title, which the HUD and Pin Tab render because
-    /// a guide page has no item to resolve a name from (add-tracker-link-tasks 7.6).</summary>
+    /// a guide page has no item to resolve a name from.</summary>
     [ProtoMember(11)]
     public string? SnapshotLinkLabel { get; set; }
 
     /// <summary>Client-supplied subtask-depth snapshot (0 = top-level, 1 = subtask), parallel to
     /// <see cref="SnapshotText"/> — so a pinned subtask reaches the HUD/Pin Tab at the right indent even
-    /// for a host the server can't resolve. Defaults to 0 for an old client that never sets it
-    /// (add-crafting-tasks / task-subtasks 5.1).</summary>
+    /// for a host the server can't resolve. Defaults to 0 for an old client that never sets it.</summary>
     [ProtoMember(12)]
     public int SnapshotDepth { get; set; }
 
     /// <summary>The acting player's client-local <see cref="Scribe.Core.ScribePinInsert"/> preference (as
     /// a byte), read only when <see cref="Pinned"/> is true — where an unrelated (no pinned-parent) pin
-    /// lands in the pin list (update-pins-1-3-3). Pin placement is decided server-side
+    /// lands in the pin list. Pin placement is decided server-side
     /// (<see cref="ScribePinStore.SetPin"/>), so this travels with the request the same way
     /// <c>ScribeCompleteTaskMessage.Policy</c> carries the completion policy. Defaults to 0
     /// (<see cref="Scribe.Core.ScribePinInsert.Bottom"/>) for an old client that never sets it — which is

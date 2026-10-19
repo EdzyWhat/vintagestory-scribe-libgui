@@ -13,38 +13,31 @@ using Vintagestory.API.Common; // ILogger
 namespace Scribe;
 
 /// <summary>
-/// Built-in, code-owned layout constants for Scribe's task rows and text sizing. These used to live in
-/// <c>ScribeClientConfig</c> (the retired <c>scribe-client-config.json</c> tuning file); of that file's
-/// ~35 fields only the handful still consumed by <see cref="ScribeRowStyle.FromSettings"/> survived, and
-/// they are now inlined here as constants rather than user configuration (add-settings-tab D1). The one
-/// user-facing knob that remains — the window font size — is expressed as a base size here multiplied by
-/// the player's <c>ScribePlayerSettings.WindowFontScale</c>; the resting pinned-row tint is no longer a
-/// constant at all (it is derived from the active LibGUI theme at build time, D1b).
+/// Built-in, code-owned layout constants for Scribe's task rows and text sizing. The one user-facing
+/// knob among them, the window font size, is expressed as a base size here multiplied by the player's
+/// <c>ScribePlayerSettings.WindowFontScale</c>; the resting pinned-row tint is derived from the active
+/// LibGUI theme at build time rather than being a constant.
 ///
-/// <para>Values are the exact former <c>ScribeClientConfig</c> defaults, so a font scale of <c>1.0</c>
-/// reproduces today's pixel layout.</para>
+/// <para>A font scale of <c>1.0</c> yields the baseline pixel layout.</para>
 /// </summary>
 internal static class ScribeRowConstants
 {
     /// <summary>Base (scale-1.0) task-row font size for the block/item WINDOW text (points), used by
-    /// both the read-view text and the editor-view input. The old <c>ScribeClientConfig.RowFontSize</c>;
-    /// multiplied by <c>ScribePlayerSettings.WindowFontScale</c> at the <see cref="ScribeRowStyle"/>
+    /// both the read-view text and the editor-view input. Multiplied by
+    /// <c>ScribePlayerSettings.WindowFontScale</c> at the <see cref="ScribeRowStyle"/>
     /// chokepoint.</summary>
     public const float BaseWindowFontSize = 15f;
 
-    /// <summary>Base (scale-1.0) font size for the pinned-task HUD's row text (points). The HUD's former
-    /// hardcoded <c>HudPinsContent.RowFontSize</c>; multiplied by
+    /// <summary>Base (scale-1.0) font size for the pinned-task HUD's row text (points); multiplied by
     /// <c>ScribePlayerSettings.HudFontScale</c> where the HUD row is built.</summary>
     public const float BaseHudFontSize = 16f;
 
     /// <summary>Base (scale-1.0) size for the pinned-task HUD's row checkbox (pixels); multiplied by
-    /// <c>ScribePlayerSettings.HudFontScale</c> so the checkbox scales with the HUD text (add-settings-tab
-    /// round 1). The HUD's former hardcoded checkbox size.</summary>
+    /// <c>ScribePlayerSettings.HudFontScale</c> so the checkbox scales with the HUD text.</summary>
     public const float BaseHudCheckboxSize = 20f;
 
     /// <summary>Font size for the Scribe settings form's own labels/section text (points). The form stays
-    /// at this size (100%); Window Text Size live-previews Read/Edit, not Settings chrome
-    /// (peg-task-fonts-to-caudex playtest).</summary>
+    /// at this size (100%); Window Text Size live-previews Read/Edit, not Settings chrome.</summary>
     public const float BaseSettingsFontSize = 14f;
 
     /// <summary>Size for the settings form's own checkboxes (pixels). Stays at this size with the form
@@ -52,60 +45,51 @@ internal static class ScribeRowConstants
     public const float BaseSettingsCheckboxSize = 22f;
 
     /// <summary>Each row's own top/bottom padding (pixels); scaled by the window font scale so inter-row
-    /// separation tracks text size. Former <c>ScribeClientConfig.RowVerticalPadding</c>.</summary>
+    /// separation tracks text size.</summary>
     public const float RowVerticalPadding = 4f;
 
     /// <summary>Each row's left/right padding (pixels), shared by both views. NOT scaled (a fixed
-    /// left/right inset reads consistently regardless of text size). Former
-    /// <c>ScribeClientConfig.RowHorizontalPadding</c>.</summary>
+    /// left/right inset reads consistently regardless of text size).</summary>
     public const float RowHorizontalPadding = 2f;
 
-    /// <summary>Horizontal gap between a row's checkbox and its text/input (pixels); scaled. Former
-    /// <c>ScribeClientConfig.RowCheckboxTextGap</c>. Tightened 6 → 4 so the Tracker/Craft stepper sits
-    /// closer to the item icon (refine-crafting-tasks-1-3-2 playtest).</summary>
+    /// <summary>Horizontal gap between a row's checkbox and its text/input (pixels); scaled. Kept tight so
+    /// the Tracker/Craft stepper sits close to the item icon.</summary>
     public const float RowCheckboxTextGap = 4f;
 
     /// <summary>Tracker/Link/Craft item-icon size (pixels at scale 1.0); scaled with the window font via
-    /// <c>ControlSize / RowCheckboxSize</c>. Formerly <c>ControlSize × 1.4</c> (~30.8px); reduced so the
-    /// icon sits closer to the checkbox/stepper height.</summary>
+    /// <c>ControlSize / RowCheckboxSize</c>. Sized so the icon sits close to the checkbox/stepper height.</summary>
     public const float ItemIconSize = 28f;
 
-    /// <summary>Checkbox widget size (pixels), shared by both views; scaled. Former
-    /// <c>ScribeClientConfig.RowCheckboxSize</c>.</summary>
+    /// <summary>Checkbox widget size (pixels), shared by both views; scaled.</summary>
     // TEMPORARY EXPERIMENT (Option 2, tools/row-leading-slot-alignment): was 22f.
     public const float RowCheckboxSize = 18f;
 
     /// <summary>The editor field's internal horizontal padding (pixels); scaled. The read row insets its
-    /// text by the same amount so the text's left edge lines up across a view switch. Former
-    /// <c>ScribeClientConfig.FieldInnerPaddingX</c>.</summary>
+    /// text by the same amount so the text's left edge lines up across a view switch.</summary>
     public const float FieldInnerPaddingX = 8f;
 
     /// <summary>The editor field's internal vertical padding (pixels); scaled. The read row insets its
-    /// text vertically by the same amount so single-line row heights match across a view switch. Former
-    /// <c>ScribeClientConfig.FieldInnerPaddingY</c>.</summary>
+    /// text vertically by the same amount so single-line row heights match across a view switch.</summary>
     public const float FieldInnerPaddingY = 6f;
 
     /// <summary>Alpha applied to the theme's <c>Secondary</c> color to make the resting pinned-row tint
-    /// (add-settings-tab D1b). Raised 0.33 → 0.55 (2026-08-03) after the subtler wash read as too
-    /// transparent to spot pinned tasks at a glance — this is an assertive wash that stays under the row
-    /// content without hiding it. The former fixed amber constant is dropped in favor of this
-    /// theme-derived tint so switching the LibGUI theme re-tints pinned rows automatically.</summary>
+    /// An assertive wash that stays under the row content without hiding it.
+    /// Theme-derived, so switching the LibGUI theme re-tints pinned rows automatically.</summary>
     public const float PinnedTintAlpha = 0.55f;
 
     /// <summary>Saturation multiplier applied to the theme's <c>Secondary</c> before it becomes the pinned
-    /// wash (2026-08-03). The wash read as clearly-pinned at <see cref="PinnedTintAlpha"/> 0.55 but a touch
-    /// desaturated against the surrounding rows; boosting chroma ~1.35× gives pinned tasks an extra splash
-    /// of color so they pop out of the list. Clamped inside <see cref="ShiftBrightness"/>, so an over-boost
-    /// on an already-saturated theme just saturates fully rather than wrapping.</summary>
+    /// wash. Boosting chroma ~1.35× gives pinned tasks an extra splash of color so they pop out of the
+    /// list. Clamped inside <see cref="ShiftBrightness"/>, so an over-boost on an already-saturated theme
+    /// just saturates fully rather than wrapping.</summary>
     public const float PinnedTintSaturationScale = 1.35f;
 
     /// <summary>The resting pinned-row tint, derived at build time from the active LibGUI theme's
     /// <see cref="ColorScheme.Secondary"/> at <see cref="PinnedTintAlpha"/>. Used by both the read and editor
     /// rows for a pinned task's whole-row background wash. Sourced from <c>Secondary</c> rather than
-    /// <c>Primary</c> (add-tablet-clay-type-themes D2a): the focused-input border also reads <c>Primary</c>,
-    /// so a focused input inside a pinned row would otherwise draw its border and the row wash from the same
-    /// hue and the focus cue reads weakly — <c>Secondary</c> keeps the two visually distinct. This is a
-    /// shared helper (tablet + Lectern/Notebook + pinned HUD), so the remap is global; every theme's
+    /// <c>Primary</c>: the focused-input border also reads <c>Primary</c>, so a focused input inside a
+    /// pinned row would otherwise draw its border and the row wash from the same hue and the focus cue
+    /// would read weakly — <c>Secondary</c> keeps the two visually distinct. This is a shared helper
+    /// (tablet + Lectern/Notebook + pinned HUD), so the remap is global; every theme's
     /// <c>Secondary</c> is authored to read as a low-alpha wash distinct from its <c>Primary</c>.</summary>
     public static Vector4 PinnedTint(ColorScheme colors) =>
         ShiftBrightness(colors.Secondary, 0f, PinnedTintSaturationScale) with { W = PinnedTintAlpha };
@@ -125,50 +109,41 @@ internal static class ScribeRowConstants
     }
 
     /// <summary>Thematic "active tab" fill color for the Read nav button — slate blue <c>#465481</c>
-    /// (add-active-tab-nav-colors). Shown as the button's box fill when the Read view is current; the
+    /// Shown as the button's box fill when the Read view is current; the
     /// glyph switches to <see cref="NavActiveGlyph"/> for contrast, and hover brightens the fill +10 V.</summary>
     public static readonly Vector4 NavActiveRead = new(0.2745f, 0.3294f, 0.5059f, 1f);
 
-    /// <summary>Thematic "active tab" fill color for the Edit nav button — brick red <c>#9d4b44</c>
-    /// (add-active-tab-nav-colors).</summary>
+    /// <summary>Thematic "active tab" fill color for the Edit nav button — brick red <c>#9d4b44</c>.</summary>
     public static readonly Vector4 NavActiveEdit = new(0.6157f, 0.2941f, 0.2667f, 1f);
 
-    /// <summary>Thematic "active tab" fill color for the Pinned nav button — sage green <c>#6b8257</c>
-    /// (add-active-tab-nav-colors).</summary>
+    /// <summary>Thematic "active tab" fill color for the Pinned nav button — sage green <c>#6b8257</c>.</summary>
     public static readonly Vector4 NavActivePinned = new(0.4196f, 0.5098f, 0.3412f, 1f);
 
     /// <summary>Thematic "active tab" fill color for the Settings nav button — warm gray <c>#746f66</c>
-    /// (add-active-tab-nav-colors). Shown while the standalone settings window is open.</summary>
+    /// Shown while the standalone settings window is open.</summary>
     public static readonly Vector4 NavActiveSettings = new(0.4549f, 0.4353f, 0.4000f, 1f);
 
-    /// <summary>Thematic "active tab" fill color for the History nav button — warm amber <c>#b28651</c>
-    /// (notebook-history-tab).</summary>
+    /// <summary>Thematic "active tab" fill color for the History nav button — warm amber <c>#b28651</c>.</summary>
     public static readonly Vector4 NavActiveHistory = new(0.6980f, 0.5255f, 0.3176f, 1f);
 
-    /// <summary>Thematic "active tab" fill color for the Guestbook nav button — dusty plum <c>#7a597e</c>
-    /// (notebook-history-tab).</summary>
+    /// <summary>Thematic "active tab" fill color for the Guestbook nav button — dusty plum <c>#7a597e</c>.</summary>
     public static readonly Vector4 NavActiveGuestbook = new(0.4784f, 0.3490f, 0.4941f, 1f);
 
     /// <summary>Thematic "active tab" fill color for the Timer nav button — muted teal <c>#63929c</c>.</summary>
     public static readonly Vector4 NavActiveTimer = new(0.3882f, 0.5725f, 0.6118f, 1f);
 
     /// <summary>Thematic "active tab" fill color for the Transcribe nav button — a bright warm gold <c>#cf9d2e</c>
-    /// (add-transcribe-copy-paste). Shifted yellower (hue ~41°) and brighter than the first golden-orange pick
-    /// (<c>#bb7c31</c>), which read too close to the theme Primary brown and to <see cref="NavActiveHistory"/>'s
-    /// amber (refinement round 3: "closer to gold, keep some orange, needs distinction"). Still warm enough to
-    /// keep an orange cast, but clearly a distinct gold.</summary>
+    /// Yellower and brighter than the theme Primary brown and <see cref="NavActiveHistory"/>'s amber so it
+    /// stays distinct from both, while keeping a slight orange cast.</summary>
     public static readonly Vector4 NavActiveTranscribe = new(0.8118f, 0.6157f, 0.1804f, 1f);
 
     /// <summary>Cream glyph color <c>#eae6dd</c> used for a nav button's icon while that button is the
-    /// active tab, for contrast against the thematic fill (add-active-tab-nav-colors).</summary>
+    /// active tab, for contrast against the thematic fill.</summary>
     public static readonly Vector4 NavActiveGlyph = new(0.9176f, 0.9020f, 0.8667f, 1f);
 
-    // ── Assignment state chip colors (refine-assignment-desk-inbox-ux 12.1) ───────────────────────
-    // Reversed from the original "dedicated, not NavActive*" decision: playtest feedback (2026-08-31)
-    // found the first custom palette read as too saturated/"fancy" next to the rest of the GUI's muted
-    // nav-icon backgrounds, and asked to directly borrow specific nav colors instead of inventing new
-    // ones. These are now aliases (not independently-tuned values) — a nav color retune here flows
-    // through to the matching chip automatically, which is the intended coupling this time.
+    // ── Assignment state chip colors ──────────────────────────────────────────────────────────────
+    // These alias specific nav colors rather than being independently tuned, so a nav color retune
+    // flows through to the matching chip automatically.
 
     /// <summary>New/Unaccepted state chip — borrows the Guest Book nav button's purple.</summary>
     public static readonly Vector4 AssignmentChipNew = NavActiveGuestbook;
@@ -182,11 +157,10 @@ internal static class ScribeRowConstants
     /// <summary>Cancelled state chip — borrows the Transcribe nav button's orange/gold.</summary>
     public static readonly Vector4 AssignmentChipCancelled = NavActiveTranscribe;
 
-    /// <summary>Discarded state chip (triage 2026-08-31: "the color for Discarded should be halfway
-    /// between the colors for Declined and Cancelled") — no longer shares <see cref="AssignmentChipRejected"/>
-    /// with Declined; the two are grouped under one combined filter pill
-    /// (<see cref="ScribeAssignmentFilterGroup.RejectedGroup"/>) but still read as visually distinct
-    /// per-row states.</summary>
+    /// <summary>Discarded state chip — halfway between the colors for Declined and Cancelled. Does not
+    /// share <see cref="AssignmentChipRejected"/> with Declined; the two are grouped under one combined
+    /// filter pill (<see cref="ScribeAssignmentFilterGroup.RejectedGroup"/>) but still read as visually
+    /// distinct per-row states.</summary>
     public static readonly Vector4 AssignmentChipDiscarded = new(
         (AssignmentChipRejected.X + AssignmentChipCancelled.X) / 2f,
         (AssignmentChipRejected.Y + AssignmentChipCancelled.Y) / 2f,
@@ -196,60 +170,52 @@ internal static class ScribeRowConstants
     /// <summary>Completed state chip — borrows the Pinned Tasks nav button's green.</summary>
     public static readonly Vector4 AssignmentChipCompleted = NavActivePinned;
 
-    /// <summary>The "All" filter pill's neutral swatch (triage 2026-08-31) — borrows the Settings nav
+    /// <summary>The "All" filter pill's neutral swatch — borrows the Settings nav
     /// button's warm gray, deliberately non-committal since it doesn't represent any one state.</summary>
     public static readonly Vector4 AssignmentChipAll = NavActiveSettings;
 
-    /// <summary>Sent state chip (refine-task-notice-ux) — a dusty amber, reading as "in transit" between
+    /// <summary>Sent state chip — a dusty amber, reading as "in transit" between
     /// New's purple and Accepted's blue. A dedicated tuned value rather than a nav-button alias: no
     /// existing nav button represents this pre-receipt Task Notice state.</summary>
     public static readonly Vector4 AssignmentChipSent = new(0.62f, 0.50f, 0.24f, 1f);
 
     /// <summary>The dark-red ink color of a <see cref="ScribeStamp"/>'s "COPIED"/"IMPORTED"/"Submitted to
-    /// Player" imprint text and border — promoted from a Scriptorium-private constant
-    /// (refine-assignment-desk-inbox-ux 10.2) so the Assignment Desk's own stamp can't drift from the
+    /// Player" imprint text and border — shared so the Assignment Desk's own stamp can't drift from the
     /// Scriptorium's tuned color.</summary>
     public static readonly Vector4 StampImprintInk = new(0.66f, 0.18f, 0.16f, 1f);
 
-    // ── Quest-prompt action button colors (rework-quest-accept-notification-styles) ────────────────
-    // ColorScheme has no Success/Warning semantic role to borrow (only Primary/Secondary/Error), so per
-    // the design's own fallback guidance these alias the closest EXISTING app colors rather than invent
-    // new tuned values — kept as a single chokepoint so the HUD banner and the center-modal presentation
-    // style (ScribeQuestPromptActions) can never drift apart.
+    // ── Quest-prompt action button colors ──────────────────────────────────────────────────────────
+    // ColorScheme has no Success/Warning semantic role to borrow (only Primary/Secondary/Error), so
+    // these are fixed colors, kept as a single chokepoint so the HUD banner and the center-modal
+    // presentation style (ScribeQuestPromptActions) can never drift apart.
 
     /// <summary>Quest-prompt "Track Quest" action color — a dedicated, hand-tuned dark green
-    /// (post-ship retune via <c>tools/quest-prompt-colors/index.html</c>), reading as the
-    /// positive/commit action. No longer aliases <see cref="NavActivePinned"/> — the higher
-    /// per-state fill alpha (<see cref="ScribeQuestPromptActions.AccentButton"/>) needed a deeper,
-    /// more saturated green to keep reading as green rather than washing out pale.</summary>
+    /// (tuned via <c>tools/quest-prompt-colors/index.html</c>), reading as the positive/commit action.
+    /// Deep and saturated so it keeps reading as green under the higher per-state fill alpha
+    /// (<see cref="ScribeQuestPromptActions.AccentButton"/>) rather than washing out pale.</summary>
     public static readonly Vector4 QuestPromptLinkColor = new(0.0471f, 0.4f, 0.0392f, 1f);
 
-    /// <summary>Quest-prompt "Not Now" (dismiss) action color — a dedicated, hand-tuned red (post-ship
-    /// retune). No longer aliases <see cref="NavActiveTranscribe"/>'s amber/orange — playtest feedback
-    /// found orange read ambiguously next to the accept button's green, where red reads unambiguously
-    /// as the non-committal/negative action.</summary>
+    /// <summary>Quest-prompt "Not Now" (dismiss) action color — a dedicated, hand-tuned red; red reads
+    /// unambiguously as the non-committal/negative action next to the accept button's green.</summary>
     public static readonly Vector4 QuestPromptDismissColor = new(0.6863f, 0.098f, 0.0314f, 1f);
 
     /// <summary>Quest-prompt "Settings" action color — near-white/neutral (not a themed color, since
     /// opening Settings is neither a commit nor a discard action), matching the HUD header's own pure
-    /// white ink (feedback 2026-08-16). Retuned slightly (post-ship) alongside the other two prompt
-    /// colors, still functionally near-white.</summary>
+    /// white ink.</summary>
     public static readonly Vector4 QuestPromptSettingsColor = new(0.902f, 0.902f, 0.902f, 1f);
 
     /// <summary>The quest-prompt HUD banner's title LABEL line color — warm gold, distinct from ordinary
-    /// row text (retuned twice post-ship via <c>tools/quest-prompt-colors/index.html</c>; was
-    /// `(1, 0.92, 0.65)`, then `(1, 0.8471, 0.5804)`, now a bit more yellow). Only the HUD banner's label
+    /// row text (tuned via <c>tools/quest-prompt-colors/index.html</c>). Only the HUD banner's label
     /// line (<see cref="HudScribePins.BuildQuestPromptBanner"/>) uses this — the quest name itself
     /// renders on its own line below in <see cref="HudStandardTextColor"/>, not this color, and the
     /// center modal (<see cref="GuiDialogScribeQuestPrompt"/>) titles its prompt with the active theme's
     /// <c>ColorScheme.Primary</c> instead, so this constant does not apply there.</summary>
     public static readonly Vector4 QuestPromptTitleColor = new(1f, 0.9529f, 0.6392f, 1f);
 
-    // ── Read View filter-pill colors (read-view-filter-and-collapse) ─────────────────────────────
+    // ── Read View filter-pill colors ──────────────────────────────────────────────────────────────
     // A distinct alias mapping from the Assignment chips above (e.g. blue means Accepted there,
     // Completed here) — the two pill rows never appear together in the same view, so each reads
-    // consistently on its own. Aliases, not tuned values, per the same 2026-08-31 lesson: a bespoke
-    // palette read as too saturated next to the rest of the GUI's muted nav-icon backgrounds.
+    // consistently on its own. Aliases, not tuned values.
 
     /// <summary>The Read View "All" pill's neutral swatch — borrows the Settings nav button's warm
     /// gray, same "no filter" meaning as <see cref="AssignmentChipAll"/>.</summary>
@@ -268,23 +234,21 @@ internal static class ScribeRowConstants
     /// Book nav button's purple.</summary>
     public static readonly Vector4 ReadFilterOther = NavActiveGuestbook;
 
-    /// <summary>The HUD's standard near-white row-text color (formerly a literal duplicated at each of
-    /// <see cref="HudScribePins"/>'s several row/label builders) — deliberately NOT pure white
+    /// <summary>The HUD's standard near-white row-text color — deliberately NOT pure white
     /// (<c>Vector4.One</c>): the HUD always renders over the live game world, so near-white
-    /// (<c>0.93</c>) reads brighter/more legible there than the theme's own surface ink
-    /// (v1-playtest-fixes), while also side-stepping the LibGUI 3.1.0 <c>TextStyle.Merge</c> "unset"
+    /// (<c>0.93</c>) reads brighter/more legible there than the theme's own surface ink,
+    /// while also side-stepping the LibGUI 3.1.0 <c>TextStyle.Merge</c> "unset"
     /// sentinel, which is exactly <c>Vector4.One</c> (see the landmine note on
     /// <see cref="ScribeQuestPromptActions.AccentButton"/>) — a literal pure-white color would silently
     /// fail to override an ancestor <c>DefaultTextStyle</c>, where this near-white value does not.
-    /// Used by the quest-prompt banner's action-button labels so they read as "standard HUD text"
-    /// rendered atop their colored button fill, per user direction.</summary>
+    /// Used by the quest-prompt banner's action-button labels so they read as standard HUD text
+    /// rendered atop their colored button fill.</summary>
     public static readonly Vector4 HudStandardTextColor = new(0.93f, 0.93f, 0.93f, 1f);
 }
 
 /// <summary>Maps the player's task-font preference (<c>ScribePlayerSettings.TaskFontFamily</c>) to the
 /// concrete family name a LibGUI <c>TextStyle</c>/<c>ScribeMultilineField</c> should render with
-/// (v1-release-checklist §6), and pegs every selectable TTF's Skia line-box to Caudex
-/// (peg-task-fonts-to-caudex). The stored value is a registered family name or the empty-string default;
+/// and pegs every selectable TTF's Skia line-box to Caudex. The stored value is a registered family name or the empty-string default;
 /// this resolves the default to LibGUI's built-in body family (<c>"sans-serif"</c>, the <c>TextStyle</c>
 /// default). Any non-empty value is assumed already-normalized by
 /// <c>ScribePlayerSettings.NormalizeTaskFontFamily</c> to a registered family, so it is passed through
@@ -299,13 +263,12 @@ internal static class ScribeTaskFont
     /// <see cref="ScribeTextDefaults.WrapChrome"/>/<see cref="ScribeTextDefaults.WrapSettingsChrome"/>.
     /// Set once by <see cref="BuildMetrics"/> from <c>ScribeModSystem.RegisterCustomFonts</c>'s resolved
     /// bundled family; falls back to the literal <c>"sans-serif"</c> (LibGUI's own shared default) only
-    /// if no bundled face loaded at all (fix-sans-serif-alias-leak — Scribe no longer aliases that shared
-    /// name, but still wants ITS OWN chrome branded consistently rather than floating to a live,
-    /// platform-dependent system-font lookup — see [[wrapsettingschrome-defaultfamily-regression]]).</summary>
+    /// if no bundled face loaded at all. Scribe's own chrome stays branded consistently rather than
+    /// floating to a live, platform-dependent system-font lookup.</summary>
     public static string DefaultFamily { get; private set; } = "sans-serif";
 
     /// <summary>Fixed font family for the in-Lectern TEXT buttons (Edit / New Task / Done Editing) —
-    /// Caudex, the same bundled face as the dialog title (v1-release-checklist §6.2). Deliberately NOT the
+    /// Caudex, the same bundled face as the dialog title. Deliberately NOT the
     /// player's task-font choice: the buttons keep one consistent face regardless of the task-text font.
     /// Caudex is registered under every weight in <c>ScribeModSystem.RegisterCustomFonts</c>.</summary>
     public const string ButtonFamily = "Caudex";
@@ -338,13 +301,14 @@ internal static class ScribeTaskFont
         string.IsNullOrEmpty(taskFontFamily) ? DefaultFamily : taskFontFamily;
 
     /// <summary>The SINGLE branch point that decides whether the tablet tier renders text in the cuneiform
-    /// pseudo-font or falls back to normal text (add-cuneiform-glyph-font). Returns <c>true</c> to use
+    /// <summary>The SINGLE branch point that decides whether the tablet tier renders text in the cuneiform
+    /// pseudo-font or falls back to normal text. Returns <c>true</c> to use
     /// cuneiform (the <c>CuneiformText</c> widget), <c>false</c> to render through the normal
     /// <see cref="Resolve"/> path in the player's task font. Centralizing the decision here (rather than
     /// scattering <c>settings.CuneiformTablets</c> checks across the tablet dialog and its rows) keeps
     /// the accessibility fallback a one-line change and guarantees every tablet surface agrees. Callers pass
-    /// the player's own client-local <see cref="ScribePlayerSettings.CuneiformTablets"/> preference; with
-    /// its positive polarity (true = cuneiform) this is now a straight pass-through (D8).</summary>
+    /// the player's own client-local <see cref="ScribePlayerSettings.CuneiformTablets"/> preference (true =
+    /// cuneiform); this is a straight pass-through.</summary>
     public static bool UseCuneiform(bool cuneiformTablets) => cuneiformTablets;
 
     /// <summary>Point size LibGUI should <em>layout</em> this family at so its Skia line-box matches
@@ -398,7 +362,7 @@ internal static class ScribeTaskFont
     /// <summary>Measures each selectable task font (every <see cref="ScribePlayerSettings.KnownTaskFonts"/>
     /// entry plus the empty default → <see cref="DefaultFamily"/>) against Caudex and stores
     /// <c>SizeScale = caudexY / familyY</c>. Call once after typefaces are registered. Caudex is forced
-    /// to identity (scale 1, offset 0). OffsetEm stays 0 until playtest fills it.</summary>
+    /// to identity (scale 1, offset 0). OffsetEm is 0 for every family.</summary>
     /// <param name="resolvedDefaultFamily">The bundled family <c>ScribeModSystem.RegisterCustomFonts</c>
     /// resolved as Scribe's own default (or the literal <c>"sans-serif"</c> if none loaded); becomes
     /// <see cref="DefaultFamily"/> for the rest of the session.</param>
@@ -412,11 +376,11 @@ internal static class ScribeTaskFont
                 DefaultFamily);
         }
 
-        // Diagnostic bracket (fix-linux-sans-serif-font-crash): this is the first real text-shaping
-        // call of the session (MeasureText -> HarfBuzz). If a future crash log shows this line but not
-        // the "measured reference line-box" line below, the abort is in shaping Caudex itself -- NOT
-        // the "sans-serif" resolution this change fixes -- and points back to a HarfBuzzSharp/system
-        // ABI mismatch (the original ripls56/vslibgui#2 theory) rather than an unresolved family name.
+        // Diagnostic bracket: this is the first real text-shaping call of the session
+        // (MeasureText -> HarfBuzz). If a crash log shows this line but not the "measured reference
+        // line-box" line below, the abort is in shaping Caudex itself -- not the "sans-serif"
+        // resolution -- and points to a HarfBuzzSharp/system ABI mismatch rather than an unresolved
+        // family name.
         logger.Notification("[scribe] measuring '{0}' as the task-font line-box reference", referenceFamily);
         float referenceY = ProbeY(referenceFamily);
         logger.Notification("[scribe] measured reference line-box ({0}px); measuring remaining task fonts", referenceY);
@@ -428,12 +392,10 @@ internal static class ScribeTaskFont
         }
 
         Metrics.Clear();
-        // This specific probe is the one fix-linux-sans-serif-font-crash originally targeted:
-        // DefaultFamily now names a bundled, custom-registered family directly (resolved by
-        // RegisterCustomFonts and passed in above), so it never falls through to a live OS/fontconfig
-        // lookup by construction -- unless RegisterCustomFonts itself found no bundled face to resolve
-        // to, in which case DefaultFamily is the literal "sans-serif" and this probe IS that live
-        // lookup (fix-sans-serif-alias-leak's documented zero-bundled-faces edge case).
+        // DefaultFamily names a bundled, custom-registered family directly (resolved by
+        // RegisterCustomFonts and passed in above), so this probe never falls through to a live
+        // OS/fontconfig lookup -- unless RegisterCustomFonts found no bundled face to resolve to, in
+        // which case DefaultFamily is the literal "sans-serif" and this probe IS that live lookup.
         logger.Notification("[scribe] measuring default family '{0}'", DefaultFamily);
         SeedFamily(DefaultFamily, referenceY);
         logger.Notification("[scribe] measured default family '{0}'; measuring selectable task fonts", DefaultFamily);
@@ -493,8 +455,8 @@ internal static class ScribeTaskFont
         _ => 1f,
     };
 
-    /// <summary>Optional replacement for the auto-measured size scale. Unset unless playtest finds a
-    /// face unreadable after line-box matching.</summary>
+    /// <summary>Optional replacement for the auto-measured size scale. Unset unless a
+    /// face is unreadable after line-box matching.</summary>
     private static float? OverrideOf(string family) => family switch
     {
         _ => null,
