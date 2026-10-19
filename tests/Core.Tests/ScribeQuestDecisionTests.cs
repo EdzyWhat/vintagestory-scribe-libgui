@@ -2,10 +2,7 @@ using Scribe.Core;
 
 namespace Scribe.Core.Tests;
 
-// Tests for the per-player quest-decision ledger's Core-side pieces: the ScribeQuestDecisionSet's
-// add/lookup/remove semantics, and the ScribeQuestDecisionCodec's list/store round-trip (network sync +
-// save-game persistence use the same bytes, so both must round-trip exactly and reject malformed input
-// safely — mirrors ScribePinCodecTests).
+// Tests for the quest-decision ledger: ScribeQuestDecisionSet semantics and the codec round-trip (mirrors ScribePinCodecTests).
 public class ScribeQuestDecisionTests
 {
     [Fact]
@@ -26,8 +23,7 @@ public class ScribeQuestDecisionTests
     [Fact]
     public void Set_IsIndependentPerIsCompletion()
     {
-        // An accept-prompt decision and that same quest's completion-prompt decision are independent keys
-        //.
+        // An accept-prompt decision and the same quest's completion-prompt decision are independent keys.
         var set = new ScribeQuestDecisionSet();
         set.Set(ScribeQuestSource.VsQuest, "quest-freeghost", isCompletion: false, ScribeQuestDecision.Dismissed);
         Assert.Null(set.Lookup(ScribeQuestSource.VsQuest, "quest-freeghost", isCompletion: true));

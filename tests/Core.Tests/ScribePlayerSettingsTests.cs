@@ -2,9 +2,7 @@ using Scribe.Core;
 
 namespace Scribe.Core.Tests;
 
-// Tests for the per-player settings normalization: the font-scale clamps/snaps and the HUD-offset
-// clamps, plus a guard that the enum/numeric
-// normalization holds when consolidated into one config. Pure/game-agnostic.
+// Tests for per-player settings normalization: font-scale clamps/snaps and HUD-offset clamps. Pure.
 public class ScribePlayerSettingsTests
 {
     [Fact]
@@ -28,8 +26,7 @@ public class ScribePlayerSettingsTests
     [Fact]
     public void Default_PixelArtDisplay_IsOn()
     {
-        // A fresh profile (no saved preference) gets the pixel-art (light theme) look for the core views;
-        // Normalized() leaves a bool untouched (nothing to clamp), so a stored value round-trips unchanged.
+        // Fresh profile gets the pixel-art (light theme) look; the value round-trips unchanged.
         Assert.True(new ScribePlayerSettings().PixelArtDisplay);
         Assert.True(new ScribePlayerSettings().Normalized().PixelArtDisplay);
         Assert.False(new ScribePlayerSettings { PixelArtDisplay = false }.Normalized().PixelArtDisplay);
@@ -38,9 +35,7 @@ public class ScribePlayerSettingsTests
     [Fact]
     public void Default_AutoPinOnQuestAccept_IsOn()
     {
-        // A fresh profile (and, since it's a plain new property,
-        // an old config JSON predating this field — the deserializer just leaves the initializer's default
-        // in place) auto-pins on quest accept; Normalized() leaves a plain bool untouched.
+        // A fresh or pre-field profile auto-pins on quest accept; Normalized() leaves the bool untouched.
         Assert.True(new ScribePlayerSettings().AutoPinOnQuestAccept);
         Assert.True(new ScribePlayerSettings().Normalized().AutoPinOnQuestAccept);
         Assert.False(new ScribePlayerSettings { AutoPinOnQuestAccept = false }.Normalized().AutoPinOnQuestAccept);
@@ -49,8 +44,7 @@ public class ScribePlayerSettingsTests
     [Fact]
     public void Default_MuteUiSounds_IsOff()
     {
-        // A fresh profile (no saved preference) has Scribe's own UI click sounds ON (mute off);
-        // Normalized() leaves a bool untouched (nothing to clamp), so a stored value round-trips unchanged.
+        // Fresh profile has UI click sounds ON (mute off); the value round-trips unchanged.
         Assert.False(new ScribePlayerSettings().MuteUiSounds);
         Assert.False(new ScribePlayerSettings().Normalized().MuteUiSounds);
         Assert.True(new ScribePlayerSettings { MuteUiSounds = true }.Normalized().MuteUiSounds);
@@ -59,8 +53,7 @@ public class ScribePlayerSettingsTests
     [Fact]
     public void Default_LastAssignmentTargetUid_IsEmpty()
     {
-        // An old config JSON missing the key defaults to "" (no
-        // prior send), and Normalized() leaves the plain string untouched.
+        // A missing key defaults to ""; Normalized() leaves the string untouched.
         Assert.Equal("", new ScribePlayerSettings().LastAssignmentTargetUid);
         Assert.Equal("", new ScribePlayerSettings().Normalized().LastAssignmentTargetUid);
         Assert.Equal("player-1",
@@ -70,9 +63,7 @@ public class ScribePlayerSettingsTests
     [Fact]
     public void Default_TimerAutoDisappear_IsOn()
     {
-        // A fresh profile (no saved preference) keeps the original behavior: a fired timer disappears
-        // from the HUD after ~30 s. Normalized() leaves a bool untouched
-        // (nothing to clamp), so a stored value round-trips unchanged — including an explicit false.
+        // Fresh profile keeps a fired timer disappearing from the HUD after ~30 s; an explicit false round-trips.
         Assert.True(new ScribePlayerSettings().TimerAutoDisappear);
         Assert.True(new ScribePlayerSettings().Normalized().TimerAutoDisappear);
         Assert.False(new ScribePlayerSettings { TimerAutoDisappear = false }.Normalized().TimerAutoDisappear);
@@ -281,10 +272,7 @@ public class ScribePlayerSettingsTests
     [Fact]
     public void Migrate_LegacyDisableCuneiform_InvertsToCuneiformTablets()
     {
-        // A pre-flip config carried the negative DisableCuneiformFont key. The migration inverts it once
-        // (D8): a player who had cuneiform OFF (DisableCuneiformFont = true) must land at
-        // CuneiformTablets = false, NOT the new true default — so the flip doesn't silently re-enable
-        // cuneiform for someone who deliberately turned it off.
+        // Migration inverts the legacy DisableCuneiformFont once: a player who had it OFF stays at CuneiformTablets = false.
         var hadItOff = new ScribePlayerSettings { DisableCuneiformFont = true }.Normalized();
         Assert.False(hadItOff.CuneiformTablets);
 
@@ -343,9 +331,7 @@ public class ScribePlayerSettingsTests
     [Fact]
     public void KnownTaskFonts_CoversTheCaudexPegLineup()
     {
-        // Mod-side BuildMetrics iterates this allowlist (plus the empty
-        // default → sans-serif). Keep the names here so a removed/renamed face cannot silently drop
-        // out of the metrics table. No Skia in Core — this is the string set only.
+        // Keep in sync with the mod-side BuildMetrics allowlist so a removed face cannot silently drop out.
         Assert.Contains("Caudex", ScribePlayerSettings.KnownTaskFonts);
         Assert.Contains("Scapholene", ScribePlayerSettings.KnownTaskFonts);
         Assert.Contains("La Belle Aurore", ScribePlayerSettings.KnownTaskFonts);
