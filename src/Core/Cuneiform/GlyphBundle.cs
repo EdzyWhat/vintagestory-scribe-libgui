@@ -3,43 +3,29 @@ using System.Text.Json;
 namespace Scribe.Core.Cuneiform;
 
 /// <summary>
-/// A parsed cuneiform glyph set: a character → <see cref="Glyph"/> map built from the combined JSON
-/// produced by <c>glyph-forge/tools/build_glyphs_bundle.py</c> (a <c>{ generatedFrom, characterCount,
-/// characters: { "A": {…}, … } }</c> object keyed by character). Parsing lives in <c>Scribe.Core</c>
-/// (pure BCL, no VS API) so it stays unit-testable; the Mod layer only supplies the raw JSON string it
-/// loaded from the mod's asset tree.
-///
-/// Uses <see cref="System.Text.Json"/> (in-box on .NET, no external package) with hand-written POCO
-/// reads rather than source-generated (de)serialization, so there is no trimming/AOT source-gen
-/// dependency under the game runtime. Each glyph is normalized through <see cref="Glyph.FromRaw"/>,
-/// applying the export-format migration ladder.
+/// A parsed cuneiform glyph set (character → <see cref="Glyph"/>) built from the combined JSON produced
+/// by <c>glyph-forge/tools/build_glyphs_bundle.py</c>. Uses hand-written <see cref="System.Text.Json"/>
+/// reads (no source-gen dependency under the game runtime); each glyph is normalized through
+/// <see cref="Glyph.FromRaw"/>.
 /// </summary>
 public sealed class GlyphBundle
 {
     private readonly IReadOnlyDictionary<char, Glyph> _glyphs;
 
-    /// <summary>The number of distinct characters authored in this bundle.</summary>
     public int CharacterCount => _glyphs.Count;
 
-    /// <summary>The characters present in this bundle (authored set).</summary>
     public IEnumerable<char> Characters => _glyphs.Keys;
 
     private GlyphBundle(IReadOnlyDictionary<char, Glyph> glyphs) => _glyphs = glyphs;
 
-    /// <summary>Returns the glyph for <paramref name="character"/>, or null if the bundle has no glyph
-    /// authored for it (the caller decides how to handle a missing glyph — the layout engine advances a
-    /// small gap rather than throwing).</summary>
+    /// <summary>The glyph for <paramref name="character"/>, or null if none is authored.</summary>
     public Glyph? Get(char character) => _glyphs.TryGetValue(character, out var g) ? g : null;
 
-    /// <summary>Whether this bundle has a glyph authored for <paramref name="character"/>.</summary>
     public bool Contains(char character) => _glyphs.ContainsKey(character);
 
     /// <summary>
-    /// Parses the combined bundle JSON into a <see cref="GlyphBundle"/>. Reads the top-level
-    /// <c>characters</c> object; each entry's key is the character and its value is a glyph object
-    /// (<c>gridSize</c>, <c>leftWidth</c>/<c>rightWidth</c> or a legacy width field, paddings, optional
-    /// <c>kerning</c>, and an ordered <c>strokes</c> array). Throws <see cref="JsonException"/> on
-    /// malformed JSON or a missing <c>characters</c> object.
+    /// Parses the bundle JSON (a top-level <c>characters</c> object keyed by character). Throws
+    /// <see cref="JsonException"/> on malformed JSON or a missing <c>characters</c> object.
     /// </summary>
     public static GlyphBundle Parse(string json)
     {
@@ -65,7 +51,7 @@ public sealed class GlyphBundle
 
     private static Glyph ParseGlyph(char character, JsonElement el)
     {
-        // A glyph's own "character" field may override the map key (e.g. a punctuation slug key); prefer it.
+        // A glyph's own "character" field overrides the map key (e.g. a punctuation slug key).
         if (el.TryGetProperty("character", out JsonElement chEl)
             && chEl.ValueKind == JsonValueKind.String)
         {
@@ -101,8 +87,6 @@ public sealed class GlyphBundle
         {
             Vec2 start = ReadPoint(s, "start");
             Vec2 end = ReadPoint(s, "end");
-            // A stroke exported before the weight field existed defaults to a small hairline rather
-            // than an error; the authored set always carries an explicit weight.
             double weight = ReadDouble(s, "weight") ?? DefaultStrokeWeight;
             strokes.Add(new GlyphStroke(start, end, weight));
         }
@@ -152,6 +136,6 @@ public sealed class GlyphBundle
         return null;
     }
 
-    /// <summary>Default stroke weight (grid units) for a stroke loaded without a <c>weight</c> field.</summary>
+    /// <summary>Stroke weight (grid units) for a stroke without a <c>weight</c> field.</summary>
     private const double DefaultStrokeWeight = 6.0;
 }

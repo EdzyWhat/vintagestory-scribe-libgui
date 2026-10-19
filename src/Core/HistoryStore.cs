@@ -3,14 +3,9 @@ using System.Text;
 namespace Scribe.Core;
 
 /// <summary>
-/// Append-only chronicle for a Notebook item. Stores events recorded automatically by the
-/// game (crafted, picked up, deaths, PvP kills, boss kills, temporal storms) and up to
-/// <see cref="MaxManual"/> player-authored entries.
-///
-/// Sliding-window caps drop the oldest entry of a given kind when the cap is reached (so the
-/// most recent entries of each kind always survive, per <see cref="MaxDeaths"/> etc.). Manual
-/// entries use the same sliding-window policy. PickedUp and Crafted use identity deduplication
-/// instead.
+/// Append-only chronicle for a Notebook item: automatically recorded game events plus up to
+/// <see cref="MaxManual"/> player-authored entries. Per-kind sliding-window caps drop the oldest entry
+/// of a kind; PickedUp and Crafted use identity deduplication instead.
 ///
 /// Accepted-version window (progressive reads — see docs/CODEC-MIGRATION.md):
 ///   Current : v4 — adds per-entry schema + live fact fields (subject/other/ref/ref2/flavorSeed)
@@ -19,19 +14,14 @@ namespace Scribe.Core;
 ///   Min     : v1 — no EntryId, no InGameTimestamp, no live facts
 ///   Older   : rejected
 ///
-/// A v1 or v2 payload has no recorded timestamp, so <see cref="ApplyV2ToV3Migrations"/> assigns
-/// every entry a synthetic one from a strictly-increasing negative sequence in its existing list
-/// order — preserving relative order while sorting before anything recorded after the v3 change.
-/// A v1–v3 payload has no schema/fact fields, so <see cref="ApplyV3ToV4Migrations"/> marks every
-/// entry <see cref="HistorySchema.Baked"/> with empty facts.
+/// v1/v2 payloads get synthetic timestamps (<see cref="ApplyV2ToV3Migrations"/>); v1–v3 entries are
+/// marked <see cref="HistorySchema.Baked"/> (<see cref="ApplyV3ToV4Migrations"/>).
 ///
 /// Serialized format (SHST v4, little-endian via <see cref="BinaryWriter"/>):
 ///   [4 bytes magic "SHST"][1 byte version][int entryCount]
 ///   [per entry: byte kind, string actorName, string detail, string inGameDate, 16 bytes entryId,
 ///    8 bytes inGameTimestamp, byte schema, string subjectName, string otherName, string refCode,
 ///    string refCode2, int flavorSeed]
-///
-/// See docs/CODEC-MIGRATION.md for the version-bump pattern.
 /// </summary>
 public sealed class HistoryStore
 {
@@ -50,8 +40,7 @@ public sealed class HistoryStore
 
     private readonly List<HistoryEntry> _entries = new();
 
-    /// <summary>All entries in chronological order by <see cref="HistoryEntry.InGameTimestamp"/>
-    /// (oldest first; ties broken by write order). The display layer reverses for newest-first.</summary>
+    /// <summary>All entries, oldest first by <see cref="HistoryEntry.InGameTimestamp"/> (ties by write order).</summary>
     public IReadOnlyList<HistoryEntry> Entries => _entries;
 
     /// <summary>
@@ -105,10 +94,8 @@ public sealed class HistoryStore
         return true;
     }
 
-    /// <summary>Inserts <paramref name="entry"/> at its correct position by
-    /// <see cref="HistoryEntry.InGameTimestamp"/> — before the first existing entry with a strictly
-    /// greater timestamp, so entries with an equal timestamp keep write order (the tie-break the
-    /// requirement calls for).</summary>
+    /// <summary>Inserts before the first entry with a strictly greater timestamp, so equal timestamps
+    /// keep write order.</summary>
     private void InsertSorted(HistoryEntry entry)
     {
         int idx = _entries.Count;
@@ -123,20 +110,16 @@ public sealed class HistoryStore
     {
         int count = _entries.Count(e => e.Kind == kind);
         if (count < cap) return;
-        // _entries is globally sorted by timestamp, so the first match of this kind is also the
-        // chronologically oldest one of that kind.
+        // _entries is sorted by timestamp, so the first match is the oldest of this kind.
         int idx = _entries.FindIndex(e => e.Kind == kind);
         if (idx >= 0) _entries.RemoveAt(idx);
     }
 
-    /// <summary>Updates an existing Manual entry's text, addressed by <see cref="HistoryEntry.EntryId"/>
-    /// and authorized by matching <paramref name="authorName"/> against the entry's own
-    /// <see cref="HistoryEntry.ActorName"/> — the caller (Mod layer) supplies the REQUESTING player's
-    /// own name, never a client-claimed identity, mirroring <c>GuestbookStore.TrySetNote</c>'s
-    /// sender-identity check. Text is clamped to <see cref="Scribe.Core.ScribeDocumentCodec.MaxTaskTextLength"/>.
-    /// No-ops (returns false) on an unknown <c>EntryId</c>, a non-Manual entry, an author mismatch, or
-    /// an unchanged value — an entry may be edited down to empty text without being removed (only a
-    /// never-created draft is discarded; that's a Mod-layer concern, not this store's).</summary>
+    /// <summary>Updates a Manual entry's text, addressed by <see cref="HistoryEntry.EntryId"/> and
+    /// authorized by <paramref name="authorName"/> matching the entry's <see cref="HistoryEntry.ActorName"/>
+    /// (the caller must pass the requesting player's real name, not a client-claimed one). Text is clamped to
+    /// <see cref="Scribe.Core.ScribeDocumentCodec.MaxTaskTextLength"/>. Returns false on an unknown id,
+    /// non-Manual entry, author mismatch, or unchanged value; editing to empty text keeps the entry.</summary>
     public bool TrySetManualEntryText(Guid entryId, string authorName, string text)
     {
         var entry = _entries.FirstOrDefault(e =>
@@ -151,9 +134,8 @@ public sealed class HistoryStore
         return true;
     }
 
-    /// <summary>Removes a Manual entry, addressed by <see cref="HistoryEntry.EntryId"/> and authorized
-    /// the same way as <see cref="TrySetManualEntryText"/>. No-ops (returns false) on an unknown
-    /// <c>EntryId</c>, a non-Manual entry, or an author mismatch.</summary>
+    /// <summary>Removes a Manual entry, authorized like <see cref="TrySetManualEntryText"/>; returns false
+    /// on an unknown id, non-Manual entry, or author mismatch.</summary>
     public bool TryDeleteManualEntry(Guid entryId, string authorName)
     {
         var entry = _entries.FirstOrDefault(e =>
@@ -207,28 +189,21 @@ public sealed class HistoryStore
         }
         catch (Exception ex) when (ex is EndOfStreamException or IOException or FormatException)
         {
-            // Malformed — return whatever was read so far.
+            // Malformed: keep whatever was read so far.
         }
 
         return store;
     }
 
-    /// <summary>v1/v2 → v3 migration: neither prior version recorded a sortable timestamp, so every
-    /// entry read from one is assigned a synthetic timestamp from a strictly-increasing negative
-    /// sequence in its existing list order — preserving that order exactly (a plain numeric sort)
-    /// while guaranteeing every migrated entry sorts before any timestamp a freshly-recorded entry
-    /// can carry (<c>Calendar.TotalDays</c> is never negative). A v1 payload also has no per-entry
-    /// <c>EntryId</c>, but that already defaults to <see cref="Guid.Empty"/> — nothing to transform
-    /// there.</summary>
+    /// <summary>v1/v2 → v3: assigns each entry a strictly-increasing negative timestamp in list order,
+    /// preserving order while sorting before any real timestamp (<c>Calendar.TotalDays</c> is never negative).</summary>
     private static void ApplyV2ToV3Migrations(List<HistoryEntry> entries)
     {
         for (int i = 0; i < entries.Count; i++)
             entries[i].InGameTimestamp = i - entries.Count;
     }
 
-    /// <summary>v1–v3 → v4 migration: none of those versions recorded a schema discriminator or
-    /// live fact fields, so every entry is marked <see cref="HistorySchema.Baked"/> with empty
-    /// facts (the C# defaults after a progressive read). Live rows are only written by v4+.</summary>
+    /// <summary>v1–v3 → v4: marks every entry <see cref="HistorySchema.Baked"/>; live rows exist only in v4+.</summary>
     private static void ApplyV3ToV4Migrations(List<HistoryEntry> entries)
     {
         foreach (var e in entries)
