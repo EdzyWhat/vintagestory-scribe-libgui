@@ -5,7 +5,7 @@ using Xunit;
 namespace Integration.Tests;
 
 /// <summary>
-/// Pure Mod-layer logic for read-view-filter-and-collapse (tasks 2.1/2.2/5.1/6.1/6.5) — no Vintage
+/// Pure Mod-layer logic for the read-view filter and collapse — no Vintage
 /// Story API surface is touched by <see cref="ScribeReadViewFilter"/>, so these run as plain xUnit
 /// facts (no Atlas world boot), the same way <c>Core.Tests</c> exercises pure logic, just living
 /// alongside the rest of this feature's tests since the code under test is `internal` to the Mod
@@ -16,7 +16,7 @@ public class ScribeReadViewFilterTests
     private static ScribeReadRowData Row(ScribeBlockKind kind, bool done = false, bool pinned = false, int depth = 0) =>
         new(Index: 0, Kind: kind, Done: done, Pinned: pinned, TaskId: Guid.NewGuid(), Text: "x", Depth: depth);
 
-    // ── 2.1/2.2: category mapping across every ScribeBlockKind, and Pinned's independence ─────────
+    // ── category mapping across every ScribeBlockKind, and Pinned's independence ─────────
 
     // xUnit test methods must be public, and a public method's signature can't expose the `internal`
     // ReadViewFilterCategory as a [Theory]/[InlineData] parameter (CS0051) even with InternalsVisibleTo
@@ -63,7 +63,7 @@ public class ScribeReadViewFilterTests
         Assert.Contains(ReadViewFilterCategory.Pinned, categories);
     }
 
-    // ── 5.1: owned-run detection over an already-rendered row list ─────────────────────────────────
+    // ── owned-run detection over an already-rendered row list ─────────────────────────────────
 
     [Fact]
     public void OwnedRun_covers_a_Quest_Links_contiguous_objectives()
@@ -108,7 +108,7 @@ public class ScribeReadViewFilterTests
         Assert.Equal(start, end);
     }
 
-    // ── 6.1: group-level filter visibility ──────────────────────────────────────────────────────────
+    // ── group-level filter visibility ──────────────────────────────────────────────────────────
 
     [Fact]
     public void A_group_with_one_matching_child_stays_visible_under_that_filter()
@@ -166,7 +166,7 @@ public class ScribeReadViewFilterTests
         Assert.Equal(ReadRowVisibility.Normal, visibility[child.TaskId]);
     }
 
-    // ── 6.5: a pill's count never includes a shadow-rendered sibling ───────────────────────────────
+    // ── a pill's count never includes a shadow-rendered sibling ───────────────────────────────
 
     [Fact]
     public void A_shadow_sibling_does_not_inflate_the_pills_count()
@@ -200,7 +200,7 @@ public class ScribeReadViewFilterTests
         Assert.Empty(ScribeReadViewFilter.DeserializeGuidSet(Array.Empty<byte>()));
     }
 
-    // ── read-view-collapse-affordance-fixes 1.1/1.2: pending-until-confirmed refresh guard ──────────
+    // ── pending-until-confirmed refresh guard ──────────
 
     [Fact]
     public void With_no_pending_pick_the_host_mirror_is_always_accepted()
@@ -211,7 +211,7 @@ public class ScribeReadViewFilterTests
     [Fact]
     public void A_pending_pick_rejects_a_still_stale_host_mirror()
     {
-        // Simulates the bug: the player just selected Completed, but a row mutation's synchronous
+        // The player just selected Completed, but a row mutation's synchronous
         // RefreshReadView lands before the server's echo — the host mirror is still whatever it was before
         // (e.g. All) — so the pending pick must NOT be overwritten by that stale value.
         bool accept = ScribeReadViewFilter.ShouldAcceptHostFilterCategory(ReadViewFilterCategory.Completed, ReadViewFilterCategory.All);

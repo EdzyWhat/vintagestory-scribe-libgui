@@ -5,7 +5,7 @@ using Scribe;
 namespace Integration.Tests;
 
 /// <summary>
-/// Task 4.6a: only one player may hold a lectern's editor lock at a time; a second opener is
+/// Only one player may hold a lectern's editor lock at a time; a second opener is
 /// refused; the lock releases on close (ReleaseLock) and on disconnect (PlayerDisconnect).
 /// </summary>
 public class SingleEditorLockScenarios : AtlasScenarioBase
