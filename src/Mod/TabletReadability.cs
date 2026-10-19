@@ -34,6 +34,10 @@ internal readonly record struct TabletReadability(
     // the cells. The only coincidences are the hard/fired glow offsets (~0.04–0.05) and offset
     // X == offset Y in every export; wet + wax offsets stay near-zero. Do not "simplify" any apparent overlap
     // into a shared field — a retune may diverge it.
+    //
+    // Provenance: BlueFired, RedHard, RedFired, FireHard, and FireFired hold values from an earlier
+    // glyph-forge export than the other five cells; the five cells from the later, partial export still
+    // need in-game verification.
     // ---------------------------------------------------------------------------------------------------
 
     private static readonly TabletReadability BlueWet = new(

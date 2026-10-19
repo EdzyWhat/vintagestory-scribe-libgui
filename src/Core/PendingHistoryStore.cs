@@ -11,8 +11,11 @@ namespace Scribe.Core;
 /// it was queued against the next time that document is observed in a live carried slot, regardless
 /// of who is carrying it by then — never redirected to a different document.
 ///
-/// No pruning: an entry for a document that is genuinely never seen again persists indefinitely
-/// (deliberate).
+/// No pruning: an entry for a document that is genuinely never seen again (destroyed, or lost in an
+/// unreachable corpse) persists indefinitely. This is deliberate: a count cap or age-based expiry
+/// would add bookkeeping for a path that is expected to be rare (it only engages when another mod
+/// wins the race), and a small unbounded set of tiny entries is an acceptable cost. Revisit if
+/// save-file growth ever shows otherwise.
 ///
 /// Game-agnostic (pure BCL) so it's unit-testable without a game install; the Mod layer's
 /// <c>OnHistoryScanTick</c> calls <see cref="TakeAll"/> and owns this store's savegame persistence,

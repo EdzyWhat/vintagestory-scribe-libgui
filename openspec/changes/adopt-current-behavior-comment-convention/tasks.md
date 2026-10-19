@@ -7,20 +7,20 @@
 ## 2. Batch plan
 
 - [x] 2.1 Generate the batch list (about 15-20 batches of ~2.5k lines for `src/Mod`, `HudScribePins.cs` alone, `src/Core` as one, `tests/` as one), keeping related partial classes together; verify every tracked `.cs` file under `src/` and `tests/` appears in exactly one batch
-- [ ] 2.2 Write the agent brief containing the trim rubric from design.md and the report format (<=15 lines); verify it by running it on one small file and checking the report and IL result
+- [x] 2.2 Write the agent brief containing the trim rubric from design.md and the report format (<=15 lines); verify it by running it on one small file and checking the report and IL result
 
 ## 3. Sweep
 
-- [ ] 3.1 Write the Workflow script: fan out one agent per batch in its own worktree, each runs the verification script against its base commit and reverts any IL-mismatched file, then returns the short report; verify with a dry run on two small batches
-- [ ] 3.2 Run the sweep over all `src/Mod` batches; verify every report states IL-identical and lists any reverted files
-- [ ] 3.3 Run the `src/Core` batch and the `tests/` batch; verify IL-identical for `Scribe.Core.dll` and that the test project still builds
+- [x] 3.1 Write the Workflow script: fan out one agent per batch in its own worktree, each runs the verification script against its base commit and reverts any IL-mismatched file, then returns the short report; verify with a dry run on two small batches
+- [x] 3.2 Run the sweep over all `src/Mod` batches; verify every report states IL-identical and lists any reverted files
+- [x] 3.3 Run the `src/Core` batch and the `tests/` batch; verify IL-identical for `Scribe.Core.dll` and that the test project still builds
 
 ## 4. Review and merge
 
-- [ ] 4.1 Review the flagged uncertain comments and stale-comment corrections from all reports; verify each is accepted, adjusted, or reverted
+- [x] 4.1 Review the flagged uncertain comments and stale-comment corrections from all reports; verify each is accepted, adjusted, or reverted
 - [ ] 4.2 Spot-check at least one file per batch (prioritizing `HudScribePins.cs` and `ScribeDialogBase.*`) by comparing comment claims against the code; verify no live constraint was dropped
-- [ ] 4.3 Merge the batch branches; verify no conflicts and run the verification script against the original base commit with exit 0
-- [ ] 4.4 Run `dotnet test tests/Core.Tests` on the merged result; verify all tests pass
+- [x] 4.3 Merge the batch branches; verify no conflicts and run the verification script against the original base commit with exit 0
+- [x] 4.4 Run `dotnet test tests/Core.Tests` on the merged result; verify all tests pass
 
 ## 5. Notes and wrap-up
 
