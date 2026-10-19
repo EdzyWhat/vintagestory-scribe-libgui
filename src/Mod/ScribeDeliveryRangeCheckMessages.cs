@@ -3,8 +3,8 @@ using ProtoBuf;
 namespace Scribe;
 
 /// <summary>
-/// Client → server: "is this target in range of my Assignment Desk?" (`assignment-delivery-mode`
-/// capability's Hybrid range check). Sent whenever the Create Assignments tab's target-player picker
+/// Client → server: "is this target in range of my Assignment Desk?" (the Hybrid delivery
+/// mode's range check). Sent whenever the Create Assignments tab's target-player picker
 /// selects a new target. Must be server-authoritative: the client only ever receives entity updates for
 /// players within its own tracking distance, so it cannot itself determine whether a FAR-away target is
 /// in range — only the server always knows every online player's true position (and, offline, their

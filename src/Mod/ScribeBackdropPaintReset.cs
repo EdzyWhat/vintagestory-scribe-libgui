@@ -19,12 +19,11 @@ namespace Scribe;
 /// MODULATED by whatever color the LAST op of the PREVIOUS frame happened to leave on the shared paint.</para>
 ///
 /// <para>On the read-only hard/fired tablet the last box painted each frame is the always-on scrollbar
-/// track (<c>Scrollbar { AutoHide = false }</c>, theme-default track alpha 0.1), so the next frame's
-/// backdrop <c>DrawMaskedBox</c> multiplied the clay art by ~alpha 0.1 → a uniformly semi-transparent
-/// backdrop. The wet editor and the tabbed Lectern/Notebook views paint an OPAQUE footer button last, so
-/// they never leaked — which is exactly why only the read-only tablet showed it (see the
-/// tablet-transparent-backdrop-sharedpaint-leak notes). The leaky ops live in the vendored
-/// <c>Gui.dll</c> (can't edit), so the fix lives here in Scribe code.</para>
+/// track (<c>Scrollbar { AutoHide = false }</c>, theme-default track alpha 0.1), so without the reset the
+/// next frame's backdrop <c>DrawMaskedBox</c> would multiply the clay art by ~alpha 0.1 and render a
+/// uniformly semi-transparent backdrop. Surfaces that paint an OPAQUE footer button last (the wet editor,
+/// the tabbed Lectern/Notebook views) leave an opaque color behind and would not show it. The leaky ops
+/// live in the vendored <c>Gui.dll</c> (not editable), so the fix lives here in Scribe code.</para>
 ///
 /// <para><b>Why wrapping the backdrop.</b> Placed directly around the backdrop <c>Container</c>, this
 /// paints (setting the shared color opaque white) in the same frame, immediately before the child
@@ -51,8 +50,7 @@ internal sealed class ScribeResetPaintColor : SingleChildWidget
             // than a stale color left by a previous op. Also clear the color/image FILTERS and restore a normal
             // SrcOver blend: DrawMaskedBox sets only FilterQuality, so a stale ColorFilter (e.g. a gear's cast
             // shadow / glow tint, or the diagnostic border's fill) or BlendMode would otherwise recolour/dim
-            // the child — the see-through-gears bug (add-timer-gearworks 7.6, D16). Additive for the backdrops
-            // (they never relied on a leftover filter); load-bearing for the opaque gears wrapped in this.
+            // the child. Harmless for the backdrops; load-bearing for the opaque gears wrapped in this.
             var paint = context.SharedPaint;
             paint.Color = SKColors.White;
             paint.ColorFilter = null;
