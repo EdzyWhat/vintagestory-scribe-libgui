@@ -74,7 +74,6 @@ public class ScribeCompletionTests
         Assert.True(outcome.Toggled);
         Assert.False(outcome.NowDone);
         Assert.False(outcome.ShouldRemovePin);
-        // Unchecking never deletes: the task is still present, just now incomplete.
         Assert.Equal(2, doc.Blocks.Count);
         Assert.False(doc.Blocks[0].Done);
     }
@@ -116,7 +115,6 @@ public class ScribeCompletionTests
 
         var outcome = ScribeCompletion.ApplyLocal(doc, id, ScribeCompletionPolicy.Sink);
 
-        // MoveTaskToBottom is a no-op (already last), but the done flip is still a content change.
         Assert.True(outcome.DocChanged);
         Assert.Equal(new[] { "a", "b" }, doc.Blocks.Select(b => b.Text));
         Assert.True(doc.Blocks[1].Done);
