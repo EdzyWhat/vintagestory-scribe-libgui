@@ -52,7 +52,7 @@ public readonly record struct ScribeDocumentPolicy
         new() { MaxBlocks = 0, MaxPins = 0, ReadOnly = true };
 
     /// <summary>Whether one more block (of ANY kind) may be added given the document's
-    /// <paramref name="currentBlockCount"/>. The cap is "N of anything" (refine-chalkboard §12) — tasks, notes,
+    /// <paramref name="currentBlockCount"/>. The cap is "N of anything" — tasks, notes,
     /// trackers, links, and craft parents all count equally. Always <c>true</c> when <see cref="MaxBlocks"/> is
     /// <c>null</c> (uncapped) and always <c>false</c> when <see cref="ReadOnly"/>; otherwise <c>true</c> only
     /// while the count is still below the cap. A negative count is treated as 0 so a garbled caller can't wrap

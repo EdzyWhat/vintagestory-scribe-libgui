@@ -22,7 +22,7 @@ public static class ScribeQuestSource
 /// block.
 ///
 /// <para>Kept in Core as pure string logic (no VS API) so every surface — read view, editor, Pin Tab, HUD —
-/// classifies a link identically and can't drift (add-tracker-link-tasks 7.6).</para>
+/// classifies a link identically and can't drift.</para>
 /// </summary>
 public static class ScribeLinkTarget
 {
