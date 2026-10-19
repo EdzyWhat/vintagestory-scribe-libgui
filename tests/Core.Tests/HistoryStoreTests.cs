@@ -331,7 +331,6 @@ public class HistoryStoreTests
             w.Write("Alice");
             w.Write("Alice fell to her death.");
             w.Write("Year 1, Day 1");
-            // no EntryId bytes in v1
         }
 
         var store = HistoryStore.Deserialize(ms.ToArray());
@@ -360,7 +359,6 @@ public class HistoryStoreTests
                 w.Write(detail);
                 w.Write("Year 1, Day 1");
                 w.Write(Guid.Empty.ToByteArray());
-                // no InGameTimestamp bytes in v2
             }
         }
 
@@ -391,7 +389,6 @@ public class HistoryStoreTests
             w.Write("Alice");
             w.Write("Alice fell to her death.");
             w.Write("Year 1, Day 1");
-            // no EntryId, no InGameTimestamp bytes in v1
         }
 
         var store = HistoryStore.Deserialize(ms.ToArray());
