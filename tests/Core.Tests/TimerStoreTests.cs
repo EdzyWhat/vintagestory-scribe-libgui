@@ -97,7 +97,6 @@ public class TimerStoreTests
             w.Write((byte)TimerMode.RealTime);
             w.Write("Legacy timer");
             w.Write(90.0);
-            // No FiredElapsedSeconds in v1.
         }
 
         var back = TimerStore.Deserialize(ms.ToArray());

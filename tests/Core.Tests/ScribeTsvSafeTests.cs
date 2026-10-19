@@ -51,7 +51,6 @@ public class ScribeTsvSafeTests
         Assert.StartsWith("\"", ScribeTsvSafe.Escape("has\ttab"));
         Assert.StartsWith("\"", ScribeTsvSafe.Escape("has\nnewline"));
         Assert.StartsWith("\"", ScribeTsvSafe.Escape(" edge space"));
-        // A plain field is left bare.
         Assert.Equal("plain", ScribeTsvSafe.Escape("plain"));
     }
 }
