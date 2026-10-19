@@ -161,8 +161,6 @@ public class CuneiformTests
     {
         // The real committed artifact (copied into the test output) must parse and carry the full
         // authored set: A–Z (26) + 0–9 (10) + 22 punctuation/symbols = 58 — no lowercase, no space glyph.
-        // (The set grew from 11 to 18 with the glyph-forge symbol sync adding + / = % # * @, then to 22
-        // with the arrow/comparison sync adding ← → < >.)
         string path = Path.Combine(AppContext.BaseDirectory, "cuneiform-glyphs-1.json");
         Assert.True(File.Exists(path), $"Shipped glyph bundle not found at {path}");
 
@@ -441,7 +439,7 @@ public class CuneiformTests
         Assert.Single(layout.LayoutWrapped("   ", 100.0));
     }
 
-    // ---- Trailing-space caret advance (task 8.3) --------------------------------------------
+    // ---- Trailing-space caret advance --------------------------------------------
 
     [Fact]
     public void Layout_TrailingSpace_AdvancesCaretImmediately()
@@ -477,9 +475,8 @@ public class CuneiformTests
     [Fact]
     public void LayoutWrapped_TrailingSpaceOnFinalLine_IsKeptSoCaretCanAdvance()
     {
-        // The wrap path tokenizes into words and would otherwise flush the final line at the last WORD's
-        // end, dropping trailing spaces so a space typed at the very end of a row never moved the caret.
-        // The final line must now run to the source end and keep its trailing whitespace.
+        // The wrap path tokenizes into words; the final line must still run to the source end and keep its
+        // trailing whitespace so a space typed at the very end of a row moves the caret.
         var layout = new CuneiformLineLayout(GlyphBundle.Parse(SampleBundleJson));
 
         IReadOnlyList<CuneiformLine> lines = layout.LayoutWrapped("AA ", 500.0);
@@ -495,7 +492,7 @@ public class CuneiformTests
     [Fact]
     public void LayoutWrapped_InteriorBreakSpacesStayDropped_OnlyFinalLineKeepsTrailing()
     {
-        // Regression guard for the trailing-space fix: the space that CAUSES a wrap is still consumed
+        // The space that CAUSES a wrap is consumed
         // as a separator (not re-added to either line), so only the genuine trailing space survives.
         // "AA AA " wraps after the first word under a tight max; line 0 ends at the first "AA" (no
         // trailing gap), and the final line keeps its one trailing space.
@@ -510,7 +507,7 @@ public class CuneiformTests
         Assert.Equal(90 + layout.WordGapUnits, lines[^1].TotalWidth, 6);
     }
 
-    // ---- Hard line breaks ('\n' / Shift+Enter, task 8.2) ------------------------------------
+    // ---- Hard line breaks ('\n' / Shift+Enter) ------------------------------------
 
     [Fact]
     public void LayoutWrapped_HardNewline_SplitsIntoLinesEvenWithoutSoftWrap()
@@ -558,14 +555,14 @@ public class CuneiformTests
         Assert.Equal(90, last.TotalWidth, 6);
     }
 
-    // ---- Character-coverage alias map (add-cuneiform-character-coverage) ---------------------
+    // ---- Character-coverage alias map ---------------------
 
     [Fact]
     public void Layout_BracketAliases_RenderIdenticallyToOpenParen()
     {
         // '[' and '{' alias to the authored '(' at the pre-lookup layer, so each lays out to byte-identical
         // strokes and advance as '(' — real ink, not the missing-glyph gap. Uses the shipped bundle (the
-        // sample bundle has no '(' glyph); '(' is one of the 47 original authored punctuation marks.
+        // sample bundle has no '(' glyph); '(' is an authored punctuation mark.
         var layout = ShippedLayout();
 
         AssertSameLayout(layout.Layout("("), layout.Layout("["));
@@ -585,8 +582,7 @@ public class CuneiformTests
     [Fact]
     public void Layout_AmpersandAlias_RendersIdenticallyToPlus()
     {
-        // '&' aliases to '+'. The '+' glyph landed with the glyph-forge symbol sync (the shipped bundle now
-        // carries + / = % # * @), so this alias resolves to a real glyph today rather than falling through.
+        // '&' aliases to '+', which the shipped bundle carries, so the alias resolves to a real glyph.
         var layout = ShippedLayout();
         Assert.True(GlyphBundle.Parse(ShippedBundleJson()).Contains('+'), "the '&' alias requires an authored '+'");
 
@@ -657,7 +653,7 @@ public class CuneiformTests
         Assert.Equal(expected.Y, actual.Y, 6);
     }
 
-    // ---- Stroke identity threaded through layout (add-cuneiform-handwriting-feel task 1) ------
+    // ---- Stroke identity threaded through layout ------
 
     [Fact]
     public void Layout_PositionedStroke_CarriesSourceCharIndexAndOrdinal()
@@ -711,7 +707,7 @@ public class CuneiformTests
         }
     }
 
-    // ---- Deterministic jitter transform (add-cuneiform-handwriting-feel task 2) ---------------
+    // ---- Deterministic jitter transform ---------------
 
     [Fact]
     public void Jitter_StrengthZero_IsIdentity()
@@ -872,7 +868,7 @@ public class CuneiformTests
         }
     }
 
-    // ---- Deterministic whole-character rotation transform (tune-tablet-jitter-add-rotation task 2) ------
+    // ---- Deterministic whole-character rotation transform ------
 
     [Fact]
     public void Rotate_MaxDegreesZero_IsIdentity()
@@ -1009,7 +1005,7 @@ public class CuneiformTests
         return d;
     }
 
-    // ---- Stroke-count reveal timing (zero-point-three-fixes §5 — no fixed per-letter slot) ----
+    // ---- Stroke-count reveal timing (no fixed per-letter slot) ----
     // The reveal clock is a pure running total of stroke-units: each glyph contributes its authored stroke
     // count, each space CuneiformReveal.SpaceStrokeUnits, so a complex letter genuinely takes longer to press
     // in than a simple one. IsStrokeRevealed / TotalDurationMs read a prefix-sum of per-character stroke-units
@@ -1052,7 +1048,7 @@ public class CuneiformTests
     [Fact]
     public void Reveal_ComplexLetterDelaysTheNextLetterMoreThanASimpleOne()
     {
-        // The whole point of the recast: a 5-stroke first letter pushes the second letter's start later than
+        // A 5-stroke first letter pushes the second letter's start later than
         // a 2-stroke first letter does. Same schedule, same second letter — only the first letter's cost differs.
         var schedule = new RevealSchedule(perStrokeMs: 80);
         int[] afterSimple = Cumulative(2, 3); // 2-stroke letter, then a letter
