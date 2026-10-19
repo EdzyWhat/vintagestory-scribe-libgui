@@ -9,7 +9,7 @@ namespace Scribe;
 /// chalkboard hangs on a wall like a vanilla painting. Wall attachment + the north/east/south/west
 /// facing come from the <c>HorizontalAttachable</c> behavior and the <c>side</c> block variant declared
 /// in <c>chalkboard.json</c>; here we only opt out of the base's floor requirement and player-facing
-/// mesh rotation (add-chalkboard-block D6). Its distinct model/textures/theme/background live in the
+/// mesh rotation. Its distinct model/textures/theme/background live in the
 /// asset JSON, <see cref="BlockEntityScribeChalkboard"/>, and <see cref="GuiDialogScribeChalkboard"/>.
 /// </summary>
 public sealed class BlockScribeChalkboard : BlockScribeWritingStation

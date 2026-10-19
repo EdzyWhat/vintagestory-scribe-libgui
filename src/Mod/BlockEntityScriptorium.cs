@@ -7,20 +7,16 @@ using Vintagestory.API.Server;
 namespace Scribe;
 
 /// <summary>
-/// The Scriptorium's placed-block entity — the third placed writing-station tier after the Lectern
-/// (v1.2, see <c>docs/specs/v7-scriptorium-and-task-types.md</c>). A thin subclass of
+/// The Scriptorium's placed-block entity. A thin subclass of
 /// <see cref="BlockEntityScribeWritingStation"/>: it shares all document, persistence, editor-lock,
 /// guestbook, and placement logic with the Lectern and supplies only its own identity/config.
 ///
-/// <para>For v1.2 it reuses the Lectern's GUI page backdrop as a placeholder (the dedicated
-/// Scriptorium art/backdrop is a tracked follow-up), and its dialog is a distinct subclass so the
-/// v1.3 assignment system can attach the Scriptorium-only Assign &amp; History / Inbox nav buttons
-/// without touching the Lectern.</para>
+/// <para>It reuses the Lectern's GUI page backdrop as a placeholder, and its dialog is a distinct
+/// subclass so Scriptorium-only nav buttons can be attached without touching the Lectern.</para>
 /// </summary>
 public sealed class BlockEntityScriptorium : BlockEntityScribeWritingStation
 {
-    // Placeholder: reuse the Lectern page art until the dedicated Scriptorium backdrop is authored
-    // (add-scriptorium-block design, Decision 3). Same 1024×1160 art size, so the same aspect.
+    // Placeholder: reuses the Lectern page art (same 1024×1160 size, so the same aspect).
     protected override ScribeBackdropSpec PageBackdrop => ScribeBackdrops.LecternPage;
 
     protected override float PageAspect => 1160f / 1024f;
@@ -34,25 +30,22 @@ public sealed class BlockEntityScriptorium : BlockEntityScribeWritingStation
     protected override ScribeDialogBase CreateDialog(ICoreClientAPI capi) =>
         new GuiDialogScribeScriptorium(Pos, this, capi);
 
-    // ── Scribe-items-only inventory (add-scriptorium-inventory) ───────────
+    // ── Scribe-items-only inventory ───────────────────────────────────────
     //
     // The Scriptorium owns a tiny inventory of Scribe document items, surfaced as its own dialog tab.
-    // This is storage only: it holds and returns whole items (the copy/paste and import/export features
-    // build on it in later changes). It follows the standard vanilla container mechanics — an
+    // It holds and returns whole items. It follows the standard vanilla container mechanics — an
     // InventoryGeneric bound to the block-entity packet channel — even though this BE keeps its
     // BlockEntityScribeWritingStation base rather than reparenting to BlockEntityOpenableContainer.
 
     /// <summary>Number of Scribe-item storage slots on the Scriptorium: slot 0 = copy Original (source),
-    /// slot 1 = copy Duplicate (target), slot 2 = the Import/Export source-and-target
-    /// (add-scriptorium-import-export). Growing 2 → 3 is additive for persistence — a Scriptorium saved with
-    /// two slots simply has no stored stack for index 2, so
-    /// <see cref="Vintagestory.API.Common.InventoryBase.SlotsFromTreeAttributes"/> leaves it empty (it reads
+    /// slot 1 = copy Duplicate (target), slot 2 = the Import/Export source-and-target.
+    /// A slot with no stored stack in the tree is left empty by
+    /// <see cref="Vintagestory.API.Common.InventoryBase.SlotsFromTreeAttributes"/> (it reads
     /// this constant's slot count, not the tree's).</summary>
     private const int SlotCount = 3;
 
-    /// <summary>Tree sub-key under which the inventory persists, kept separate from the document keys so
-    /// persistence is additive: a Scriptorium saved before this change simply lacks this sub-tree and
-    /// loads with empty slots.</summary>
+    /// <summary>Tree sub-key under which the inventory persists, kept separate from the document keys. A
+    /// block whose tree lacks this sub-tree loads with empty slots.</summary>
     private const string InventoryTreeKey = "scriptoriumInventory";
 
     /// <summary>The Scriptorium's Scribe-items-only inventory. Created lazily via <see cref="EnsureInventory"/>
@@ -98,7 +91,7 @@ public sealed class BlockEntityScriptorium : BlockEntityScribeWritingStation
         base.ToTreeAttributes(tree);
         EnsureInventory();
         // Nest under a dedicated sub-tree so the inventory's own "qslots"/"slots" keys never collide with
-        // the document/lock/guestbook keys the base writes, and old blocks stay readable.
+        // the document/lock/guestbook keys the base writes.
         var invTree = new TreeAttribute();
         inventory!.ToTreeAttributes(invTree);
         tree[InventoryTreeKey] = invTree;
@@ -108,7 +101,7 @@ public sealed class BlockEntityScriptorium : BlockEntityScribeWritingStation
     {
         EnsureInventory();
         base.FromTreeAttributes(tree, worldForResolving);
-        // Additive: a Scriptorium saved before this change has no inventory sub-tree → slots stay empty.
+        // A tree without the inventory sub-tree leaves the slots empty.
         if (tree.GetTreeAttribute(InventoryTreeKey) is { } invTree)
         {
             inventory!.FromTreeAttributes(invTree);

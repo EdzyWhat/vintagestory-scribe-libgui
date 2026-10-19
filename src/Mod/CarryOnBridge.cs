@@ -14,8 +14,7 @@ namespace Scribe;
 /// <summary>
 /// Zero-compile-dependency bridge to the CarryOn mod family (modid <c>carryon</c>), so a Notebook
 /// or Tablet stored inside a block the player is currently carrying (e.g. a chest on their back)
-/// still participates in Death/PvpKill/TemporalStorm history recording. See
-/// <c>fix-carried-notebook-detection</c>'s design.md for the full rationale.
+/// still participates in Death/PvpKill/TemporalStorm history recording.
 ///
 /// CarryOn freezes a carried container's entire block-entity state — including its own inventory
 /// — into a raw <see cref="ITreeAttribute"/> (<c>CarriedBlock.BlockEntityData</c>) rather than a

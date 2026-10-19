@@ -47,10 +47,9 @@ public abstract class BlockScribeWritingStation : Block
 
     /// <summary>Whether the placed/held-item tooltip appends a "Title: ..." line at all (the
     /// Lectern/Scriptorium default — they carry a real, renamable document title). The Inbox and
-    /// Assignment Desk blocks override this to <c>false</c> (triage 2026-08-31: "we should remove
-    /// [Title: (untitled)] since they can't be renamed") — they're thin subclasses of this base for their
+    /// Assignment Desk blocks override this to <c>false</c> — they share this base's
     /// placement/interaction/carry-over plumbing, but have no document title a player can ever set, so
-    /// the line only ever reads as a confusing permanent "(untitled)" placeholder.</summary>
+    /// the line would only ever read as a permanent "(untitled)" placeholder.</summary>
     protected virtual bool ShowsDocumentTitleInTooltip => true;
 
     public override void OnLoaded(ICoreAPI api)
@@ -117,7 +116,7 @@ public abstract class BlockScribeWritingStation : Block
     {
         if (world.BlockAccessor.GetBlockEntity(blockSel.Position) is BlockEntityScribeWritingStation station)
         {
-            // Shift+right-click is the unified quick-add gesture (add-unified-quick-add-interaction):
+            // Shift+right-click is the unified quick-add gesture:
             // take the editor lock AND drop a fresh empty task at the top with the caret focused. Plain
             // right-click opens Read; the plain-editor view is still reachable via the Editor nav tab.
             // (A placed writing station is furniture, so there is no Ctrl+Shift ground-place branch here —
@@ -145,9 +144,9 @@ public abstract class BlockScribeWritingStation : Block
         if (!base.CanPlaceBlock(world, byPlayer, blockSel, ref failureCode)) return false;
 
         // A wall-mounted variant (chalkboard) opts out of the floor requirement: its attach-to-wall
-        // check is handled by the HorizontalAttachable behavior instead (add-chalkboard-block D6). A
+        // check is handled by the HorizontalAttachable behavior instead. A
         // dual-mode block (the Inbox) opts out only for a horizontal-face placement, since it still needs
-        // this exact floor check for its own ground mode (redesign-inbox-block-placement-and-capacity).
+        // this exact floor check for its own ground mode.
         if (!RequiresSolidGround(blockSel)) return true;
 
         var posBelow = blockSel.Position.DownCopy();
@@ -174,7 +173,7 @@ public abstract class BlockScribeWritingStation : Block
         if (!base.TryPlaceBlock(world, byPlayer, itemstack, blockSel, ref failureCode)) return false;
 
         // A wall-mounted variant takes its facing from the `side` block variant + shape rotateYByType,
-        // so it stores no per-instance mesh angle (add-chalkboard-block D6). Skipping this also avoids
+        // so it stores no per-instance mesh angle. Skipping this also avoids
         // reading a block entity at blockSel.Position that the HorizontalAttachable behavior may have
         // placed at an offset cell.
         if (!OrientTowardPlayerOnPlace) return true;

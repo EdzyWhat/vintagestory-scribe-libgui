@@ -6,18 +6,15 @@ using Vintagestory.API.Server;
 namespace Scribe;
 
 /// <summary>
-/// The Assignment Desk's placed-block entity (add-assignment-and-quest-support §5). A thin subclass of
+/// The Assignment Desk's placed-block entity. A thin subclass of
 /// <see cref="BlockEntityScribeWritingStation"/>: it shares all document, persistence, editor-lock, and
 /// guestbook logic with the Lectern/Scriptorium and supplies only its own identity/config.
 ///
-/// <para>Reuses the Lectern's GUI page art as a placeholder backdrop (§13.1 tracks the dedicated
-/// Assignment Desk art), and its physical block model/textures are cloned from the Scriptorium's shape
-/// (see <c>assignmentdesk.json</c>) pending its own §13.1 asset — the same "placeholder now, restyle
-/// later" precedent the Scriptorium itself set for its GUI backdrop.</para>
+/// <para>Reuses the Lectern's GUI page art as a placeholder backdrop, and its physical block
+/// model/textures are cloned from the Scriptorium's shape (see <c>assignmentdesk.json</c>).</para>
 ///
-/// <para><see cref="PageAspect"/> is fixed at the design's Decision 8 ratio (<c>W × 1.2W</c>) rather than
-/// an art-derived value — this dialog's layout is not blocked on final art (see the
-/// <c>assignment-desk-block</c> spec and design.md Decision 8).</para>
+/// <para><see cref="PageAspect"/> is a fixed <c>W × 1.2W</c> ratio rather than an art-derived value, so
+/// the dialog's layout does not depend on the backdrop art.</para>
 /// </summary>
 public sealed class BlockEntityAssignmentDesk : BlockEntityScribeWritingStation
 {
@@ -34,16 +31,14 @@ public sealed class BlockEntityAssignmentDesk : BlockEntityScribeWritingStation
 
     protected override ScribeBoxTuningTarget? TuningTarget => ScribeBoxTuningTarget.AssignmentDesk;
 
-    // ── Staging slot (assignment-multi-item-creation design.md D8) ───────────
+    // ── Staging slot ─────────────────────────────────────────────────────────
     //
     // A single Scribe-items-only slot the Create Assignments tab uses to stage an existing document
     // (Notebook, Tablet, or a picked-up Lectern/Scriptorium/Assignment Desk item) for multi-row
     // selection and batch-send. Mirrors BlockEntityScriptorium's inventory verbatim — same slot type,
     // same lazy-init/persistence/packet-routing shape — just with one slot instead of three.
 
-    /// <summary>Staging + Task Notice supply/output slots (`assignment-delivery-mode` capability's
-    /// "Send a Notice" mode — tasks.md 4.4). Growing 1→3 here is additive for persistence, matching the
-    /// Scriptorium's own 2→3 growth precedent.</summary>
+    /// <summary>Staging + Task Notice supply/output slots (the "Send a Notice" delivery mode).</summary>
     private const int SlotCount = 3;
 
     public const int StagingSlotIndex = 0;
@@ -56,9 +51,8 @@ public sealed class BlockEntityAssignmentDesk : BlockEntityScribeWritingStation
     /// notice here for the sender to collect and hand-deliver.</summary>
     public const int NoticeOutputSlotIndex = 2;
 
-    /// <summary>Tree sub-key the inventory persists under, kept separate from the document/lock keys so
-    /// persistence is additive: an Assignment Desk saved before this change simply lacks this sub-tree
-    /// and loads with an empty slot.</summary>
+    /// <summary>Tree sub-key the inventory persists under, kept separate from the document/lock keys. A
+    /// block whose tree lacks this sub-tree loads with empty slots.</summary>
     private const string InventoryTreeKey = "assignmentDeskInventory";
 
     /// <summary>Created lazily via <see cref="EnsureInventory"/> so it exists before whichever of

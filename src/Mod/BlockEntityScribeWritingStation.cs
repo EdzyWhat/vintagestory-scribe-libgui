@@ -52,11 +52,11 @@ public abstract class BlockEntityScribeWritingStation : BlockEntity, IRotatable,
     /// rotates ONLY by <see cref="MeshAngleRad"/>, which is 0 for a wall block until we set it here.</summary>
     protected virtual float? WallMountAngleRad => null;
 
-    /// <summary>Optional box-tuning target (add-scribe-block-box-tuning): which of the 5 live-tunable
+    /// <summary>Optional box-tuning target: which of the 5 live-tunable
     /// <see cref="ScribeBoxTuning"/> targets this placed instance's collision/selection box reads from, if
-    /// any. Null (default) keeps the untouched behavior of reading the static, registration-time-baked
-    /// <c>Block.CollisionBoxes[0]</c>/<c>SelectionBoxes[0]</c> — the Lectern never overrides this, so it
-    /// is byte-for-byte unaffected by this capability. Overridden on the Scriptorium, Assignment Desk,
+    /// any. Null (default) reads the static, registration-time-baked
+    /// <c>Block.CollisionBoxes[0]</c>/<c>SelectionBoxes[0]</c> — the Lectern never overrides this.
+    /// Overridden on the Scriptorium, Assignment Desk,
     /// Chalkboard, and (variant-resolved) Inbox.</summary>
     protected virtual ScribeBoxTuningTarget? TuningTarget => null;
 
@@ -68,9 +68,9 @@ public abstract class BlockEntityScribeWritingStation : BlockEntity, IRotatable,
     /// so the Lectern and Scriptorium never collide in the shared mesh cache.</summary>
     protected abstract string MeshCacheKeyPrefix { get; }
 
-    /// <summary>The per-tier document cap this block reports through <see cref="IScribeDocumentHost.Policy"/>
-    /// (refine-chalkboard). Default is <see cref="ScribeDocumentPolicy.Unlimited"/> so the Lectern/Scriptorium
-    /// stay uncapped exactly as before. A capped block (the Chalkboard) overrides this seam; the explicit
+    /// <summary>The per-tier document cap this block reports through <see cref="IScribeDocumentHost.Policy"/>.
+    /// Default is <see cref="ScribeDocumentPolicy.Unlimited"/> so the Lectern/Scriptorium
+    /// stay uncapped. A capped block (the Chalkboard) overrides this seam; the explicit
     /// interface member below delegates to it, because — as with the other host members — a bare <c>Policy</c>
     /// property on a subclass would NOT re-map the interface's default member (see the note on
     /// <c>NotebookHost.Policy</c>). The dialog consults <see cref="ScribeDocumentPolicy.CanAdd"/> before adding
@@ -98,10 +98,10 @@ public abstract class BlockEntityScribeWritingStation : BlockEntity, IRotatable,
     /// <summary>The block's COLLISION box rotated to <see cref="MeshAngleRad"/>, surfaced by the block's
     /// <c>GetCollisionBoxes</c> so the solid hitbox tracks the mesh. Computed live on every read (not
     /// cached at <see cref="MeshAngleRad"/>-set time) so a live <see cref="ScribeBoxTuning"/> change is
-    /// reflected on the very next call with no restart (add-scribe-block-box-tuning design.md Decision 1).
+    /// reflected on the very next call with no restart.
     /// Sourced from <see cref="ScribeBoxTuning.CollisionBoxFor"/> when <see cref="TuningTarget"/> is set
-    /// AND <see cref="ScribeBoxTuning.HasCollisionBox"/> is true for it, else <c>Block.CollisionBoxes[0]</c>
-    /// exactly as before. Null when the block has no collision box (e.g. the walk-through wall
+    /// AND <see cref="ScribeBoxTuning.HasCollisionBox"/> is true for it, else <c>Block.CollisionBoxes[0]</c>.
+    /// Null when the block has no collision box (e.g. the walk-through wall
     /// Chalkboard, whose <see cref="TuningTarget"/> IS set but is excluded by <c>HasCollisionBox</c>) —
     /// the block then falls back to its un-rotated JSON box (which for the Chalkboard is none).</summary>
     public Cuboidf[]? RotatedBox => Rotated(TuningTarget is { } t && ScribeBoxTuning.HasCollisionBox(t)
@@ -113,8 +113,8 @@ public abstract class BlockEntityScribeWritingStation : BlockEntity, IRotatable,
     /// can have a thin selection slab WITHOUT a collision box: the floor stations set both to the same box
     /// (selection defaults to collision in their JSON), while the Chalkboard rotates only its slab
     /// selection box and leaves collision null (walk-through). Computed live, same rationale as
-    /// <see cref="RotatedBox"/>; a tuned target uses the SAME box for both collision and selection (design.md
-    /// Non-Goals). Null falls back to the un-rotated JSON box.</summary>
+    /// <see cref="RotatedBox"/>; a tuned target uses the SAME box for both collision and selection.
+    /// Null falls back to the un-rotated JSON box.</summary>
     public Cuboidf[]? RotatedSelectionBox => Rotated(TuningTarget is { } t
         ? ModSystem?.BoxTuning.CollisionBoxFor(t)
         : (Block?.SelectionBoxes is { Length: > 0 } s ? s[0] : null));
@@ -143,7 +143,7 @@ public abstract class BlockEntityScribeWritingStation : BlockEntity, IRotatable,
     private string? lockHolderUid;
 
     /// <summary>Client-side mirror of <see cref="lockHolderUid"/>, synced via the block-entity tree
-    /// (fix-multiplayer-editor-lock §2.1) so the client can reflect a held lock in its "switch to editor"
+    /// so the client can reflect a held lock in its "switch to editor"
     /// affordance WITHOUT a server round-trip. The server keeps <see cref="lockHolderUid"/> authoritative;
     /// this is only read on the client. Null when the lock is free.</summary>
     private string? syncedLockHolderUid;
@@ -155,16 +155,15 @@ public abstract class BlockEntityScribeWritingStation : BlockEntity, IRotatable,
     public bool IsLockedByOther(string viewerUid) =>
         syncedLockHolderUid is not null && syncedLockHolderUid != viewerUid;
 
-    /// <summary>Server-authoritative durable access mode for this block (fix-transient-lectern-editor-lock).
-    /// Persisted + synced via the tree round-trip. RESERVED / dormant this version: nothing sets it away
+    /// <summary>Server-authoritative durable access mode for this block.
+    /// Persisted + synced via the tree round-trip. Reserved/dormant: nothing sets it away
     /// from <see cref="ScribeAccessMode.Public"/> and the editor-entry gate does not read it, so every
-    /// block behaves as Public. Kept as a distinct field so the sticky "private/read-only" permission can
-    /// be surfaced by a later change without conflating it with the transient editor lock.</summary>
+    /// block behaves as Public. Kept distinct from the transient editor lock so a sticky
+    /// "private/read-only" permission can be surfaced without conflating the two.</summary>
     private ScribeAccessMode accessMode = ScribeAccessMode.Public;
 
     /// <summary>Client-side mirror of <see cref="accessMode"/>, updated from the tree in
-    /// <see cref="FromTreeAttributes"/>. Unused by any current control (dormant); present so a future
-    /// player-facing change reads a synced value rather than adding a new packet.</summary>
+    /// <see cref="FromTreeAttributes"/>. Dormant: no control reads it.</summary>
     private ScribeAccessMode syncedAccessMode = ScribeAccessMode.Public;
 
     /// <summary>Server-side: DocId this block entity has registered in the pin store's live index, so
@@ -179,17 +178,17 @@ public abstract class BlockEntityScribeWritingStation : BlockEntity, IRotatable,
 
     private GuestbookStore _guestbook = new();
 
-    /// <summary>Per-instance persisted Read View filter pill (read-view-filter-and-collapse), a
+    /// <summary>Per-instance persisted Read View filter pill, a
     /// <see cref="ReadViewFilterCategory"/> cast to byte. Defaults to All (0).</summary>
     private byte readViewFilterCategory;
 
-    /// <summary>Per-instance persisted set of collapsed subtask-group parent TaskIds
-    /// (read-view-filter-and-collapse). Empty (fully expanded) by default.</summary>
+    /// <summary>Per-instance persisted set of collapsed subtask-group parent TaskIds.
+    /// Empty (fully expanded) by default.</summary>
     private HashSet<Guid> collapsedGroupIds = new();
 
     /// <summary>Sample interval (ms) for the particle indicator's periodic check, mirroring
-    /// <see cref="ScribeAmbientLightSampler"/>'s periodic-sample precedent rather than a per-frame
-    /// check (design.md Decision 9) — playtest-tunable, not final.</summary>
+    /// <see cref="ScribeAmbientLightSampler"/>'s periodic sampling rather than a per-frame
+    /// check.</summary>
     private const int AssignmentParticleTickIntervalMs = 1500;
 
     // ── IScribeDocumentHost explicit implementations ──────────────────────
@@ -213,7 +212,7 @@ public abstract class BlockEntityScribeWritingStation : BlockEntity, IRotatable,
     void IScribeDocumentHost.SetReadViewStateFromReader(byte filterCategory, IReadOnlyCollection<Guid> collapsedIds) =>
         SetReadViewStateFromReader(filterCategory, collapsedIds);
 
-    /// <summary>Client-side: the single LibGUI dialog serving BOTH views (migrate-editor-view-libgui).
+    /// <summary>Client-side: the single LibGUI dialog serving BOTH views.
     /// Read and editor are internal view states of this one dialog, so switching between them is a
     /// view swap rather than closing one dialog and opening another.</summary>
     private ScribeDialogBase? dialog;
@@ -230,7 +229,6 @@ public abstract class BlockEntityScribeWritingStation : BlockEntity, IRotatable,
         {
             sapi.Event.PlayerDisconnect += OnPlayerDisconnect;
 
-            // Clear-on-load leg of the transient-lock guarantee (fix-transient-lectern-editor-lock).
             // The editor lock is server-session-only crash-prevention state, never authoritative
             // across a load: a freshly-loaded block must start editable. FromTreeAttributes only ever
             // writes the *client mirror* (syncedLockHolderUid), so this null is defence-in-depth — it
@@ -260,9 +258,8 @@ public abstract class BlockEntityScribeWritingStation : BlockEntity, IRotatable,
                 MeshAngleRad = wallAngle;
             }
 
-            // Unseen-assignment ambient particle indicator (§8.4) — every subclass of this base is one
-            // of the five Inbox-capable blocks design.md Decision 9 scopes it to, so registering it once
-            // here covers all of them with no per-block duplication. Uses the BlockEntity's OWN
+            // Unseen-assignment ambient particle indicator — every subclass of this base is an
+            // Inbox-capable block, so registering it once here covers all of them. Uses the BlockEntity's OWN
             // RegisterGameTickListener (not capi.Event's) so OnBlockRemoved/OnBlockUnloaded's inherited
             // UnregisterAllTickListeners() cleans it up automatically — no manual bookkeeping needed.
             RegisterGameTickListener(OnAssignmentParticleTick, AssignmentParticleTickIntervalMs);
@@ -271,16 +268,16 @@ public abstract class BlockEntityScribeWritingStation : BlockEntity, IRotatable,
 
     /// <summary>Tracks whether the previous tick's proximity+unseen-assignment check was true, so the
     /// next tick that turns it true again after being false can tell it's a fresh entry (see
-    /// <see cref="OnAssignmentParticleTick"/>'s <c>seedBurst</c> — playtest feedback 2026-08-31).
+    /// <see cref="OnAssignmentParticleTick"/>'s <c>seedBurst</c>).
     /// Client-side, transient, per-instance only — never persisted.</summary>
     private bool assignmentParticlesWereActive;
 
-    /// <summary>Client-side periodic check (§8.4): if the local player has an unseen received assignment
+    /// <summary>Client-side periodic check: if the local player has an unseen received assignment
     /// AND is within <see cref="ScribeAssignmentParticleEmitter.DetectionRadius"/> of this block, spawn
     /// this tick's mote batch. Player-specific and local-only — never touches the server or any other
-    /// client (design.md Decision 9). The gate has no memory of its own, so a one-tick-late accrual to
-    /// steady-state density read as a slow "build-up" (playtest feedback 2026-08-31); tracking the
-    /// trigger's own true/false edge here lets the first active tick request a seed burst instead.</summary>
+    /// client. The gate has no memory of its own, so the block tracks the
+    /// trigger's true/false edge to let the first active tick request a seed burst rather than
+    /// building up to steady-state density slowly.</summary>
     private void OnAssignmentParticleTick(float dt)
     {
         if (Api is not ICoreClientAPI capi) return;
@@ -306,7 +303,7 @@ public abstract class BlockEntityScribeWritingStation : BlockEntity, IRotatable,
 
     public override void OnBlockRemoved()
     {
-        base.OnBlockRemoved(); // unregisters the §8.4 particle tick listener (UnregisterAllTickListeners)
+        base.OnBlockRemoved(); // unregisters the particle tick listener (UnregisterAllTickListeners)
 
         if (Api is ICoreServerAPI sapi)
         {
@@ -335,20 +332,18 @@ public abstract class BlockEntityScribeWritingStation : BlockEntity, IRotatable,
         base.ToTreeAttributes(tree);
         tree.SetBytes(DocumentAttributeKey, ScribeDocumentCodec.Serialize(Document));
         tree.SetFloat("meshAngle", meshAngleRad);
-        // Sync the editor-lock holder so clients can reflect a held lock in their editor affordance
-        // (fix-multiplayer-editor-lock §2.1). Empty string = lock free (tree attrs don't store null).
+        // Sync the editor-lock holder so clients can reflect a held lock in their editor affordance.
+        // Empty string = lock free (tree attrs don't store null).
         // This is TRANSIENT session state: it drives the contended-editor affordance on other clients,
         // but is never authoritative across a block load — Initialize clears lockHolderUid on load and
-        // FromTreeAttributes only writes the client mirror (fix-transient-lectern-editor-lock).
+        // FromTreeAttributes only writes the client mirror.
         tree.SetString("lockHolder", lockHolderUid ?? "");
-        // Durable per-block access mode (fix-transient-lectern-editor-lock). Dormant this version
-        // (always Public), but persisted + synced so a future private/read-only permission needs no
-        // save-format change. Stored as the underlying byte.
+        // Durable per-block access mode. Dormant (always Public), but persisted + synced.
+        // Stored as the underlying byte.
         tree.SetInt("accessMode", (byte)accessMode);
         tree.SetBytes("guestbook", _guestbook.Serialize());
-        // Read View filter pill + subtask-group collapse state (read-view-filter-and-collapse): purely
-        // additive, per-instance viewer-preference state — absent on a pre-existing save, which defaults
-        // both back to All/fully-expanded on load (no migration needed).
+        // Read View filter pill + subtask-group collapse state: per-instance viewer-preference
+        // state; absent keys default to All/fully-expanded on load.
         tree.SetInt("readViewFilter", readViewFilterCategory);
         tree.SetBytes("readViewCollapsed", ScribeReadViewFilter.SerializeGuidSet(collapsedGroupIds));
     }
@@ -369,21 +364,20 @@ public abstract class BlockEntityScribeWritingStation : BlockEntity, IRotatable,
                 ? tree.GetFloat("meshAngle", 0f)
                 : (Block?.Shape?.rotateY ?? 0f) * ((float)Math.PI / 180f));
 
-        // Client mirror of the editor-lock holder (fix-multiplayer-editor-lock §2.1). Empty string (the
+        // Client mirror of the editor-lock holder. Empty string (the
         // "lock free" sentinel written above) maps back to null. Read on the client to drive the editor
         // affordance; the server ignores its own synced copy (lockHolderUid stays authoritative).
         var lockHolder = tree.GetString("lockHolder", "");
         syncedLockHolderUid = string.IsNullOrEmpty(lockHolder) ? null : lockHolder;
 
-        // Durable access mode (fix-transient-lectern-editor-lock). Absent key (pre-existing saves) →
-        // Public. Both the authoritative field and its client mirror are set from the tree; the field
-        // is dormant (never read by the editor gate this version).
+        // Durable access mode. Absent key → Public. Both the authoritative field and its client
+        // mirror are set from the tree; the field is dormant (never read by the editor gate).
         var mode = (ScribeAccessMode)(byte)tree.GetInt("accessMode", (int)ScribeAccessMode.Public);
         accessMode = mode;
         syncedAccessMode = mode;
 
-        // Read View filter pill + subtask-group collapse state (read-view-filter-and-collapse). Absent key
-        // (pre-existing saves) → All / empty (fully expanded), via GetInt/GetBytes's own defaults.
+        // Read View filter pill + subtask-group collapse state. Absent key → All / empty
+        // (fully expanded), via GetInt/GetBytes's own defaults.
         readViewFilterCategory = (byte)tree.GetInt("readViewFilter", 0);
         collapsedGroupIds = ScribeReadViewFilter.DeserializeGuidSet(tree.GetBytes("readViewCollapsed"));
 
@@ -398,8 +392,7 @@ public abstract class BlockEntityScribeWritingStation : BlockEntity, IRotatable,
         // the break→replace path can restore a saved doc). Keep the live index pointing at the current one.
         RegisterDocInStore();
 
-        // Re-key the host registry under the now-current DocId (same bug class as ab702d1's
-        // ApplyEdit/OnBlockPlaced re-registers, on the path they missed). Each side constructs its
+        // Re-key the host registry under the now-current DocId. Each side constructs its
         // Document with its OWN random DocId (ScribeDocument ctor → Guid.NewGuid()); the authoritative
         // DocId only arrives here. For a FRESHLY PLACED block the VS lifecycle runs Initialize (which
         // registers under the throwaway random id) BEFORE FromTreeAttributes, so without this the client
@@ -417,10 +410,10 @@ public abstract class BlockEntityScribeWritingStation : BlockEntity, IRotatable,
 
         // Likewise repaint an open inventory tab (Scriptorium only) after a synced slot change, so a second
         // client viewing the same block sees the moved item. A no-op for the non-inventory views and for the
-        // Lectern/Notebook/Tablet dialogs, which never enter the inventory view (add-scriptorium-inventory).
+        // Lectern/Notebook/Tablet dialogs, which never enter the inventory view.
         dialog?.RefreshInventoryView();
 
-        // Same resync for the Inbox block's own Inbox Inventory tab (add-inbox-inventory-tab) — a no-op
+        // Same resync for the Inbox block's own Inbox Inventory tab — a no-op
         // for every other dialog, which never enters that view.
         dialog?.RefreshInboxInventoryView();
     }
@@ -528,9 +521,8 @@ public abstract class BlockEntityScribeWritingStation : BlockEntity, IRotatable,
         }
 
         lockHolderUid = byPlayer.PlayerUID;
-        // Re-sync so other clients see the lock is now held and can disable their editor affordance
-        // (fix-multiplayer-editor-lock §2.1). redrawOnClient:false — this only changes lock state, not the
-        // document, so no read-view rebuild is needed; the tree attr rides the next block-entity packet.
+        // Re-sync so other clients see the lock is now held and can disable their editor affordance;
+        // the tree attr rides the block-entity packet.
         MarkDirty();
         SendReply(sapi, byPlayer, granted: true, editorMode: true, refusalReason: null, quickAdd: quickAdd);
     }
@@ -555,7 +547,7 @@ public abstract class BlockEntityScribeWritingStation : BlockEntity, IRotatable,
             MarkDirty(redrawOnClient: true);
             // Only the editing player's own pins reconcile to their edit (grief-proof, player-owned).
             ReconcileActorPins(fromPlayer.PlayerUID);
-            // fix-editor-assignment-completion-sync: the Editor's own checkbox has no dedicated completion
+            // The Editor's own checkbox has no dedicated completion
             // message — it relies on this whole-document flush to persist Done, so derive Completed here too.
             ModSystem?.NotifyDoneAssignmentsInDocument(doc);
         }
@@ -630,10 +622,10 @@ public abstract class BlockEntityScribeWritingStation : BlockEntity, IRotatable,
     /// <summary>
     /// Server-side: set a Tracker's live <see cref="ScribeBlock.CurrentQuantity"/> on the authoritative
     /// document by its stable <see cref="ScribeBlock.TaskId"/> — the write-through for the client count
-    /// engine (add-tracker-link-tasks D5). Lock-free like <see cref="SetTaskDoneFromReader"/> (updating a
+    /// engine. Lock-free like <see cref="SetTaskDoneFromReader"/> (updating a
     /// derived carried-inventory count is an always-allowed viewer action, not an editor edit). Routes
     /// through the Core <see cref="ScribeDocument.SetTrackerCurrentQuantity"/> op so the
-    /// ≥ 0 clamp holds (overflow above the target is preserved, 7.14), and returns whether the value
+    /// ≥ 0 clamp holds (overflow above the target is preserved), and returns whether the value
     /// actually changed. A no-op, an unknown TaskId, or a non-Tracker block is left unwritten. Does NOT
     /// touch pins.
     /// </summary>
@@ -653,7 +645,7 @@ public abstract class BlockEntityScribeWritingStation : BlockEntity, IRotatable,
     /// <summary>
     /// Server-side: set a QuestObjective's live <see cref="ScribeBlock.CurrentQuantity"/> on the
     /// authoritative document by its stable <see cref="ScribeBlock.TaskId"/> — the write-through for the
-    /// client-side quest watcher (add-progression-framework-quest-objective-subtasks). Lock-free like
+    /// client-side quest watcher. Lock-free like
     /// <see cref="SetTrackerCurrentQuantityFromReader"/>, but gated on <see cref="ScribeBlock.IsQuestObjective"/>
     /// rather than <c>IsTracker</c>, and routed through <see cref="ScribeDocument.SetQuestObjectiveProgress"/>
     /// (clamps into <c>[0, TargetQuantity]</c> — never overflow-visible like a Tracker's count). A no-op, an
@@ -696,8 +688,8 @@ public abstract class BlockEntityScribeWritingStation : BlockEntity, IRotatable,
     }
 
     /// <summary>
-    /// Server-side: overwrite this instance's persisted Read View filter pill + collapsed-group set
-    /// (read-view-filter-and-collapse), driven by <see cref="ScribeSetReadViewStateMessage"/>. Lock-free
+    /// Server-side: overwrite this instance's persisted Read View filter pill + collapsed-group set,
+    /// driven by <see cref="ScribeSetReadViewStateMessage"/>. Lock-free
     /// like <see cref="SetTaskDoneFromReader"/> — a viewer preference, not a document edit — and, like the
     /// other per-instance state on this block, shared by every viewer rather than per-player.
     /// </summary>
@@ -719,8 +711,8 @@ public abstract class BlockEntityScribeWritingStation : BlockEntity, IRotatable,
 
     /// <summary>
     /// Server-side: move a task to the BOTTOM of the authoritative document by its stable
-    /// <see cref="ScribeBlock.TaskId"/> — the write-through for the <c>Sink</c> completion policy
-    /// (scribe-lectern-view-consistency). Lock-free like <see cref="SetTaskDoneFromReader"/>. Returns
+    /// <see cref="ScribeBlock.TaskId"/> — the write-through for the <c>Sink</c> completion policy.
+    /// Lock-free like <see cref="SetTaskDoneFromReader"/>. Returns
     /// whether the task moved (false when the id is unknown or the task is already last). Does NOT touch
     /// pins.
     /// </summary>
@@ -749,15 +741,14 @@ public abstract class BlockEntityScribeWritingStation : BlockEntity, IRotatable,
 
     /// <summary>Server-side: releases the lock, e.g. when the editing player closes the GUI or switches to read view.
     /// Idempotent + UID-guarded: only the current holder's own release clears it, so a redundant release
-    /// (e.g. release-on-every-close for a player who holds no lock) is a harmless no-op
-    /// (fix-transient-lectern-editor-lock).</summary>
+    /// (e.g. release-on-every-close for a player who holds no lock) is a harmless no-op.</summary>
     public void ReleaseLock(string playerUid)
     {
         if (lockHolderUid == playerUid)
         {
             lockHolderUid = null;
-            // Re-sync so other clients see the lock is free again and re-enable their editor affordance
-            // (fix-multiplayer-editor-lock §2.1). Also covers the disconnect path (OnPlayerDisconnect).
+            // Re-sync so other clients see the lock is free again and re-enable their editor affordance.
+            // Also covers the disconnect path (OnPlayerDisconnect).
             MarkDirty();
         }
     }
@@ -794,7 +785,7 @@ public abstract class BlockEntityScribeWritingStation : BlockEntity, IRotatable,
 
     /// <summary>
     /// Client-side: handles the server's reply to an open request or a mid-session mode-switch. A
-    /// single LibGUI dialog serves both views (migrate-editor-view-libgui), so a grant opens the
+    /// single LibGUI dialog serves both views, so a grant opens the
     /// dialog if needed and swaps its internal view mode; there is no second dialog to close. A
     /// post-autosave failure ack (editor already open, refused) surfaces the error and stays put.
     /// </summary>
@@ -821,7 +812,7 @@ public abstract class BlockEntityScribeWritingStation : BlockEntity, IRotatable,
 
             // A save-failed ack (autosave rejected because our lock was lost) is recoverable: ask the
             // open editor to re-request the lock and re-flush its unsaved edit rather than silently
-            // dropping it (task 8.6). Bounded internally so a lock held elsewhere can't spin forever.
+            // dropping it. Bounded internally so a lock held elsewhere can't spin forever.
             if (open && message.RefusalReason == "scribe:scribe-gui-save-failed"
                 && dialog!.HandleSaveFailed())
             {
@@ -836,8 +827,7 @@ public abstract class BlockEntityScribeWritingStation : BlockEntity, IRotatable,
             else
             {
                 // Editor access denied while the dialog is already open — e.g. a Back-from-settings that
-                // re-requested the editor lock but another player grabbed it first (add-settings-tab round
-                // 1). Fall back to the dialog's own granted view so it can't be stranded on a stale view;
+                // re-requested the editor lock but another player grabbed it first. Fall back to the dialog's own granted view so it can't be stranded on a stale view;
                 // the error toast above already told the player why. (The save-failed recovery returned
                 // earlier.)
                 dialog!.EnterGrantedView();
@@ -859,8 +849,7 @@ public abstract class BlockEntityScribeWritingStation : BlockEntity, IRotatable,
         {
             dialog!.EnterEditorMode(message.DocumentBytes);
             // Quick-add gesture (Shift+right-click): now that the editor holds the lock and the scratch is
-            // seeded, insert a fresh empty task at the top and focus its caret (add-unified-quick-add-
-            // interaction). Threaded through the round-trip because the dialog didn't exist at interact time.
+            // seeded, insert a fresh empty task at the top and focus its caret. Threaded through the round-trip because the dialog didn't exist at interact time.
             if (message.QuickAdd) dialog!.QuickAddTopTask();
         }
         else
