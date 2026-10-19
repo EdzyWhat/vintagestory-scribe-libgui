@@ -25,7 +25,7 @@ public sealed class GuiDialogScribeChalkboard : ScribeDialogBase
     /// asynchronously in <see cref="ScribeDialogBase.EnterEditorMode"/> (same as the Lectern).</summary>
     protected override bool EditorAccessIsAsync => true;
 
-    /// <summary>The chalkboard's brown-slate / chalk-light theme (add-chalkboard-block D3). Applied only when
+    /// <summary>The chalkboard's brown-slate / chalk-light theme. Applied only when
     /// Pixel-Art Display is on — the same rule the base and tablet use — so with it off the dialog follows
     /// the player's global theme.</summary>
     protected override ThemeData ResolveTheme(bool pixelArt) =>
@@ -57,7 +57,7 @@ public sealed class GuiDialogScribeChalkboard : ScribeDialogBase
 
     /// <summary>Outline a focused input in chalk-white (<see cref="ScribeTheme.ChalkboardInputFocusBorder"/>)
     /// instead of the theme's forest-green <c>Primary</c>: on the chalkboard <c>Primary</c> is the schoolroom
-    /// green that reads well as a button FILL but which the author disliked as an input border. Feeds both the
+    /// green that reads well as a button FILL but not as an input border. Feeds both the
     /// task rows (via <c>RowStyle</c> → <see cref="ScribeRowStyle.InputFocusBorderColor"/>) and the guestbook
     /// note field through the base seam. Only when Pixel-Art Display is on (chalkboard theme active); otherwise
     /// the global-theme default.</summary>
@@ -66,27 +66,27 @@ public sealed class GuiDialogScribeChalkboard : ScribeDialogBase
 
     /// <summary>Render the completed-task checkbox TICK in the same chalk-white as the row text
     /// (<see cref="ScribeTheme.ChalkboardInputFocusBorder"/>) instead of the theme's forest-green
-    /// <c>Primary</c>: the playtest verdict on §3/§6.4 was that a brighter-green tick still read as a
-    /// mismatched accent on the slate, so the tick should match the chalk text (refine-chalkboard §11). Only
+    /// <c>Primary</c>: a brighter-green tick reads as a
+    /// mismatched accent on the slate, so the tick matches the chalk text. Only
     /// the tick color changes — the box background/border stay the resolved chalkboard theme. Feeds the read,
     /// editor, frozen, and pinned rows via <c>RowStyle</c> → <see cref="ScribeRowStyle.CheckTickColor"/>. Only
     /// when Pixel-Art Display is on (chalkboard theme active); otherwise the global-theme tick is unchanged.</summary>
     private protected override Vector4? CheckTickColor(ColorScheme colors) =>
         modSystem.MySettings.PixelArtDisplay ? ScribeTheme.ChalkboardInputFocusBorder : base.CheckTickColor(colors);
 
-    /// <summary>Place the right-column nav buttons the Hard Border-group way (refine-nav-button-placement):
+    /// <summary>Place the right-column nav buttons the Hard Border-group way:
     /// CENTER the stack within its <c>SideColW</c> column when the column is at least as wide as a button, and
     /// align to the END when the column is narrower than a button. RenderFlex offsets an overflowing cross
     /// child by (columnW − childW): End → negative, so the button's right edge pins to the column's outer edge
     /// and the overflow spills LEFT (inward over the tasks margin) rather than off the window's right edge where
-    /// it was being clipped at small <c>PixelArtSize</c> (e.g. SideColW ≈ 0.073·400 ≈ 29px &lt; the ≈35px box).
+    /// it would be clipped at small <c>PixelArtSize</c> (e.g. SideColW ≈ 0.073·400 ≈ 29px &lt; the ≈35px box).
     /// The Pages surfaces keep the base's <c>Start</c> default; the chalkboard's hard-bordered slate art wants
     /// the buttons centered and never clipped at the frame edge. Unlike the theme/border seams this is NOT gated
     /// on Pixel-Art Display — the placement is a property of the chalkboard's fixed frame art, not its palette.</summary>
     private protected override CrossAxisAlignment NavButtonAlignment(float sideColW, float navBoxW) =>
         navBoxW > sideColW ? CrossAxisAlignment.End : CrossAxisAlignment.Center;
 
-    /// <summary>Word the task-cap-reached notice for a chalkboard rather than a tablet (refine-chalkboard):
+    /// <summary>Word the task-cap-reached notice for a chalkboard rather than a tablet:
     /// the chalkboard caps tasks at <see cref="Scribe.Core.ScribeDocumentPolicy.StandardMaxBlocks"/>
     /// (<see cref="BlockEntityScribeChalkboard.HostPolicy"/>), and the base's
     /// default notice says "A tablet holds…", which is wrong on a board. Route it to
@@ -94,7 +94,7 @@ public sealed class GuiDialogScribeChalkboard : ScribeDialogBase
     /// of theme.</summary>
     protected override string TaskCapReachedLangKey => "scribe:chalkboard-full";
 
-    /// <summary>Make the completion-policy picker's OPEN menu legible on the dark board (refine-chalkboard).
+    /// <summary>Make the completion-policy picker's OPEN menu legible on the dark board.
     /// The stock <see cref="DropdownStyle"/> paints the selected row's fill from <c>StateSelected</c> (a
     /// translucent forest-green <c>Primary</c> wash) and its selected LABEL from <c>SelectionAccentColor =
     /// Primary</c> — dark green text on a see-through dark-green tint over the dark slate, which is unreadable.
@@ -129,7 +129,7 @@ public sealed class GuiDialogScribeChalkboard : ScribeDialogBase
             OnClickSwitchToVisitors,
             boxShadows: NavButtonShadow,
             activeColor: IsVisitorsView ? ScribeRowConstants.NavActiveGuestbook : null);
-        // Gated on assignment history (refine-assignment-desk-inbox-ux 3.2 / inbox-tab spec): a player
+        // Gated on assignment history: a player
         // who has never received an assignment gets no Inbox nav button here — the Assignment Desk and
         // standalone Inbox block are unaffected, they always show their Inbox surface.
         if (modSystem.MyReceivedAssignments.Count > 0)
