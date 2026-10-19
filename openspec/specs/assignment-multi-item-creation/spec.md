@@ -2,7 +2,9 @@
 
 ## Purpose
 TBD - created by archiving change refine-assignment-desk-inbox-ux. Update Purpose after archive.
+
 ## Requirements
+
 ### Requirement: Staging an existing Scribe item on the Create Assignments tab
 The Create Assignments tab SHALL provide a single item slot that accepts any item whose
 `Collectible` is an `IScribeDocumentItem` (Notebook, Clockmaker's Notebook, Tablet) or a
@@ -73,6 +75,13 @@ Discard lifecycle, its own row in the recipient's Inbox. No bundling identifier 
 SHALL be introduced; declining or completing one row's assignment SHALL have no effect on any other
 row sent in the same batch.
 
+The recipient MAY be any player the target-player picker validly presents, including a currently
+offline player who has previously connected to the world. The server SHALL accept such a recipient
+and create the assignment(s) exactly as it would for a currently-online recipient — the recipient's
+current online/offline state SHALL NOT by itself cause the batch to be rejected. A batch SHALL only
+be rejected for a recipient the server cannot recognize as a real player at all (an unknown UID
+that is neither online nor previously known to the world).
+
 #### Scenario: A mixed-kind batch arrives as independent assignments
 - **WHEN** the player selects a Task row, a Tracker row, and a Link row from the staged document
   and sends them to one recipient
@@ -83,6 +92,19 @@ row sent in the same batch.
 - **WHEN** a recipient declines one assignment that was sent as part of a multi-row batch
 - **THEN** the other assignments sent in that same batch are unaffected and keep their own
   independent state
+
+#### Scenario: Sending to a currently-offline, previously-known recipient succeeds
+- **WHEN** the Assigner selects a target-player who has connected to the world before but is not
+  currently online, and sends a batch of selected rows to them
+- **THEN** the assignment(s) are created exactly as they would be for an online recipient — the
+  recipient sees them in their Inbox (Local Inboxes mode) or receives a Sealed Task Notice (Send a
+  Notice mode) once delivered, rather than the send silently doing nothing
+
+#### Scenario: Sending to an unrecognized target is still rejected
+- **WHEN** a send request names a target UID that is neither currently online nor previously known
+  to the world
+- **THEN** the server rejects the batch and creates no assignment records, exactly as before this
+  change
 
 ### Requirement: "Delete from source on send" is an optional, non-persisted, per-send choice
 The Create Assignments tab SHALL offer a "Delete from source on send" checkbox, defaulting to
@@ -107,4 +129,3 @@ left completely unmodified by the send.
 - **WHEN** the player checks "Delete from source on send", sends a batch, and then closes and
   reopens the Create Assignments tab (or the dialog)
 - **THEN** the checkbox shows unchecked again, regardless of its state on the previous send
-

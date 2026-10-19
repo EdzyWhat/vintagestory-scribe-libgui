@@ -61,15 +61,18 @@ to fill the dialog's width.
   neither button is pushed off the visible dialog area
 
 ### Requirement: Accept converts a Task Notice into a normal tracked assignment
-When the Assignee accepts a Task Notice, the system SHALL create a `ScribeAssignmentStore` record
-for it beginning in the Accepted state, placing the resulting task via the existing
-`AcceptedIntoLabel` bind-to-first-legal-item mechanism used by in-range assignments. From that
-point forward the assignment SHALL behave identically to an in-range assignment: Complete and
-Discard sync through the existing mechanism regardless of either party's distance or online
-status, and no further physical item is required.
+When a player holding a sealed Task Notice accepts it, the system SHALL create a
+`ScribeAssignmentStore` record for it beginning in the Accepted state, placing the resulting task
+via the existing `AcceptedIntoLabel` bind-to-first-legal-item mechanism used by in-range
+assignments. From that point forward the assignment SHALL behave identically to an in-range
+assignment: Complete and Discard sync through the existing mechanism regardless of either party's
+distance or online status, and no further physical item is required. If the accepting player is
+not the notice's recorded recipient, this Accept SHALL only proceed after the confirmation
+required by the redirect requirement below; the resulting record's target SHALL be the accepting
+player, not the original recipient.
 
 #### Scenario: Accepting a notice creates a normal Accepted record
-- **WHEN** the Assignee accepts a Task Notice
+- **WHEN** the recorded recipient accepts a Task Notice
 - **THEN** a `ScribeAssignmentStore` record is created for it in the Accepted state, placed via the
   same mechanism used for in-range assignments
 
@@ -142,3 +145,88 @@ ground, or in a slot) without needing to read its tooltip.
 - **WHEN** a blank Task Notice becomes sealed (or a sealed one's document is otherwise cleared)
 - **THEN** its rendered model updates to match its new state without requiring the item to be
   re-picked-up, re-equipped, or the game restarted
+
+### Requirement: Accepting a Task Notice not addressed to the holder requires explicit confirmation
+When a player holding a sealed Task Notice taps Accept and they are not the notice's recorded
+recipient, the system SHALL present a confirmation dialog naming the recorded recipient before
+proceeding, rather than silently rejecting the action or silently redirecting it. The
+confirmation SHALL be a standalone popup layered over the open Task Notice dialog, distinct from
+that dialog's own controls. Declining the confirmation SHALL leave the notice and its assignment
+record untouched. Confirming SHALL redirect the assignment to the confirming player and proceed
+with the normal Accept transition.
+
+#### Scenario: A non-recipient is warned before accepting
+- **WHEN** a player who is not a Task Notice's recorded recipient taps Accept
+- **THEN** a confirmation popup appears naming the recorded recipient and asking the player to
+  confirm before the notice is tracked and consumed
+
+#### Scenario: Declining the confirmation changes nothing
+- **WHEN** a non-recipient is shown the confirmation popup and does not confirm
+- **THEN** the Task Notice remains sealed and unconsumed, and no assignment record is changed
+
+#### Scenario: Confirming proceeds with Accept
+- **WHEN** a non-recipient confirms the popup
+- **THEN** the Accept transition proceeds as described in the Accept requirement above, with the
+  assignment redirected to the confirming player
+
+### Requirement: A redirected acceptance leaves a trace in the Assigner's Sent Assignment History
+When a Task Notice is accepted by a player who was not its recorded recipient, the assignment
+record SHALL retain who it was originally addressed to and when the redirect occurred. The
+Assigner's Sent Assignment History SHALL continue to show the record's state as Accepted, and its
+expanded detail SHALL include an additional line naming the original recipient and the player who
+actually accepted it instead. No other notification (toast, highlight, or similar) SHALL be sent
+to the Assigner beyond this passive history detail.
+
+#### Scenario: Sent Assignment History shows the redirect
+- **WHEN** the Assigner expands a Sent Assignment History row for a notice that was redirected
+- **THEN** the row's state still reads Accepted, and the expanded detail includes a line naming
+  both the original recipient and the player who accepted it
+
+#### Scenario: No active notification is sent for a redirect
+- **WHEN** a Task Notice is redirected and accepted
+- **THEN** the Assigner receives no toast or highlight about it — the Sent Assignment History
+  detail is the only trace
+
+### Requirement: The original recipient's Inbox silently loses a redirected notice
+Once a Task Notice's assignment has been redirected to a different player, the original
+recipient's Inbox SHALL no longer show any record for it. No ghost entry, read-only trace, or
+notification SHALL be shown to the original recipient.
+
+#### Scenario: The original recipient sees nothing after a redirect
+- **WHEN** a Task Notice originally addressed to a player is accepted by someone else instead
+- **THEN** the original recipient's Inbox shows no record of it, with no indication it was ever
+  redirected away from them
+
+### Requirement: A Task Notice is proactively consumed when its assignment resolves through another path
+When an assignment's Accept, Decline, Cancel, or Discard transition succeeds through a path other
+than that specific Task Notice's own Accept/Decline dialog (for example, the Inbox tab's action
+buttons on an Assignment Desk, Lectern, or Inbox block), the system SHALL search for and consume
+any sealed Task Notice still carrying that assignment, so it stops rendering and behaving as a
+live, actionable item. The search SHALL cover the same scope already used by the Task Notice
+proximity-discovery signal: the affected player's own carried inventory, plus dropped items and
+block-entity containers within that signal's existing scan radius of the affected player's current
+position. If no matching notice is found within that scope, the notice is left unchanged and
+continues to self-consume the next time a player interacts with it, exactly as before this
+requirement existed.
+
+#### Scenario: Accepting via the Inbox tab consumes a carried notice
+- **WHEN** a player is carrying the sealed Task Notice for an assignment and accepts that
+  assignment via the Inbox tab instead of opening the notice itself
+- **THEN** the carried notice is consumed as part of that Accept, and no longer appears in their
+  inventory
+
+#### Scenario: Declining via the Inbox tab consumes a nearby notice
+- **WHEN** a player declines an assignment via the Inbox tab while its sealed Task Notice sits in a
+  container within the proximity-discovery signal's scan radius of them
+- **THEN** that notice is consumed as part of the Decline
+
+#### Scenario: A notice out of scan range is left for lazy self-consumption
+- **WHEN** an assignment resolves via the Inbox tab while its sealed Task Notice is outside the
+  proximity-discovery signal's scan scope (for example, held by a different, distant player)
+- **THEN** the notice is left untouched by this requirement, and continues to consume itself the
+  next time a player opens it and taps Accept or Decline, unchanged from prior behavior
+
+#### Scenario: No matching notice exists
+- **WHEN** an assignment resolves via the Inbox tab and no sealed Task Notice for it exists anywhere
+  in scope (it was already consumed earlier)
+- **THEN** nothing happens beyond the normal state transition — this requirement is a no-op

@@ -7,7 +7,9 @@ per-player settings surface: a gear-opened, host-agnostic settings widget that e
 dialog's central content region (or the HUD), groups preferences into Behavior and Appearance sections,
 exposes one labeled input control per preference, writes through immediately with live preview, and
 surfaces localized helptext.
+
 ## Requirements
+
 ### Requirement: A gear control opens the settings surface
 The system SHALL provide a gear control that opens Scribe's per-player settings surface. The gear
 SHALL be present in the Lectern dialog's chrome (available from both the read and editor views) and on
@@ -337,25 +339,33 @@ footer Add control, Shift+right-click quick-add, and Handbook Add to Scribe.
 - **WHEN** the player selects Bottom
 - **THEN** subsequent document-level creates append until they change the setting again
 
-### Requirement: Quest Accept and Completion policies are Settings pickers, gated on VS Quest
-When VS Quest is installed and enabled, the Behavior section of Scribe Settings SHALL include two
-independent dropdowns — Quest Accept Policy and Quest Completion Policy — each offering Always,
-Never, and Prompt, each defaulting to Prompt, each with localized helptext describing what it
-governs (per the `quest-auto-detect` capability). When VS Quest is not installed, neither row
-SHALL appear.
+### Requirement: Quest Accept and Completion policies are Settings pickers, gated on an installed quest backend
+When a supported quest backend (VS Quest, or Progression Framework) is installed and enabled, the
+Behavior section of Scribe Settings SHALL include two independent dropdowns — Quest Accept Policy and
+Quest Completion Policy. Quest Accept Policy SHALL offer four options: Always, Never, Prompt via HUD,
+and Prompt via Popup, defaulting to Prompt via HUD. Quest Completion Policy SHALL offer three options
+— Always, Never, and Prompt — defaulting to Prompt, unchanged from before. Each dropdown SHALL have
+localized helptext describing what it governs (per the `quest-auto-detect` and
+`quest-accept-notification-style` capabilities). When no supported quest backend is installed, neither
+row SHALL appear.
 
-#### Scenario: Quest policy rows appear only with VS Quest installed
-- **WHEN** a player with vsquest installed opens Scribe Settings
-- **THEN** the Behavior section shows the Quest Accept Policy and Quest Completion Policy
-  dropdowns, both defaulting to Prompt
+#### Scenario: Quest policy rows appear only with a supported backend installed
+- **WHEN** a player with a supported quest backend installed opens Scribe Settings
+- **THEN** the Behavior section shows the Quest Accept Policy dropdown (four options, defaulting to
+  Prompt via HUD) and the Quest Completion Policy dropdown (three options, defaulting to Prompt)
 
-#### Scenario: Quest policy rows are absent without VS Quest
-- **WHEN** a player without vsquest installed opens Scribe Settings
+#### Scenario: Quest policy rows are absent without a supported backend
+- **WHEN** a player with no supported quest backend installed opens Scribe Settings
 - **THEN** neither Quest policy row appears anywhere in the settings surface
 
 #### Scenario: The two policies are set independently
-- **WHEN** the player changes Quest Accept Policy to Always
+- **WHEN** the player changes Quest Accept Policy to Prompt via Popup
 - **THEN** Quest Completion Policy is unchanged and continues to write through independently
+
+#### Scenario: Prompt via Popup is selectable and persists
+- **WHEN** the player selects Prompt via Popup for Quest Accept Policy
+- **THEN** the selection persists and subsequent detected quest accepts render via the center modal
+  (subject to the vanilla-dialog guard)
 
 ### Requirement: A control opens LibGUI's own theme picker
 The settings surface's Window Appearance section SHALL include a labeled button that, when
@@ -374,4 +384,3 @@ setting on the surface.
 - **WHEN** the theme-picker button renders its label and helptext
 - **THEN** both strings are resolved through the localization assets rather than hardcoded
   literals
-

@@ -326,6 +326,7 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
       out of B's inventory (e.g. into a chest); as B, complete the pinned task from the HUD or
       Pin Tab — confirm both B's Inbox and A's Sent Assignment History show Completed.
       *(fix-assignment-completion-doc-resolution 1.4)*
+      - **Backlogged 2026-10-19**: change closed out before archive; in-game verification not yet done.
 
 ## assignment-lifecycle-bug-fixes
 
@@ -886,3 +887,47 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
 - [x] `000000cb` **No change with Immersive Mouse Mode off.** Turn it off and open a Notebook, Tablet, and
       Lectern — confirm they open and behave as before. *(pin-carried-dialogs-in-immersive-mode 2.2)*
       - **Confirmed 2026-10-07** (user playtest): "Reported as "old interfaces unchanged"."
+
+## fix-offline-assignment-send-validation
+
+> Sending an assignment to a known-but-offline player now works: Task Notice delivery produces a Sealed notice, Local Inboxes delivery lands in the recipient's Inbox on reconnect, and notice-delivered assignments no longer trigger ambient block particles.
+
+- [ ] `000000cc` **Check offline send with Send a Notice.** Host a world open to LAN (or use a dedicated server), have a second player join once and disconnect, restart the server process, open the Assignment Desk, pick the now-offline player with "Send a Notice" delivery, and send a batch — confirm a Sealed Task Notice appears in the Desk's output slot (previously nothing was produced).
+      *(fix-offline-assignment-send-validation 4.1)*
+      - **Backlogged 2026-10-19**: change closed out before archive; in-game verification not yet done.
+- [ ] `000000cd` **Check offline send with Local Inboxes.** Repeat the offline-player send above with "Local Inboxes" delivery — confirm the recipient sees the new assignment in their Inbox once they reconnect.
+      *(fix-offline-assignment-send-validation 4.2)*
+      - **Backlogged 2026-10-19**: change closed out before archive; in-game verification not yet done.
+- [ ] `000000ce` **Check notice delivery suppresses ambient particles.** Send yourself (or a second player) a Task Notice via "Send a Notice", staying within particle range of a Desk/Lectern/Scriptorium/Chalkboard/Inbox throughout — confirm that once the sealed notice lands in inventory the block's ambient particle does NOT start. Then, without opening an Inbox, walk near a block while a separate Local-Inboxes-delivered assignment is still unseen — confirm that block's particle STILL fires as before.
+      *(fix-offline-assignment-send-validation 7.2)*
+      - **Backlogged 2026-10-19**: change closed out before archive; in-game verification not yet done.
+
+## persist-known-players-for-assignment
+
+> Known players persist across world reloads so the Assignment Desk picker still lists players who joined earlier but are offline.
+
+- [ ] `000000cf` **Check known player survives world reload.** In a singleplayer world open to LAN, have a second client join and disconnect, close and reopen the world — confirm that player appears in the Assignment Desk's picker.
+      *(persist-known-players-for-assignment 6.1)*
+      - **Backlogged 2026-10-19**: change closed out before archive; in-game verification not yet done.
+
+## consume-tasknotice-on-inbox-accept
+
+> Accepting an assignment via the Inbox tab consumes a matching sealed Task Notice still held in inventory.
+
+- [ ] `000000d0` **Check notice vanishes on Inbox accept.** Seal a notice, then accept the same assignment via the Inbox tab while still holding the notice — confirm the notice disappears from inventory immediately, with no further interaction needed.
+      *(consume-tasknotice-on-inbox-accept 4.2)*
+      - **Backlogged 2026-10-19**: change closed out before archive; in-game verification not yet done.
+
+## add-task-notice-redirect-confirm
+
+> A non-recipient tapping Accept on a Task Notice gets a confirm popup before the assignment is redirected to them.
+
+- [ ] `000000d1` **Check Cancel leaves notice untouched.** Hold a sealed notice addressed to another player, tap Accept, then Cancel on the popup — confirm the notice stays sealed and unconsumed, no packet is sent, and the notice dialog is still open. Then repeat and Confirm — confirm it proceeds exactly like the recipient Accept path (destination placement, item consumed).
+      *(add-task-notice-redirect-confirm 3.4)*
+      - **Backlogged 2026-10-19**: change closed out before archive; in-game verification not yet done.
+- [ ] `000000d2` **Check redirect trace and Inbox silence.** After a confirmed redirect, check the original recipient's Inbox — confirm it shows no record at all of the redirected notice. Check the redirected-to player's own Inbox — confirm it shows the new detail line naming both players.
+      *(add-task-notice-redirect-confirm 4.3)*
+      - **Backlogged 2026-10-19**: change closed out before archive; in-game verification not yet done.
+- [ ] `000000d3` **Check full redirect flow.** Run: recipient Accept (unchanged), recipient Decline (unchanged), non-recipient Decline (silently ignored), non-recipient Accept with Cancel (no-op), non-recipient Accept with Confirm (redirect succeeds, history trace visible, original recipient's Inbox stays silent).
+      *(add-task-notice-redirect-confirm 5.2)*
+      - **Backlogged 2026-10-19**: change closed out before archive; in-game verification not yet done.

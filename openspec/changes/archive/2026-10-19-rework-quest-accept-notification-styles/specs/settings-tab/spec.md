@@ -1,3 +1,8 @@
+## RENAMED Requirements
+
+- FROM: `### Requirement: Quest Accept and Completion policies are Settings pickers, gated on VS Quest`
+- TO: `### Requirement: Quest Accept and Completion policies are Settings pickers, gated on an installed quest backend`
+
 ## MODIFIED Requirements
 
 ### Requirement: Quest Accept and Completion policies are Settings pickers, gated on an installed quest backend
