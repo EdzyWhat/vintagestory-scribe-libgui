@@ -24,12 +24,10 @@ public sealed class ScribeNotebookSaveMessage
     [ProtoMember(3)]
     public byte[]? HistoryBytes { get; set; }
 
-    /// <summary>Client → server only: the <c>InventoryID</c> of the slot the dialog was actually editing,
-    /// so the server writes the document back to the EXACT chosen slot rather than the player's active hand.
-    /// The Handbook "Add to Scribe" flow can open a carried book that is NOT the in-hand item (e.g. while a
-    /// read-only tablet sits in the hand), so addressing the save by the active hand would misroute the write
-    /// onto that other item. Null on
-    /// server→client echoes and on legacy clients, where the server falls back to the active-hand slot.</summary>
+    /// <summary>Client → server only: the <c>InventoryID</c> of the slot the dialog was editing, so the
+    /// server writes to that exact slot rather than the active hand (the Handbook "Add to Scribe" flow can
+    /// open a carried book that is not in hand). Null on echoes and legacy clients, where the server falls
+    /// back to the active-hand slot.</summary>
     [ProtoMember(4)]
     public string? TargetInventoryId { get; set; }
 
