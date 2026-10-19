@@ -9,9 +9,8 @@ using Vintagestory.API.Util;
 namespace Scribe;
 
 /// <summary>
-/// A player-carried Notebook item. Right-click opens the full Scribe dialog (Read / Editor /
-/// Pinned / Settings) for the document stored in this specific item stack. No Guestbook tab.
-/// Owner-only: only the player currently holding the item can edit it.
+/// A player-carried Notebook item. Right-click opens the Scribe dialog for the document stored in this
+/// ItemStack. No Guestbook tab; owner-only.
 /// </summary>
 public class ItemScribeNotebook : Item, IScribeDocumentItem
 {
@@ -36,17 +35,15 @@ public class ItemScribeNotebook : Item, IScribeDocumentItem
                 HotKeyCode = "shift",
                 MouseButton = EnumMouseButton.Right,
             },
-            // The Ctrl+Shift "place on ground" hint comes from the base GroundStorable behavior itself
-            // (its JSON has ctrlKey:true), so we don't add a redundant one here.
+            // The Ctrl+Shift "place on ground" hint comes from the base GroundStorable behavior.
         });
     }
 
     public override WorldInteraction[] GetHeldInteractionHelp(ItemSlot inSlot)
         => _interactions.Append(base.GetHeldInteractionHelp(inSlot));
 
-    /// <summary>Append the stored document's title (quoted, or an untitled placeholder) to the
-    /// held/inventory tooltip. A never-opened notebook carries no document attribute yet, so
-    /// <see cref="ScribeDocumentAttributes.TryReadFrom"/> returns false and the placeholder shows.</summary>
+    /// <summary>Appends the stored document's title (or an untitled placeholder) to the tooltip. A never-opened
+    /// notebook has no document attribute, so the placeholder shows.</summary>
     public override void GetHeldItemInfo(ItemSlot inSlot, StringBuilder dsc, IWorldAccessor world, bool withDebugInfo)
     {
         base.GetHeldItemInfo(inSlot, dsc, world, withDebugInfo);
@@ -61,10 +58,8 @@ public class ItemScribeNotebook : Item, IScribeDocumentItem
         EntitySelection entitySel, bool firstEvent, ref EnumHandHandling handling)
     {
         if (!firstEvent) return;
-        // Ctrl+Shift+right-click: let base run CollectibleBehaviors (including GroundStorable) for ground
-        // placement, following the vanilla spear convention. The base ground-storable gate keys on
-        // ShiftKey ONLY, so requiring BOTH modifiers here means a
-        // Shift-only press never reaches it — no double-action with the quick-add branch below.
+        // Ctrl+Shift+right-click: ground placement via base. The base ground-storable gate keys on ShiftKey
+        // ONLY, so requiring both modifiers keeps a Shift-only press from double-acting with quick-add.
         if (byEntity.Controls.CtrlKey && byEntity.Controls.ShiftKey)
         {
             base.OnHeldInteractStart(slot, byEntity, blockSel, entitySel, firstEvent, ref handling);
@@ -73,8 +68,7 @@ public class ItemScribeNotebook : Item, IScribeDocumentItem
         if (byEntity.Api.Side != EnumAppSide.Client) return;
         if (byEntity.Api is not ICoreClientAPI capi) return;
 
-        // Shift+right-click (no Ctrl): unified quick-add — open the editor with a fresh empty task at the
-        // top and the caret focused. Plain right-click opens Read.
+        // Shift+right-click (no Ctrl): quick-add with a fresh empty top task focused. Plain right-click opens Read.
         handling = EnumHandHandling.PreventDefault;
         OpenNotebookDialog(slot, capi, quickAdd: byEntity.Controls.ShiftKey);
     }
@@ -85,7 +79,6 @@ public class ItemScribeNotebook : Item, IScribeDocumentItem
         if (api.Side != EnumAppSide.Server) return;
         if (outputSlot.Itemstack is null) return; // always set for a crafting output; guard is defensive
 
-        // Resolve the crafting player from the inventory's opener set.
         var playerUid = outputSlot.Inventory.openedByPlayerGUIds.FirstOrDefault();
         var playerName = (playerUid is not null
             ? (api.World.PlayerByUid(playerUid) as IServerPlayer)?.PlayerName
@@ -104,9 +97,7 @@ public class ItemScribeNotebook : Item, IScribeDocumentItem
         outputSlot.Itemstack.Attributes.SetBytes("scribeHistory", history.Serialize());
     }
 
-    /// <summary>Open this carried Notebook's Scribe dialog for the Handbook "Add to Scribe" fallback.
-    /// Delegates to the same <see cref="OpenNotebookDialog"/> the right-click
-    /// path uses, so host registration, last-opened tracking, and the server pickup notice are identical.</summary>
+    /// <summary>Opens this Notebook's dialog for the Handbook "Add to Scribe" fallback, same path as right-click.</summary>
     public ScribeDialogBase? OpenScribeDialog(ItemSlot slot, ICoreClientAPI capi)
         => OpenNotebookDialog(slot, capi);
 
@@ -115,19 +106,15 @@ public class ItemScribeNotebook : Item, IScribeDocumentItem
         var host = new NotebookHost(slot);
         var modSystem = capi.ModLoader.GetModSystem<ScribeModSystem>();
         modSystem.RegisterHost(host);
-        // Tell the server we opened this notebook so it can record the one-time PickedUp entry
-        // (opening the dialog is client-only; the server never sees it otherwise).
+        // Tell the server we opened this notebook (it never sees client-only dialog opens) for the one-time PickedUp entry.
         modSystem.NotifyServerNotebookOpened(host.Document.DocId, slot);
-        // Remember this as the last-opened Scribe item so a later Handbook "Add to Scribe" click with no
-        // dialog open re-targets it rather than an arbitrary carried item.
+        // Remember as the last-opened Scribe item so a later Handbook "Add to Scribe" click re-targets it.
         modSystem.NoteScribeItemDialogOpened(host.Document.DocId);
 
         var dialog = new GuiDialogScribeNotebook(host, capi);
         dialog.OnClosed += () => modSystem.UnregisterHost(host.Document.DocId);
         dialog.TryOpen();
-        // Quick-add (Shift+right-click): the Notebook grants editor access immediately (no server lock),
-        // so enter the editor and drop a fresh empty top task with the caret focused — right after TryOpen
-        // has built the tree.
+        // Quick-add: the Notebook grants editor access immediately (no server lock); runs right after TryOpen builds the tree.
         if (quickAdd)
         {
             dialog.EnterEditorMode(ScribeDocumentCodec.Serialize(host.Document));

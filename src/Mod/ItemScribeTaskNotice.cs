@@ -9,19 +9,11 @@ using Vintagestory.API.Util;
 namespace Scribe;
 
 /// <summary>
-/// The Task Notice item (`task-notice-item` capability) — a physical, hand-carried delivery path for an
-/// out-of-range or offline assignment target. A BLANK notice carries no <see cref="ScribeDocument"/> (a
-/// plain, stackable crafting-supply item, per <see cref="ScribeDocumentAttributes"/>'s existing
-/// attribute-presence convention); a SEALED notice's document holds one <see cref="ScribeBlock"/> per
-/// assigned row from the send that populated it (each carrying its own <see cref="ScribeAssignment"/> in
-/// the Unaccepted state — the physical item IS the pending record, per the `assignment-state-machine`
-/// capability's notice-originated-lifecycle requirement), and never stacks (its document bytes are
-/// unique per stack, so the engine's own attribute-equality check already refuses to merge it with any
-/// other stack — no override needed, exactly like every other Scribe document item).
-///
-/// <para>Deliberately NOT writeable (<see cref="IsSlotWriteable"/> always false): a Task Notice is never
-/// a valid Accept-placement target (<c>ScribeAcceptCandidates</c> filters on writeability) nor a Handbook
-/// "Add to Scribe" append target — it is the SOURCE of a pending assignment, never a destination.</para>
+/// The Task Notice item, a physical delivery path for an out-of-range or offline assignment target. A BLANK
+/// notice carries no <see cref="ScribeDocument"/> (a plain stackable supply item); a SEALED notice holds one
+/// <see cref="ScribeBlock"/> per assigned row, each in the Unaccepted state, and never stacks (its unique
+/// document bytes already defeat the engine's attribute-equality merge). Never writeable: it is the SOURCE of
+/// a pending assignment, never an Accept or Handbook-append destination.
 /// </summary>
 public sealed class ItemScribeTaskNotice : Item, IScribeDocumentItem
 {
@@ -46,10 +38,8 @@ public sealed class ItemScribeTaskNotice : Item, IScribeDocumentItem
         });
     }
 
-    /// <summary>Swaps the rendered mesh between the blank and filled/sealed shapes based on
-    /// <see cref="IsSealed"/>, so a stack's model updates the instant its document is populated or
-    /// cleared. Each variant's mesh is tesselated once and cached (see
-    /// <c>CollectibleBehaviorCustomTongedShape</c> for the precedent this follows).</summary>
+    /// <summary>Swaps the mesh between blank and sealed shapes based on <see cref="IsSealed"/>; each variant is
+    /// tesselated once and cached.</summary>
     public override void OnBeforeRender(ICoreClientAPI capi, ItemStack itemstack, EnumItemRenderTarget target,
         ref ItemRenderInfo renderinfo)
     {
@@ -81,14 +71,11 @@ public sealed class ItemScribeTaskNotice : Item, IScribeDocumentItem
     public override WorldInteraction[] GetHeldInteractionHelp(ItemSlot inSlot)
         => IsSealed(inSlot.Itemstack) ? _interactions.Append(base.GetHeldInteractionHelp(inSlot)) : base.GetHeldInteractionHelp(inSlot);
 
-    /// <summary>Internal (not private) so <see cref="ScribeDocumentSlot.BuildSummaryCard"/> can reuse this
-    /// same check for its Task-Notice hover-card exception rather than re-deriving it.</summary>
+    /// <summary>Internal so <see cref="ScribeDocumentSlot.BuildSummaryCard"/> reuses it for its Task-Notice exception.</summary>
     internal static bool IsSealed(ItemStack? stack) =>
         stack is not null && ScribeDocumentAttributes.TryReadFrom(stack, out var doc) && doc is not null && doc.Blocks.Count > 0;
 
-    /// <summary>Append the notice's status to the held/inventory tooltip: a blank notice gets an explicit
-    /// "unassigned" indicator (it's otherwise indistinguishable from a sealed one at a glance in a
-    /// stack/slot), a sealed notice gets its recipient.</summary>
+    /// <summary>Appends an "unassigned" line for a blank notice, or the recipient for a sealed one.</summary>
     public override void GetHeldItemInfo(ItemSlot inSlot, StringBuilder dsc, IWorldAccessor world, bool withDebugInfo)
     {
         base.GetHeldItemInfo(inSlot, dsc, world, withDebugInfo);
@@ -110,8 +97,7 @@ public sealed class ItemScribeTaskNotice : Item, IScribeDocumentItem
         EntitySelection entitySel, bool firstEvent, ref EnumHandHandling handling)
     {
         if (!firstEvent) return;
-        // A blank notice has nothing to review — fall through to base (ground placement etc.), matching
-        // every other Scribe item's Ctrl+Shift convention. Only a sealed notice opens the review dialog.
+        // A blank notice has nothing to review: fall through to base (ground placement etc.).
         if (!IsSealed(slot.Itemstack))
         {
             base.OnHeldInteractStart(slot, byEntity, blockSel, entitySel, firstEvent, ref handling);
@@ -124,14 +110,10 @@ public sealed class ItemScribeTaskNotice : Item, IScribeDocumentItem
         OpenTaskNoticeDialog(slot, capi);
     }
 
-    /// <summary>Handbook "Add to Scribe" fallback entry point (<see cref="IScribeDocumentItem"/>). In
-    /// practice never reached — <see cref="IsSlotWriteable"/> is always false, so the Handbook resolver
-    /// skips this item before it would call here — but implemented for interface completeness/consistency
-    /// with every other Scribe document item.</summary>
+    /// <summary>Never reached in practice (<see cref="IsSlotWriteable"/> is false, so the Handbook resolver skips this item).</summary>
     public ScribeDialogBase? OpenScribeDialog(ItemSlot slot, ICoreClientAPI capi) => null;
 
-    /// <summary>A Task Notice is never an Accept-placement or Handbook-append target — it is the SOURCE
-    /// of a pending assignment, never a destination (see class remarks).</summary>
+    /// <summary>Never writeable: a Task Notice is the SOURCE of a pending assignment, not a destination.</summary>
     public bool IsSlotWriteable(ItemSlot slot) => false;
 
     private void OpenTaskNoticeDialog(ItemSlot slot, ICoreClientAPI capi)

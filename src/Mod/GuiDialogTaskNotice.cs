@@ -21,39 +21,23 @@ using Vintagestory.API.Config;    // Lang
 namespace Scribe;
 
 /// <summary>
-/// The Task Notice's held-item review dialog (`task-notice-item` capability). A minimal standalone
-/// window — NOT a <see cref="ScribeDialogBase"/> subclass, since that base class's
-/// <see cref="IScribeDocumentHost"/> contract (editor write-through, lock, guestbook) is built for a real
-/// editable document surface and doesn't fit a locked, one-shot Accept/Decline letter. Reuses <see cref="ScribeReadContent"/> for the
-/// body (read-only, completion/pin inert) exactly as every other Scribe surface renders its Task/Tracker/
-/// Link/Craft rows, and mirrors <see cref="ScribeInboxRow"/>'s Accept/Decline button shapes for the footer.
-///
-/// <para>The notice's document is a frozen snapshot read once at construction: it never changes while
-/// this dialog is open (Accept/Decline both consume the item and close the dialog), so there is no
-/// server-resync path to react to, unlike every editable Scribe surface.</para>
-///
-/// <para><b>Chrome:</b> a custom title bar + 3-column inset frame
-/// visually matching <see cref="ScribeDialogBase.Layout"/>'s pattern (drag band, close button, symmetric
-/// side-margin columns), backed by the <see cref="ScribeBackdrops.TaskNoticePage"/> parchment/scroll
-/// backdrop rather than stock LibGUI <c>WindowFrame</c> chrome. This code is local to this
-/// file, deliberately not shared with <see cref="ScribeDialogBase"/> (the two surfaces' underlying
-/// contracts, live host vs. frozen snapshot, differ enough that sharing would need its own abstraction
-/// layer anyway). Sized from the parchment art's own aspect ratio and a fraction of the player's Pixel
-/// Art Size setting, so the dialog reads noticeably smaller than a full Notebook/Lectern page.</para>
+/// The Task Notice's held-item review dialog: a minimal standalone window, NOT a <see cref="ScribeDialogBase"/>
+/// subclass (that base's host contract is built for an editable document, not a locked one-shot Accept/Decline
+/// letter). Reuses <see cref="ScribeReadContent"/> for the read-only body and mirrors
+/// <see cref="ScribeInboxRow"/>'s button shapes. The document is a frozen snapshot read once at construction.
+/// The title bar and 3-column inset frame mirror <see cref="ScribeDialogBase.Layout"/> but are local to this
+/// file, over the <see cref="ScribeBackdrops.TaskNoticePage"/> art, sized from its aspect ratio and a fraction of
+/// the Pixel Art Size setting.
 /// </summary>
 public sealed class GuiDialogTaskNotice : GuiBase
 {
-    /// <summary>The parchment PNG's own aspect ratio (<c>H / W</c>) — a taller-than-wide scroll, unlike
-    /// the notebook/lectern family's near-square art.</summary>
+    /// <summary>The parchment PNG's aspect ratio (<c>H / W</c>); a taller-than-wide scroll.</summary>
     private const float NoticeAspectH = 130f / 105f;
 
-    /// <summary>Tuned via <c>tools/task-notice-layout/index.html</c>: the notice reads noticeably
-    /// smaller than a full Notebook/Lectern page — ~2/3 of the player's Pixel Art Size setting.</summary>
+    /// <summary>Fraction of the player's Pixel Art Size setting, so the notice reads smaller than a full page.</summary>
     private const float SizeScale = 0.667f;
 
-    /// <summary>Proportions tuned via <c>tools/task-notice-layout/index.html</c> for this dialog's
-    /// taller-than-wide scroll art (the default <see cref="ScribeLayoutProportions"/> is authored for the
-    /// Lectern/Notebook's near-square page).</summary>
+    /// <summary>Proportions for the taller-than-wide scroll art (the default targets the near-square Lectern page).</summary>
     private static readonly ScribeLayoutProportions NoticeProportions = ScribeLayoutProportions.Default with
     {
         TitleBarFrac = 0.128f,
@@ -84,24 +68,18 @@ public sealed class GuiDialogTaskNotice : GuiBase
 
     public override string DialogCode => "scribetasknotice";
 
-    /// <summary>Matches the settings window's band (ScribeSettingsDialog) — a held-item review dialog
-    /// can open over a Lectern/Notebook/Tablet just as the settings gear can.</summary>
+    /// <summary>Matches the settings window's draw-order band, since it can open over a Lectern/Notebook/Tablet.</summary>
     public override double DrawOrder => 0.2;
 
-    /// <summary>Computed inline (no <see cref="IScribeDocumentHost.GetLayout"/> — there is no host):
-    /// <see cref="NoticeAspectH"/> fixed at the parchment art's own ratio, <c>W</c> derived from the
-    /// player's Pixel Art Size setting scaled by <see cref="SizeScale"/>, proportions from
-    /// <see cref="NoticeProportions"/>.</summary>
+    /// <summary>Computed inline (there is no host): fixed aspect, <c>W</c> from Pixel Art Size times <see cref="SizeScale"/>.</summary>
     private ScribeLayout ComputeLayout()
     {
         float w = modSystem.MySettings.PixelArtSize * SizeScale;
         return new ScribeLayout(w, NoticeAspectH, NoticeProportions);
     }
 
-    /// <summary>Window size applied once at open, derived from the same <c>W</c>/<c>H</c> the body layout
-    /// uses. <see cref="WindowConfig.DragHandleHeight"/> covers the whole custom title band so
-    /// <see cref="GuiBase"/>'s own drag handling moves the window — no grip-drag reimplementation needed,
-    /// since this title bar has no tooltip glyph to swallow the click.</summary>
+    /// <summary>Window size applied once at open. The drag handle covers the whole title band, so <see cref="GuiBase"/>
+    /// moves the window itself (no tooltip glyph swallows the click).</summary>
     protected override WindowConfig CreateWindowConfig()
     {
         var layout = ComputeLayout();
@@ -188,8 +166,7 @@ public sealed class GuiDialogTaskNotice : GuiBase
             child: ScribeTextDefaults.WrapChrome(WrapBackdrop(layout, BuildOuterArtBox(layout, colors, centerColumn))));
     }
 
-    /// <summary>Mirrors <see cref="ScribeDialogBase.Layout.WrapBackdrop"/>'s pattern (missing-asset
-    /// flat-color fallback included) for this standalone dialog's own backdrop spec.</summary>
+    /// <summary>Mirrors <see cref="ScribeDialogBase.Layout.WrapBackdrop"/> (including the flat-color fallback).</summary>
     private Widget WrapBackdrop(ScribeLayout layout, Widget tree)
     {
         if (!modSystem.MySettings.PixelArtDisplay)
@@ -205,8 +182,7 @@ public sealed class GuiDialogTaskNotice : GuiBase
         return new ScribeResetPaintColor(new Container(style: style, child: tree));
     }
 
-    /// <summary>The parchment art's contents: the draggable title band over the 3-column inset frame,
-    /// mirroring <see cref="ScribeDialogBase.Layout.BuildOuterArtBox"/>'s shape.</summary>
+    /// <summary>The draggable title band over the 3-column inset frame.</summary>
     private Widget BuildOuterArtBox(ScribeLayout layout, ColorScheme colors, Widget centerColumn) =>
         new Column(
             crossAxisAlignment: CrossAxisAlignment.Center,
@@ -217,11 +193,8 @@ public sealed class GuiDialogTaskNotice : GuiBase
                 BuildSectionInnerBox(layout, centerColumn),
             });
 
-    /// <summary>A bespoke title bar (title text + close button), matching
-    /// <see cref="ScribeDialogBase.Layout.BuildTitleBar"/>'s visual style but simplified — no pencil, no
-    /// expand/collapse-all, no separate grip glyph (the whole band is already the drag zone via
-    /// <see cref="WindowConfig.DragHandleHeight"/>, and there is no tooltip glyph here to swallow a
-    /// press the way <see cref="ScribeDialogBase"/>'s grip tooltip does).</summary>
+    /// <summary>Title text + close button; simplified from <see cref="ScribeDialogBase.Layout.BuildTitleBar"/>
+    /// (the whole band is already the drag zone).</summary>
     private Widget BuildTitleBar(ScribeLayout layout, ColorScheme colors)
     {
         float titleFont = ScribeRowConstants.BaseWindowFontSize
@@ -260,9 +233,7 @@ public sealed class GuiDialogTaskNotice : GuiBase
                         child: titleRow))));
     }
 
-    /// <summary>The 3-column inset frame (side margins sized proportionally to the art width, matching
-    /// <see cref="ScribeDialogBase.Layout.BuildSectionInnerBox"/>'s proportions) so content sits inset
-    /// from the parchment art's border instead of touching its edge.</summary>
+    /// <summary>The 3-column inset frame, so content sits inside the art's border.</summary>
     private Widget BuildSectionInnerBox(ScribeLayout layout, Widget centerColumn) =>
         new SizedBox(
             width: layout.InnerW,
@@ -279,12 +250,8 @@ public sealed class GuiDialogTaskNotice : GuiBase
 
     private string ResolvePlayerName(string uid) => modSystem.ResolvePlayerName(uid);
 
-    /// <summary>Decline + Accept. The multi-candidate picker — when shown — renders as its OWN
-    /// full-width row ABOVE the Decline/Accept row, not stacked inside one of that row's cells (a
-    /// <c>Column</c> squeezed into the leftover width next to Decline could push both buttons off the
-    /// visible dialog area). Decline/Accept both
-    /// stay natural-width (a <c>Row</c> never stretches its children's cross-axis width) regardless of
-    /// which Accept shape is showing.</summary>
+    /// <summary>Decline + Accept. The multi-candidate picker renders as its own full-width row ABOVE the buttons:
+    /// a Column squeezed beside Decline could push both buttons off the dialog.</summary>
     private Widget BuildActionSection(ColorScheme colors, ThemeData theme)
     {
         var candidates = acceptCandidates;
@@ -350,10 +317,8 @@ public sealed class GuiDialogTaskNotice : GuiBase
                 new TextStyle { FontSize = 12, Color = colors.OnSurface, SoftWrap = true })),
             useGlobalOverlay: true);
 
-    /// <summary>If the acting player isn't the notice's recorded recipient, warns them via
-    /// <see cref="GuiDialogTaskNoticeRedirectConfirm"/> before sending anything — confirming redirects
-    /// the assignment to them; Cancel leaves the notice untouched. When the recipient matches, the
-    /// action is sent immediately.</summary>
+    /// <summary>Warns via <see cref="GuiDialogTaskNoticeRedirectConfirm"/> before sending when the acting player
+    /// is not the recorded recipient (confirming redirects the assignment); otherwise sends immediately.</summary>
     private void AcceptOnto(ScribeAcceptCandidate candidate)
     {
         var recordedRecipientUid = document.Blocks.FirstOrDefault()?.Assignment?.TargetPlayerUid;

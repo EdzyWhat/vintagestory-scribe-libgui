@@ -5,9 +5,8 @@ using Scribe.Core;
 namespace Scribe;
 
 /// <summary>
-/// Per-item proportions that parameterise <see cref="ScribeLayout"/>. All values are fractions of
-/// the outer box dimensions. The <see cref="Default"/> singleton reproduces the Lectern's v1 layout.
-/// A future item overrides only the fields it needs: <c>ScribeLayoutProportions.Default with { SideColFrac = 0.12f }</c>.
+/// Per-item proportions that parameterise <see cref="ScribeLayout"/>, as fractions of the outer box
+/// dimensions. <see cref="Default"/> is the Lectern layout; override fields with <c>Default with { ... }</c>.
 /// </summary>
 public readonly record struct ScribeLayoutProportions
 {
@@ -19,8 +18,7 @@ public readonly record struct ScribeLayoutProportions
 
     public ScribeLayoutProportions()
     {
-        // TitleBarFrac is kept small so the tab content area gets height to offset the Row 2 subtitle
-        // every tab renders. The two fracs sum to 0.93, leaving a ~7% bottom margin below the inner box.
+        // Small title bar leaves tab content height for the Row 2 subtitle; the two fracs sum to 0.93, leaving a ~7% bottom margin.
         TitleBarFrac   = 0.115f;
         InnerHFrac     = 0.815f;
         SideColFrac    = 0.10f;
@@ -32,45 +30,34 @@ public readonly record struct ScribeLayoutProportions
 }
 
 /// <summary>
-/// The generalised dialog layout driven by one outer width <paramref name="W"/>, an art aspect ratio
-/// <paramref name="AspectH"/>, and an optional <see cref="ScribeLayoutProportions"/> override.
-/// Replaces the Lectern-only <c>LecternLayout</c>; all property formulas are identical when
-/// <c>AspectH = 1160f/1024f</c> and <c>Props = ScribeLayoutProportions.Default</c>.
+/// The dialog layout driven by one outer width <paramref name="W"/>, an art aspect ratio
+/// <paramref name="AspectH"/>, and an optional proportions override.
 /// </summary>
 public readonly record struct ScribeLayout(float W, float AspectH, ScribeLayoutProportions? Props = null)
 {
     private ScribeLayoutProportions P => Props ?? ScribeLayoutProportions.Default;
 
-    /// <summary>Outer box height derived from the art's aspect ratio.</summary>
     public float H => W * AspectH;
 
-    /// <summary>The draggable title-bar band.</summary>
     public float TitleBarH => P.TitleBarFrac * H;
 
-    /// <summary>The full outer width used as the inner section width (all three columns sum to W).</summary>
     public float InnerW => W;
 
-    /// <summary>Inner section height (80 % of outer height by default).</summary>
     public float InnerH => P.InnerHFrac * H;
 
-    /// <summary>Each side spacer / nav column.</summary>
     public float SideColW => P.SideColFrac * W;
 
     /// <summary>The centre tasks column: InnerW minus both side columns.</summary>
     public float TasksColW => (1f - 2f * P.SideColFrac) * W;
 
-    /// <summary>Bottom-anchored title+buttons row width.</summary>
     public float TitleBtnsW => P.TitleBtnsWFrac * W;
 
-    /// <summary>Bottom-anchored title+buttons row height.</summary>
     public float TitleBtnsH => P.TitleBtnsHFrac * H;
 }
 
 /// <summary>
-/// The minimal surface the dialog layer needs from any Scribe block entity. Implemented by
-/// <see cref="BlockEntityScribeLectern"/> today; the Notebook and Desk will implement it
-/// without inheriting from the Lectern. The dialog operates entirely against this interface
-/// — it never holds a concrete block-entity reference.
+/// The minimal surface the dialog layer needs from any Scribe block entity or item host; the dialog
+/// never holds a concrete block-entity reference.
 /// </summary>
 public interface IScribeDocumentHost
 {
@@ -80,88 +67,65 @@ public interface IScribeDocumentHost
     /// <summary>True when another player holds the editor lock on this block.</summary>
     bool IsLockedByOther(string viewerUid);
 
-    /// <summary>Update the client-side cache with a fresh optimistic copy after a flush.</summary>
+    /// <summary>Updates the client-side cache with a fresh optimistic copy after a flush.</summary>
     void ApplyLocalOptimisticEdit(ScribeDocument doc);
 
-    /// <summary>Backdrop spec for this item's page (notebook art texture + fallback colour).</summary>
+    /// <summary>Backdrop spec (art texture + fallback colour) for this item's page.</summary>
     ScribeBackdropSpec BackdropSpec { get; }
 
-    /// <summary>Compute the dialog layout for a given pixel-art size setting.</summary>
+    /// <summary>Computes the dialog layout for a pixel-art size setting.</summary>
     ScribeLayout GetLayout(float pixelArtSize);
 
     /// <summary>Item-specific fallback title when the player clears the title and saves
-    /// (e.g. <c>"Lectern"</c>, <c>"Notebook"</c>). Distinct from <see cref="ScribeDocument.DefaultTitle"/>
-    /// (<c>"Untitled"</c>) which is a Core-layer constant used only by the codec.</summary>
+    /// (e.g. <c>"Lectern"</c>). Distinct from the Core codec's <c>"Untitled"</c> constant.</summary>
     string DefaultDocumentTitle { get; }
 
     /// <summary>The guestbook for this block — visitor entries recorded server-side on GUI open.</summary>
     GuestbookStore Guestbook { get; }
 
-    /// <summary>The per-tier cap this host enforces on its document (max task blocks, max pins,
-    /// read-only). Defaults to <see cref="ScribeDocumentPolicy.Unlimited"/> so every existing host
-    /// (Lectern, Notebook, Clockmaker's) is uncapped and behaviorally unchanged; only the tablet tier
-    /// (<see cref="TabletHost"/>) overrides it. The dialog consults <see cref="ScribeDocumentPolicy.CanAdd"/>
-    /// before adding a task and <see cref="ScribeDocumentPolicy.CanPin"/> before pinning one, so the cap
-    /// is applied at the editor mutation boundary rather than inside the shared <see cref="ScribeDocument"/>
-    /// model.</summary>
+    /// <summary>The per-tier cap (max blocks, max pins, read-only). Defaults to
+    /// <see cref="ScribeDocumentPolicy.Unlimited"/>; only the tablet tier overrides it. The dialog applies it
+    /// at the editor mutation boundary, not inside <see cref="ScribeDocument"/>.</summary>
     ScribeDocumentPolicy Policy => ScribeDocumentPolicy.Unlimited;
 
-    // ── Server-side document write-through (lock-free, called from completion/pin handlers) ──
+    // Server-side document write-through (lock-free, called from completion/pin handlers)
 
-    /// <summary>Server-side: set a task's done flag by stable TaskId. No-op if not found.
-    /// For block hosts: marks dirty and resyncs. For item hosts: writes to the ItemStack.</summary>
+    /// <summary>Server-side: set a task's done flag by TaskId. No-op if not found. Every write-through
+    /// below persists the host (block: mark dirty and resync; item: write the ItemStack).</summary>
     void SetTaskDoneFromReader(Guid taskId, bool done);
 
-    /// <summary>Server-side: delete a task by stable TaskId. Returns true if removed.
-    /// For block hosts: marks dirty and resyncs. For item hosts: writes to the ItemStack.</summary>
+    /// <summary>Server-side: delete a task by TaskId. Returns true if removed.</summary>
     bool DeleteTaskFromReader(Guid taskId);
 
-    /// <summary>Server-side: persist the in-memory document after a Core mutation (range complete/delete)
-    /// already applied to <see cref="Document"/>. For block hosts: marks dirty and resyncs. For item hosts:
-    /// writes to the ItemStack.</summary>
+    /// <summary>Server-side: persist the in-memory document after a Core mutation already applied to <see cref="Document"/>.</summary>
     void PersistFromReader();
 
-    /// <summary>Server-side: move a task to the bottom of the document. Returns true if moved.
-    /// For block hosts: marks dirty and resyncs. For item hosts: writes to the ItemStack.</summary>
+    /// <summary>Server-side: move a task to the bottom. Returns true if moved.</summary>
     bool MoveTaskToBottomFromReader(Guid taskId);
 
-    /// <summary>Server-side: set a task's text by stable TaskId. Returns true if changed.
-    /// Rejects blank/whitespace. For block hosts: marks dirty and resyncs. For item hosts: writes to the ItemStack.</summary>
+    /// <summary>Server-side: set a task's text by TaskId. Rejects blank/whitespace. Returns true if changed.</summary>
     bool SetTaskTextFromReader(Guid taskId, string text);
 
-    /// <summary>Server-side: set a Tracker's live <c>CurrentQuantity</c> by stable TaskId (clamped only to
-    /// ≥ 0 by the Core model — overflow above the target is preserved). Returns true if it changed. The client-side count
-    /// engine drives this from the viewing player's carried inventory, so
-    /// the count is server-persisted and multiplayer viewers converge — exactly like the Done flag.
-    /// No-op for a non-Tracker or unknown TaskId. For block hosts: marks dirty and resyncs. For item hosts:
-    /// writes to the ItemStack.</summary>
+    /// <summary>Server-side: set a Tracker's live <c>CurrentQuantity</c> (clamped only to ≥ 0; overflow above
+    /// the target is preserved). Driven by the client count engine from the viewer's carried inventory, so
+    /// multiplayer viewers converge. No-op for a non-Tracker or unknown TaskId. Returns true if changed.</summary>
     bool SetTrackerCurrentQuantityFromReader(Guid taskId, int currentQuantity);
 
-    /// <summary>Server-side: set a QuestObjective's live backend-reported progress by stable TaskId, clamped
-    /// into <c>[0, TargetQuantity]</c> by the Core model (unlike a Tracker's overflow-visible count, an
-    /// objective's progress cannot exceed its required count in Progression Framework's own model). Returns true if it changed. The client-side quest watcher
-    /// drives this from the backend's own reported state, never from carried inventory, so the count is
-    /// server-persisted and multiplayer viewers converge — exactly like a Tracker's
-    /// <see cref="SetTrackerCurrentQuantityFromReader"/>, but gated on <c>IsQuestObjective</c> rather than
-    /// <c>IsTracker</c>/the shared carried-count predicate. No-op for a non-QuestObjective or unknown TaskId.
-    /// For block hosts: marks dirty and resyncs. For item hosts: writes to the ItemStack.</summary>
+    /// <summary>Server-side: set a QuestObjective's backend-reported progress, clamped into
+    /// <c>[0, TargetQuantity]</c> by the Core model. Driven by the client quest watcher, never carried
+    /// inventory. No-op for a non-QuestObjective or unknown TaskId. Returns true if changed.</summary>
     bool SetQuestObjectiveProgressFromReader(Guid taskId, int currentQuantity);
 
-    // ── Read View filter-pill + subtask-collapse persisted state ──
+    // Read View filter-pill + subtask-collapse persisted state
 
-    /// <summary>The last-selected Read View filter pill for THIS Scribe item/block instance (a
-    /// <see cref="ReadViewFilterCategory"/> cast to byte), defaulting to <c>0</c> (All) when never set.
-    /// Per-instance, not per-player — mirrors the block entity's <c>accessMode</c> persistence shape.</summary>
+    /// <summary>The last-selected Read View filter pill (a <see cref="ReadViewFilterCategory"/> cast to byte)
+    /// for THIS instance, not per-player. <c>0</c> (All) when never set.</summary>
     byte ReadViewFilterCategory { get; }
 
-    /// <summary>The TaskIds of subtask-group parents currently collapsed in this instance's Read View.
-    /// Empty (fully expanded) when never set.</summary>
+    /// <summary>TaskIds of subtask-group parents collapsed in this instance's Read View; empty when never set.</summary>
     IReadOnlyCollection<Guid> CollapsedGroupIds { get; }
 
-    /// <summary>Server-side: overwrite both persisted pieces of Read View state at once (they always ride
-    /// the same client packet — see <see cref="ScribeSetReadViewStateMessage"/>) and persist/resync. A
-    /// lock-free, always-allowed viewer preference, exactly like <see cref="SetTaskDoneFromReader"/> — not
-    /// a document edit. For block hosts: marks dirty and resyncs. For item hosts: writes to the
-    /// ItemStack.</summary>
+    /// <summary>Server-side: overwrite both Read View state pieces at once (they ride the same client packet,
+    /// <see cref="ScribeSetReadViewStateMessage"/>). A lock-free, always-allowed viewer preference, not a document edit.</summary>
     void SetReadViewStateFromReader(byte filterCategory, IReadOnlyCollection<Guid> collapsedGroupIds);
 }
