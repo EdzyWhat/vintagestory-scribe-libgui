@@ -7,35 +7,28 @@ using Vintagestory.GameContent;
 namespace Scribe;
 
 /// <summary>
-/// Client-side Harmony postfix that appends a single "Add Link" clickable link to the bottom of every
-/// non-item Handbook <b>guide/explainer</b> page. The item-page patch
-/// (<see cref="ScribeHandbookPatch"/>) offers Add Tracker + Add Link on pages with an item behind them;
-/// a guide page has no item, so only a <b>Link</b> makes sense (there is nothing to count for a Tracker).
-/// Clicking it calls <see cref="ScribeModSystem.AddGuideLinkFromHandbook"/> with the guide's page code and
-/// resolved title, which resolves an open/openable Scribe surface and appends a <c>page:</c>-prefixed guide
-/// Link through that dialog's existing save path.
+/// Client-side Harmony postfix that appends a single "Add Link" clickable link to the bottom of every non-item
+/// Handbook <b>guide/explainer</b> page. The item-page patch (<see cref="ScribeHandbookPatch"/>) offers Add
+/// Tracker + Add Link; a guide page has no item, so only a Link makes sense. Clicking calls
+/// <see cref="ScribeModSystem.AddGuideLinkFromHandbook"/> with the page code and resolved title, which appends a
+/// <c>page:</c>-prefixed guide Link through the open Scribe dialog's save path.
 ///
-/// <para>Patches <see cref="GuiHandbookTextPage.Init"/> (the survival mod's text-page builder). Init runs
-/// <c>comps = VtmlUtil.Richtextify(...)</c>, freshly rebuilding the component array each call, so appending in
-/// a postfix can never accumulate duplicates across repeated opens. The postfix only APPENDS — it never
-/// mutates existing components — so a page matches vanilla apart from the trailing link. As with
-/// <see cref="ScribeHandbookPatch"/>, Harmony and the survival mod both ship with the base game, so this adds
-/// no mod dependency.</para>
+/// <para>Patches <see cref="GuiHandbookTextPage.Init"/>, which rebuilds <c>comps</c> on each call, so appending in
+/// a postfix never accumulates duplicates. The postfix only APPENDS, so a page matches vanilla apart from the
+/// trailing link. Harmony and the survival mod ship with the base game, so this adds no mod dependency.</para>
 ///
-/// <para>Client-only: created/unpatched with the same <see cref="Harmony"/> instance as the item-page patch,
-/// discovered by the shared <c>PatchAll</c> in <see cref="ScribeModSystem.StartHandbookPatch"/>.</para>
+/// <para>Client-only; discovered by the shared <c>PatchAll</c> in <see cref="ScribeModSystem.StartHandbookPatch"/>.</para>
 /// </summary>
 [HarmonyPatch(typeof(GuiHandbookTextPage), nameof(GuiHandbookTextPage.Init))]
 internal static class ScribeGuidePageHandbookPatch
 {
-    /// <summary>Append the "Add Link" action to a guide page's component array. Runs after
-    /// <see cref="GuiHandbookTextPage.Init"/> rebuilds <c>comps</c> (accessed by field-ref as
-    /// <paramref name="___comps"/>). Only guide-category pages get the link — item-stack pages are a different
-    /// page class entirely (<c>GuiHandbookItemStackPage</c>) and are handled by <see cref="ScribeHandbookPatch"/>,
-    /// so this simply skips any text page whose category isn't <c>"guide"</c>. The link reuses the item picker's
-    /// <c>scribe-gui-addlink</c> label. The stored target is the guide's <see cref="GuiHandbookTextPage.PageCode"/>
-    /// (marked as a guide page in Core via <see cref="ScribeLinkTarget"/>); the display label is the resolved
-    /// title, captured now because a guide page has no item to derive a name from later.</summary>
+    /// <summary>Append the "Add Link" action to a guide page's component array after
+    /// <see cref="GuiHandbookTextPage.Init"/> rebuilds <c>comps</c> (field-ref <paramref name="___comps"/>). Text
+    /// pages whose category isn't <c>"guide"</c> are skipped; item-stack pages are a different class handled by
+    /// <see cref="ScribeHandbookPatch"/>. The stored target is the guide's
+    /// <see cref="GuiHandbookTextPage.PageCode"/> (marked as a guide page via <see cref="ScribeLinkTarget"/>); the
+    /// display label is the resolved title, captured now because a guide page has no item to derive a name from
+    /// later.</summary>
     // ReSharper disable once InconsistentNaming — Harmony injected parameter names are fixed.
     private static void Postfix(GuiHandbookTextPage __instance, ICoreClientAPI capi, ref RichTextComponentBase[] ___comps)
     {
@@ -48,8 +41,7 @@ internal static class ScribeGuidePageHandbookPatch
         var modSystem = capi.ModLoader.GetModSystem<ScribeModSystem>();
         if (modSystem is null) return;
 
-        // Title is a lang KEY on the page (the survival mod renders it via Lang.Get(Title)); resolve it to the
-        // player-facing string so the pinned/read-view Link row shows a real title rather than the raw key.
+        // Title is a lang KEY (the survival mod renders it via Lang.Get(Title)); resolve it to the player-facing string.
         string title = Lang.Get(__instance.Title);
 
         var linkFont = CairoFont.WhiteSmallText();
@@ -57,7 +49,7 @@ internal static class ScribeGuidePageHandbookPatch
 
         var appended = new RichTextComponentBase[]
         {
-            // Match the item page's spacing idiom: a small gap, a bold heading, then the single action.
+            // Same spacing idiom as the item page: small gap, bold heading, single action.
             new ClearFloatTextComponent(capi, 14f),
             new RichTextComponent(capi, Lang.Get("scribe:scribe-gui-additem-heading") + "\n", headingFont),
             new LinkTextComponent(capi, Lang.Get("scribe:scribe-gui-handbook-addlink") + "\n", linkFont,
