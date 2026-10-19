@@ -9,9 +9,9 @@ namespace Scribe;
 /// Plays <c>scribe:alarm/clockbell</c> (ambient, no positional attenuation) once, driving
 /// a three-phase volume envelope via a per-frame tick listener:
 /// <list type="bullet">
-///   <item><b>RampUp</b> (0–1 s): easeInCubic from silence to nominal volume.</item>
-///   <item><b>Breathing</b> (1 s – clip end): sine-wave ±10% oscillation, 3 s period.</item>
-///   <item><b>FadingOut</b> (500 ms): easeInOutSine to silence on early dismiss.</item>
+///   <item><b>RampUp</b> (0–0.5 s): easeInCubic from silence to nominal volume.</item>
+///   <item><b>Breathing</b> (0.5 s – clip end): sine-wave ±10% oscillation, 3 s period.</item>
+///   <item><b>FadingOut</b> (300 ms): easeInOutSine to silence on early dismiss.</item>
 /// </list>
 /// Create one instance when the timer fires; call <see cref="Dismiss"/> on player dismiss;
 /// check <see cref="IsDone"/> to know when it has self-cleaned.
@@ -71,7 +71,7 @@ internal sealed class ScribeAlarmSound : IDisposable
 
     public bool IsDone => _phase == Phase.Done;
 
-    /// <summary>Trigger the 500 ms easeInOutSine fade-out. No-op if already fading or done.</summary>
+    /// <summary>Trigger the 300 ms easeInOutSine fade-out. No-op if already fading or done.</summary>
     public void Dismiss()
     {
         if (_phase is Phase.RampUp or Phase.Breathing)

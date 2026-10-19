@@ -20,7 +20,7 @@ public sealed record ScribeBackdropSpec(AssetLocation Texture, Vector4? Tint = n
 /// <summary>The three tablet drying states, in permanence order. <see cref="ScribeBackdrops.ForTablet"/>
 /// resolves the backdrop by clay type × state; <see cref="ItemScribeTablet"/> derives the state from the
 /// stack's <c>material</c> variant — the soft variant is the bare clay code, and hardening/firing swap it
-/// to a <c>-hard</c>/<c>-fired</c> sibling (wire-tablet-clay-art-and-variants). Top-level (not nested in the
+/// to a <c>-hard</c>/<c>-fired</c> sibling. Top-level (not nested in the
 /// internal <see cref="ScribeBackdrops"/>) and public so it can be a parameter of the public
 /// <see cref="GuiDialogScribeTablet"/> ctor.</summary>
 public enum TabletState { Wet, Hard, Fired }
@@ -41,7 +41,7 @@ internal static class ScribeBackdrops
 {
     /// <summary>The Lectern read/editor page: its own illustrated art (1024×1160, aspect 0.883) that the
     /// dialog is sized to so LibGUI's stretch-to-fill <c>BoxStyle.Texture</c> renders it as a uniform,
-    /// distortion-free scale (scribe-notebook-frame).</summary>
+    /// distortion-free scale.</summary>
     public static readonly ScribeBackdropSpec LecternPage =
         new(new AssetLocation("scribe", "textures/gui/scribe-lectern.png"));
 
@@ -51,7 +51,7 @@ internal static class ScribeBackdrops
     public static readonly ScribeBackdropSpec NotebookPage =
         new(new AssetLocation("scribe", "textures/gui/scribe-notebook.png"));
 
-    /// <summary>The Chalkboard block's read/editor page (add-chalkboard-block): its own committed GUI art
+    /// <summary>The Chalkboard block's read/editor page: its own committed GUI art
     /// (<c>scribe-chalkboard.png</c>, 128×145, aspect 145/128). Same stretch-to-fill path as every other
     /// full-page spec — no tint, no renderer change. The Chalkboard block entity is sized to this aspect.</summary>
     public static readonly ScribeBackdropSpec ChalkboardPage =
@@ -63,21 +63,19 @@ internal static class ScribeBackdrops
     public static readonly ScribeBackdropSpec ClockmakerPage =
         new(new AssetLocation("scribe", "textures/gui/scribe-clockmakers-notebook.png"));
 
-    /// <summary>The Task Notice's Accept dialog backdrop (refine-task-notice-ux 3.1): its own 105×130 art
+    /// <summary>The Task Notice's Accept dialog backdrop: its own 105×130 art
     /// (aspect 130/105 ≈ 1.238 — a taller-than-wide scroll, deliberately distinct from the notebook/lectern
     /// family's near-square 128×145 art), consumed directly by <see cref="GuiDialogTaskNotice"/>, which has
     /// no <see cref="IScribeDocumentHost"/> to route this through.</summary>
     public static readonly ScribeBackdropSpec TaskNoticePage =
         new(new AssetLocation("scribe", "textures/gui/scribe-task-notice.png"));
 
-    // ---- Clay tablet backdrops (add-tablet-clay-type-backdrops, add-tablet-firing-mechanic) -----------
+    // ---- Clay tablet backdrops -------------------------------------------------------------------
     // Each clay type has authored full-page 1024×1160 backdrops (same shape as the pages above, so they
     // take the identical stretch-to-fill path — NO tiling/renderer change). Art exists per drying STATE:
     // "-soft" (wet/malleable, the editable tablet), "-hard" (dried-but-unfired, read-only until rehydrated),
     // and "-fired" (kiln-fired ceramic, permanently read-only). Each state is its own authored PNG with NO
-    // tint — the design's earlier "interim tint the soft art" plan is superseded now that real per-state art
-    // is authored (the same move that retired the fired tint once fired art shipped). ForTablet selects by
-    // clay type × state, with fired taking precedence over hard.
+    // tint. ForTablet selects by clay type × state, with fired taking precedence over hard.
 
     private static AssetLocation Clay(string type, string state) =>
         new("scribe", $"textures/gui/scribe-clay-tablet-{type}-{state}.png");
@@ -92,7 +90,7 @@ internal static class ScribeBackdrops
     public static readonly ScribeBackdropSpec ClayFireSoft = new(Clay("fire", "soft"));
 
     /// <summary>Dried (hard, unfired) red-clay tablet page — authored dried-clay art (read-only until
-    /// rehydrated). Its own PNG, no tint (tablet-clay-hardening).</summary>
+    /// rehydrated). Its own PNG, no tint.</summary>
     public static readonly ScribeBackdropSpec ClayRedHard = new(Clay("red", "hard"));
 
     /// <summary>Dried (hard, unfired) blue-clay tablet page — authored dried-clay art, its own PNG.</summary>
@@ -101,9 +99,7 @@ internal static class ScribeBackdrops
     /// <summary>Dried (hard, unfired) fire-clay tablet page — authored dried-clay art, its own PNG.</summary>
     public static readonly ScribeBackdropSpec ClayFireHard = new(Clay("fire", "hard"));
 
-    /// <summary>Fired red-clay tablet page — authored kiln-fired ceramic art (its own PNG, no tint).
-    /// Interim-unreachable in normal play this round (nothing sets <c>fired = true</c>); reachable via
-    /// creative.</summary>
+    /// <summary>Fired red-clay tablet page — authored kiln-fired ceramic art (its own PNG, no tint).</summary>
     public static readonly ScribeBackdropSpec ClayRedFired = new(Clay("red", "fired"));
 
     /// <summary>Fired blue-clay tablet page — authored kiln-fired ceramic art (its own PNG, no tint).</summary>
@@ -112,18 +108,16 @@ internal static class ScribeBackdrops
     /// <summary>Fired fire-clay tablet page — authored kiln-fired ceramic art (its own PNG, no tint).</summary>
     public static readonly ScribeBackdropSpec ClayFireFired = new(Clay("fire", "fired"));
 
-    /// <summary>The wax tablet page — bespoke authored wax art (its own PNG, no tint), replacing the
-    /// earlier fire-clay-soft placeholder.</summary>
+    /// <summary>The wax tablet page — bespoke authored wax art (its own PNG, no tint).</summary>
     public static readonly ScribeBackdropSpec Wax =
         new(new AssetLocation("scribe", "textures/gui/scribe-wax-tablet.png"));
 
     /// <summary>Select the tablet backdrop for a stack's <c>material</c> variant + drying <c>state</c>, in
-    /// ONE place so the item and its dialog agree on the mapping (add-tablet-dialog D6, add-tablet-firing-
-    /// mechanic). The clay type is the item's own registered variant (<c>clay-red</c>/<c>clay-blue</c>/
+    /// ONE place so the item and its dialog agree on the mapping. The clay type is the item's own registered variant (<c>clay-red</c>/<c>clay-blue</c>/
     /// <c>clay-fire</c>) — one discrete item per type — not a stack attribute; <c>wax</c> gets
     /// <see cref="Wax"/> and has no hard/fired states (it neither dries nor fires). An unknown or absent
     /// material defaults to red, so a legacy or creative-inventory stack always resolves to a valid backdrop
-    /// (clay-wax-tablet-item: "consumers treat it as red + soft").</summary>
+    /// (consumers treat it as red + soft).</summary>
     public static ScribeBackdropSpec ForTablet(string? material, TabletState state)
     {
         if (material == "wax") return Wax;

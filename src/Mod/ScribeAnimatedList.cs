@@ -1,4 +1,4 @@
-// A rendering-agnostic "animate row departures" container (animated-task-list). Any surface that renders
+// A rendering-agnostic "animate row departures" container. Any surface that renders
 // an identity-keyed list of rows gets the editor's collapse-on-removal animation "for free" by routing its
 // rows through this container and mutating ONLY its data — no per-view departing map, ghost widget, cleanup
 // flag, or OnRenderGUI loop. The container diffs the id-keyed item set frame-to-frame (the pure math lives
@@ -6,7 +6,7 @@
 // the slot it left, wrapped in the shared ScribeRowSizeAnimation(Collapse); when the collapse finishes the
 // container drops the ghost itself.
 //
-// It abstracts MOTION only, never content (design D6). It touches exactly two things about a row — its
+// It abstracts MOTION only, never content. It touches exactly two things about a row — its
 // stable Guid identity and its height (to collapse it) — and never inspects what the row renders. Each
 // surface supplies its own row widgets AND its own layout wrapper (the layoutBuilder), so an editable task
 // row, a static Read line, or a multi-column Guestbook entry are all just "a widget at an id" here and stay
@@ -20,7 +20,7 @@
 // completed ghost. The editor's flag exists only because IT rebuilds the DIALOG tree (a cross-tree
 // RebuildBody), whereas the container rebuilds just its own local subtree.
 //
-// Scroll-pin-during-collapse and the hover-refresh latch are NOT owned here (open question §2.7, resolved):
+// Scroll-pin-during-collapse and the hover-refresh latch are NOT owned here:
 // they touch dialog-level state (the shared ScrollController, RootElement, RefreshHoverAtCursor), so they
 // stay in the host's OnRenderGUI, driven off the SAME host-owned ScribeAnimationRegistry's AnyAnimating that
 // this container animates against. The container packages the diff / ghost / slot / self-cleanup
@@ -48,16 +48,15 @@ namespace Scribe;
 /// for any live, interactive row (a checkbox/field/gesture row is unsafe to freeze in place — it would stay
 /// clickable mid-collapse and its focus node is gone once the data leaves), so supply a frozen twin (e.g.
 /// <c>ScribeFrozenEditorRow</c>). If null the container falls back to caching <see cref="Child"/> itself
-/// (D2's last-built-row default) — safe only for a genuinely static row.</param>
+/// (the last-built-row default) — safe only for a genuinely static row.</param>
 internal readonly record struct ScribeAnimatedListItem(Guid Id, Widget Child, Widget? Ghost = null);
 
-/// <summary>When a departed row begins its collapse (animated-task-list D3). Every surface collapses a
+/// <summary>When a departed row begins its collapse. Every surface collapses a
 /// departed row the frame its identity leaves the item set — including the pinned-task HUD, whose
 /// misclick-rescue undo window is a live-row deferred-send phase (the pin stays IN the set at full height,
-/// its checkbox clickable, until the window elapses), not an animation hold. A held-ghost "delayed removal"
-/// policy was considered for the HUD and removed as a misconception: a frozen ghost cannot host the live
-/// checkbox the undo depends on (see migrate-hud-onto-animated-list). The enum is retained (single-valued)
-/// so call sites and the entry/order wiring read the policy explicitly.</summary>
+/// its checkbox clickable, until the window elapses), not an animation hold (a frozen ghost cannot host
+/// the live checkbox the undo depends on). The enum is single-valued so call sites and the
+/// entry/order wiring read the policy explicitly.</summary>
 internal enum ScribeListRemovalPolicy
 {
     /// <summary>The ghost begins collapsing the frame the row's identity departs the item set — every surface
@@ -69,7 +68,7 @@ internal enum ScribeListRemovalPolicy
 
 /// <summary>
 /// A container that animates row <em>departures</em> by diffing its identity-keyed item set frame-to-frame
-/// (animated-task-list). See the file header for the full rationale. Adopted across all four surfaces —
+/// See the file header for the full rationale. Adopted across all four surfaces —
 /// editor, Read view, Pin Tab, and the pinned-task HUD.
 /// </summary>
 internal sealed class ScribeAnimatedList : StatefulWidget
@@ -102,7 +101,7 @@ internal sealed class ScribeAnimatedList : StatefulWidget
     public ScribeAnimationRegistry Registry { get; }
 
     /// <summary>Builds the surface's layout around the final ordered widget list (live rows + collapsing
-    /// ghosts spliced at their slots). This is the D6 seam: the container decides ORDER and MOTION; the
+    /// ghosts spliced at their slots). This is the seam: the container decides ORDER and MOTION; the
     /// surface decides layout (a <c>Scrollbar &gt; SingleChildScrollView &gt; Column</c>, a <c>ListView</c>,
     /// columns-in-a-row, …). The container never dictates it.</summary>
     public Func<IReadOnlyList<Widget>, Widget> LayoutBuilder { get; }
@@ -148,7 +147,7 @@ internal sealed class ScribeAnimatedListState : State<ScribeAnimatedList>
     /// detected THIS frame can freeze the row as it looked while still live.</summary>
     private Dictionary<Guid, Widget> priorSnapshots = new();
 
-    /// <summary>Ids currently entering (animate-row-insertion): a row appeared on a non-first build and is
+    /// <summary>Ids currently entering: a row appeared on a non-first build and is
     /// sliding in. An entered id PERSISTS here for the row's whole live lifetime — it is NOT dropped when the
     /// slide completes (a settled <see cref="ScribeSlideIn"/> renders an inert Opacity(1) > Transform(identity)
     /// pass-through). This is load-bearing: removing the wrapper from a row on completion would type-swap the
@@ -163,7 +162,7 @@ internal sealed class ScribeAnimatedListState : State<ScribeAnimatedList>
     /// LATER build (a genuine add into an already-mounted list) animate.</summary>
     private bool firstBuild = true;
 
-    /// <summary>Each row's last-measured real rendered height (animate-row-reposition), reported by the
+    /// <summary>Each row's last-measured real rendered height, reported by the
     /// <see cref="ScribeSizeReportWidget"/> every row is wrapped in. Reset only when this State itself is
     /// torn down (a genuine <c>ForceRebuild</c>) — an ordinary row mutation goes through the surface's local
     /// <c>RebuildBody</c>, which reconciles this State rather than recreating it, so the cache survives
@@ -171,7 +170,7 @@ internal sealed class ScribeAnimatedListState : State<ScribeAnimatedList>
     private readonly Dictionary<Guid, float> knownHeight = new();
 
     /// <summary>For a row that has ever been repositioned, its CURRENT generation number
-    /// (animate-row-reposition) — bumped each time a fresh, non-negligible displacement starts, so
+    /// — bumped each time a fresh, non-negligible displacement starts, so
     /// <see cref="ScribeRowReposition"/> can tell "resume this animation" (unchanged generation) apart from
     /// "start a new one" (bumped) without unmounting the row's wrapper (which would drop a live caret).
     /// Once added, an id is never removed except on departure — the wrapper renders forever (inert at rest)
@@ -185,8 +184,8 @@ internal sealed class ScribeAnimatedListState : State<ScribeAnimatedList>
     /// already-Completed entry controller (which would render an instantly-closed ghost).</summary>
     private static string EntryKey(Guid id) => "enter:" + id.ToString("N");
 
-    /// <summary>Registry key for a row's reposition controller at a given generation
-    /// (animate-row-reposition). The generation is embedded in the key itself (not looked up separately) so
+    /// <summary>Registry key for a row's reposition controller at a given generation.
+    /// The generation is embedded in the key itself (not looked up separately) so
     /// a fresh displacement gets a genuinely new <see cref="AnimationController"/> from the registry, while
     /// an unchanged generation resumes the existing one across a reconciling rebuild.</summary>
     private static string MoveKey(Guid id, int generation) => "move:" + id.ToString("N") + ":" + generation;
@@ -196,11 +195,10 @@ internal sealed class ScribeAnimatedListState : State<ScribeAnimatedList>
     private const float RepositionEpsilon = 1f;
 
     /// <summary>Cumulative Y position immediately BEFORE each id in <paramref name="order"/>, using each id's
-    /// last-known real height (animate-row-reposition). A missing height (a row never yet measured — only
+    /// last-known real height. A missing height (a row never yet measured — only
     /// possible for one that just appeared this very build, e.g. a brand-new task) falls back to the
-    /// SMALLEST currently-known row height rather than zero: defaulting to zero was the exact bug found in
-    /// playtest — a single fresh insertion's survivor delta rounded to nothing (nothing separated old and
-    /// new position except the unmeasured row), so it never animated at all. A brand-new task starts as
+    /// SMALLEST currently-known row height rather than zero: with zero, a single fresh insertion's survivor
+    /// delta would round to nothing and never animate. A brand-new task starts as
     /// empty text, so the shortest known row is a reasonable stand-in for its real height until the next
     /// build measures it for real (the row's OWN entry animation is unaffected either way — this fallback
     /// only feeds OTHER survivors' displacement math).</summary>
@@ -282,7 +280,7 @@ internal sealed class ScribeAnimatedListState : State<ScribeAnimatedList>
             }
         }
 
-        // 4b. New appearances (animate-row-insertion): a row present now that was neither live last frame nor
+        // 4b. New appearances: a row present now that was neither live last frame nor
         //     a ghost. On the FIRST build every row looks appeared (prevLiveIds empty) — suppress those so the
         //     list doesn't animate in wholesale on open/view-switch. Otherwise register each appeared id so it
         //     slides in (one uniform entry motion for every appearance — the focus-safe translate holds the
@@ -294,7 +292,7 @@ internal sealed class ScribeAnimatedListState : State<ScribeAnimatedList>
             foreach (var id in diff.Appeared) entering.Add(id);
         }
 
-        // 4c. Reposition (animate-row-reposition): a survivor — an id live in BOTH the previous and current
+        // 4c. Reposition: a survivor — an id live in BOTH the previous and current
         //     render order (so neither departing, reviving, nor freshly appeared) — whose cumulative Y
         //     position changes gets a fresh displacement animation. Computed purely from the before/after
         //     order and each row's real measured height, so it fires uniformly regardless of WHY the slot
@@ -331,7 +329,7 @@ internal sealed class ScribeAnimatedListState : State<ScribeAnimatedList>
         //    (keyed by id so its controller is found across rebuilds); a live id → the caller's row widget,
         //    optionally wrapped in its entry slide-in or its reposition displacement. Every rendered row is
         //    additionally wrapped in a size reporter so knownHeight stays current for the next build's
-        //    reposition math (animate-row-reposition), regardless of which (if any) animation wraps it.
+        //    reposition math, regardless of which (if any) animation wraps it.
         var rows = new List<Widget>(diff.RenderOrder.Count);
         foreach (var id in diff.RenderOrder)
         {
@@ -357,9 +355,7 @@ internal sealed class ScribeAnimatedListState : State<ScribeAnimatedList>
                 // entered once and later needs to reposition (e.g. a brand-new task, still "entering"
                 // forever, later shifted by ANOTHER new task landing above it) would otherwise be
                 // permanently stuck on the entry branch and never reposition-animate again for the rest of
-                // its life in this mounted session (the exact bug this fixes — confirmed by testing: it
-                // only "fixed itself" after a ForceRebuild, i.e. reopening the dialog or switching tabs,
-                // reset `entering` to empty). A row is excluded from reposition only on the EXACT build it
+                // its life in this mounted session (only a ForceRebuild resets `entering`). A row is excluded from reposition only on the EXACT build it
                 // first appears (no prior position exists yet — survivorTargetOffset excludes it by
                 // construction); from the next build on it is eligible even while still mid-slide-in.
                 Widget content = live;

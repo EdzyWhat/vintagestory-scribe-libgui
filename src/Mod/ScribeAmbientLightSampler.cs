@@ -9,7 +9,7 @@ namespace Scribe;
 /// <summary>
 /// Samples the light reaching the client player each frame and folds it into a single quantized
 /// (brightness, tint) value that the <see cref="ScribeGlobalTint"/> widget renders the Scribe GUI at
-/// (respect-local-illumination D1/D3). Read on the render/main thread only — block-accessor reads off the
+/// Read on the render/main thread only — block-accessor reads off the
 /// relight background thread are unsafe.
 ///
 /// <para><b>Read the engine's LIVE result, don't bake.</b> Every light input is read fresh from an engine
@@ -45,7 +45,7 @@ namespace Scribe;
 /// punishing but a little light already reads comfortably. The curve's x=0 floor is the player's
 /// <see cref="ScribePlayerSettings.IlluminationFloor"/>.</para>
 ///
-/// <para><b>Quantization (D3).</b> LibGUI caches each dialog's paint into an <c>SKPicture</c> and only
+/// <para><b>Quantization.</b> LibGUI caches each dialog's paint into an <c>SKPicture</c> and only
 /// re-records when a widget marks itself needing paint. A continuously-varying tint would re-record every
 /// frame and defeat the cache on the pixel-art parchment backdrops. So the output is snapped to coarse
 /// brightness + per-channel-hue buckets, and <see cref="Sample"/> reports whether the quantized value
@@ -59,13 +59,12 @@ internal sealed class ScribeAmbientLightSampler
 
     /// <summary>Brightness quantization: snap the 0..1 curve output to 1/N steps (default 32 buckets). The
     /// engine's own sun-brightness is a 0..32 grid lookup, so the default loses little real fidelity while
-    /// keeping the paint cache stable frame-to-frame. Author-tunable via <see cref="ScribeVisualTuning"/>
-    /// (add-configkit-visual-tuning).</summary>
+    /// keeping the paint cache stable frame-to-frame. Author-tunable via <see cref="ScribeVisualTuning"/>.</summary>
     private readonly int BrightnessSteps;
 
-    /// <summary>Hue quantization: snap each tint channel to 1/N steps (default 32 buckets/channel, raised from
-    /// 16 — the coarser step was visibly banding near-white tints, where a uniform step size reads as a bigger
-    /// jump than the same step does against a warm/dark tint). Coarse enough that a torch flicker's steady-state
+    /// <summary>Hue quantization: snap each tint channel to 1/N steps (default 32 buckets/channel; a uniform step
+    /// reads as a bigger jump against near-white tints than against a warm/dark tint, so coarser steps band).
+    /// Coarse enough that a torch flicker's steady-state
     /// or a slow day/night sky shift only re-records the picture a handful of times across the whole transition,
     /// fine enough that the warm/neutral/cool distinction still reads. Author-tunable via
     /// <see cref="ScribeVisualTuning"/>.</summary>
@@ -73,18 +72,18 @@ internal sealed class ScribeAmbientLightSampler
 
     /// <summary>How much of the raw hue skew to keep (the rest is pulled back to neutral). At the default
     /// <c>2/3</c> the color/temperature effect is reduced by one third from the physical tint — warm light
-    /// still reads warm, just less aggressively (author tuning, now via <see cref="ScribeVisualTuning"/>).</summary>
+    /// still reads warm, just less aggressively. Author-tunable via <see cref="ScribeVisualTuning"/>.</summary>
     private readonly float TintStrength;
 
     /// <summary>Exponential smoothing time-constant (seconds) for the brightness + tint transition. The GUI eases
     /// toward the newly-sampled target instead of snapping between quantization buckets as the player walks
-    /// through changing light (author request: smooth the V change, stretched to ~400ms by default). With the
+    /// through changing light. With the
     /// default <c>τ = 0.2</c> the value reaches ~86% of a step in 400ms and ~95% in 600ms — a soft glide, not a
     /// visible jump. Because this is a first-order ease toward the CURRENT target each frame (not a fixed-duration
     /// tween), it stays continuous even while the target keeps moving — walking into ever-brighter/darker light
     /// just keeps chasing the moving value with no restart or velocity snap; the only cost of a longer τ is a
     /// longer lag/"tail" behind abrupt changes. A light transition re-records the paint cache for the frames it
-    /// takes to settle (a bounded, deliberate relaxation of D3's "only on change"); a STATIC scene still settles
+    /// takes to settle (a bounded relaxation of the "re-record only on change" rule); a STATIC scene still settles
     /// and then holds, so the cache stays valid at rest. Author-tunable via <see cref="ScribeVisualTuning"/>.</summary>
     private readonly float SmoothingTau;
 
@@ -94,7 +93,7 @@ internal sealed class ScribeAmbientLightSampler
     /// calls that exact method with <c>pos: null</c>, so we already RECEIVE the flickered value each frame — the only
     /// thing that would erase it is our own smoothing. So when IL is active we let the HELD brightness term bypass the
     /// ease (see <see cref="Smooth"/>) and IL's flicker reappears exactly as the player configured it, with no
-    /// dependency, reflection, or flicker-matching code. (unify-held-light-flicker)</summary>
+    /// dependency, reflection, or flicker-matching code.</summary>
     private const string FlickerModId = "immersivelanterns";
 
     // Continuous (pre-quantization) smoothed state, eased toward the sampled target each frame. Only the ENVIRONMENT
@@ -103,9 +102,9 @@ internal sealed class ScribeAmbientLightSampler
     private float smoothedBrightness;
     private float smoothedR = 1f, smoothedG = 1f, smoothedB = 1f;
 
-    // IL-presence gate (unify-held-light-flicker), resolved once and cached — mod enablement can't change mid-session.
-    // Null until first query; when false the sampler takes exactly the pre-existing path (held folded into the one
-    // smoothed brightness), so a non-IL player sees no behavioral change and no extra paint-cache churn.
+    // IL-presence gate, resolved once and cached — mod enablement can't change mid-session.
+    // Null until first query; when false the held term is folded into the one smoothed brightness, so a
+    // non-IL player sees no extra paint-cache churn.
     private bool? flickerModActive;
 
     // Last reported quantized value, so Sample() can detect a meaningful change.
@@ -156,8 +155,7 @@ internal sealed class ScribeAmbientLightSampler
         }
 
         // Player BLOCK position, dimension-aware. Eye vs. feet is immaterial at block granularity, and the
-        // block pos is the cheap grid-aligned key the light grid is indexed by (D1: eye/block choice is a
-        // tuning detail, block chosen for the stable cache key).
+        // block pos is the cheap grid-aligned key the light grid is indexed by (and a stable cache key).
         BlockPos pos = entity.Pos.AsBlockPos;
 
         // (1) Block-light RGB (XYZ) + sun-brightness scalar (W). GetLightRGBs reads the LIVE light grid, so any
@@ -189,13 +187,13 @@ internal sealed class ScribeAmbientLightSampler
             blockR = heldR; blockG = heldG; blockB = heldB;
         }
 
-        // --- Brightness (split: environment vs. held — unify-held-light-flicker D1) ---
+        // --- Brightness (split: environment vs. held) ---
         // ENVIRONMENT = grid light + the sun channel weathered by scene brightness; curve-mapped. This term is
         // ALWAYS eased (τ=0.2s) so walking sun↔shade glides. HELD = the curve-mapped held-light contribution.
         // When a flicker mod (IL) is active the held term rides on top of the smoothed environment UNSMOOTHED
         // (see Smooth) so IL's per-frame V flicker — which TryHeldLight already receives via GetLightHsv —
         // survives instead of being flattened by the low-pass; when it isn't, the two collapse into one smoothed
-        // value identical to the pre-split behavior (the curve is monotonic, so max(curve a, curve b) == curve max).
+        // value (the curve is monotonic, so max(curve a, curve b) == curve max).
         float floor = ScribePlayerSettings.ClampIlluminationFloor(settings.IlluminationFloor);
         float sunlit = sun * Clamp01(sceneBrightness);
         float envRaw = Clamp01(MathF.Max(gridLuma, sunlit));
@@ -229,7 +227,7 @@ internal sealed class ScribeAmbientLightSampler
         }
 
         // Reduce the color/temperature effect: pull each channel partway back toward neutral (1) so the hue
-        // skew is gentler than the physical light (author tuning — TintStrength). Level is unaffected.
+        // skew is gentler than the physical light (TintStrength). Level is unaffected.
         r = 1f + (r - 1f) * TintStrength;
         g = 1f + (g - 1f) * TintStrength;
         b = 1f + (b - 1f) * TintStrength;
@@ -240,7 +238,7 @@ internal sealed class ScribeAmbientLightSampler
     /// <summary>Whether a held-light flicker mod (Immersive Lanterns) is installed, resolved once and cached — mod
     /// enablement can't change mid-session. When true the held-brightness term bypasses the ease in
     /// <see cref="Smooth"/> so IL's flicker (already present in the value <see cref="TryHeldLight"/> samples via
-    /// <c>GetLightHsv</c>) survives; when false the sampler takes exactly the pre-split smoothed path.</summary>
+    /// <c>GetLightHsv</c>) survives; when false the held term is smoothed together with the environment.</summary>
     private bool FlickerModActive => flickerModActive ??= capi.ModLoader.IsModEnabled(FlickerModId);
 
     /// <summary>Read the light emitted by the item(s) in the player's two hands and convert it to a normalized
@@ -287,17 +285,16 @@ internal sealed class ScribeAmbientLightSampler
     /// bucket steps through intermediate values over ~400ms instead of snapping, giving a soft glide as the
     /// player moves through changing light.
     ///
-    /// <para><b>Environment vs. held (unify-held-light-flicker D1).</b> Only the ENVIRONMENT brightness
+    /// <para><b>Environment vs. held.</b> Only the ENVIRONMENT brightness
     /// (<paramref name="envBrightness"/>) and the hue tint are eased. The HELD brightness
     /// (<paramref name="heldBrightness"/>) is combined by MAX AFTER easing: when <see cref="FlickerModActive"/>
     /// it is taken UNSMOOTHED (adopt-per-frame) so Immersive Lanterns' V flicker — already present in the value
     /// <see cref="TryHeldLight"/> samples — passes straight through; otherwise the held term is smoothed with the
-    /// same τ (folded into <c>smoothedBrightness</c>), reproducing the pre-split single-value behavior exactly.</para></summary>
+    /// same τ (folded into <c>smoothedBrightness</c>) as a single value.</para></summary>
     private Shade Smooth(float envBrightness, float heldBrightness, float r, float g, float b, float dt)
     {
-        // When no flicker mod is installed there is nothing to protect from the low-pass, so smooth the combined
-        // brightness exactly as before — the held term is folded into the one eased value. This keeps the vanilla
-        // path structurally identical (not a runtime branch that merely happens to match).
+        // When no flicker mod is installed there is nothing to protect from the low-pass, so the held term is
+        // folded into the one eased value.
         bool passHeldThrough = FlickerModActive;
         float smoothTarget = passHeldThrough ? envBrightness : MathF.Max(envBrightness, heldBrightness);
 
@@ -357,7 +354,7 @@ internal sealed class ScribeAmbientLightSampler
 
     /// <summary>DEV diagnostic (the <c>.scribelight</c> command): a one-shot, unsmoothed snapshot of what the
     /// sampler sees RIGHT NOW at the player, so the response-curve anchors can be calibrated against real
-    /// numbers instead of guessed (measure-don't-theorize). Returns a human-readable multi-line string; does not
+    /// numbers instead of guessed. Returns a human-readable multi-line string; does not
     /// touch the smoothing/quantization state. Static (takes capi+settings) so it can run without an open dialog.</summary>
     public static string Describe(ICoreClientAPI capi, ScribePlayerSettings settings)
     {
