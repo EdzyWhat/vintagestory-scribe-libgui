@@ -69,24 +69,6 @@ public sealed class ScribeAssignmentStore
             recipeSignature, depth, batchId, assignedTimestamp, acceptedTimestamp: null);
 
     /// <summary>
-    /// Accept-time counterpart of <see cref="TryCreate"/> for Task Notices: creates a record already
-    /// <see cref="ScribeAssignmentState.Accepted"/> (the physical notice carried the pending decision, not a
-    /// store record). <paramref name="acceptedDate"/> is stamped immediately because
-    /// <see cref="TryApplyAction"/> never runs for this transition. The record starts
-    /// <see cref="ScribeAssignment.Seen"/>.
-    /// </summary>
-    public bool TryCreateAccepted(Guid assignmentId, string assignerUid, string targetPlayerUid, string taskText,
-        string assignedDate, string acceptedDate, out ScribeBlock? record,
-        ScribeBlockKind kind = ScribeBlockKind.Task, string? targetItemCode = null, int targetQuantity = 1,
-        string? linkTarget = null, string? linkLabel = null, string? linkDescription = null,
-        string? recipeSignature = null, int depth = 0, Guid batchId = default,
-        double? assignedTimestamp = null, double? acceptedTimestamp = null)
-        => TryCreateCore(assignmentId, assignerUid, targetPlayerUid, taskText, assignedDate,
-            ScribeAssignmentState.Accepted, seen: true, acceptedDate, out record,
-            kind, targetItemCode, targetQuantity, linkTarget, linkLabel, linkDescription,
-            recipeSignature, depth, batchId, assignedTimestamp, acceptedTimestamp);
-
-    /// <summary>
     /// Send-time counterpart of <see cref="TryCreate"/> for Task Notices: creates a record in the
     /// <see cref="ScribeAssignmentState.Sent"/> state using the assignment id embedded in the sealed notice.
     /// Visible in the Assigner's <see cref="Sent"/> view at once; hidden from the Assignee's

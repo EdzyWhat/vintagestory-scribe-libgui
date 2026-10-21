@@ -27,8 +27,11 @@ public class EditorAssignmentCompletionSyncScenarios : AtlasScenarioBase
     {
         var store = Mod.AssignmentStore!;
         const string date = "day 1";
-        Assert.True(store.TryCreateAccepted(assignmentId, assigner.Player.PlayerUID, assignee.Player.PlayerUID,
-            text, date, date, out var record));
+        Assert.True(store.TryCreateSent(assignmentId, assigner.Player.PlayerUID, assignee.Player.PlayerUID,
+            text, date, out _));
+        Assert.True(store.TryMarkReceived(assignmentId, date));
+        Assert.True(store.TryApplyAction(assignmentId, assignee.Player.PlayerUID, ScribeAssignmentAction.Accept));
+        var record = store.TryGet(assignmentId);
         return new ScribeBlock(ScribeBlockKind.Task, text, done: false, taskId: assignmentId, assignment: record!.Assignment);
     }
 

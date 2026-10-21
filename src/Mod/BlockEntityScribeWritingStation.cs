@@ -122,10 +122,6 @@ public abstract class BlockEntityScribeWritingStation : BlockEntity, IRotatable,
     /// <summary>Client-side mirror of <see cref="accessMode"/>. Dormant: no control reads it.</summary>
     private ScribeAccessMode syncedAccessMode = ScribeAccessMode.Public;
 
-    /// <summary>Server-side: DocId registered in the pin store's live index, so exactly that id is
-    /// unregistered on removal. Null until the first register.</summary>
-    private Guid? registeredDocId;
-
     /// <summary>Server-side: true when a v4 document (no title field) was loaded and must be re-saved as v5
     /// on first server init.</summary>
     private bool needsV5Resave;
@@ -180,8 +176,7 @@ public abstract class BlockEntityScribeWritingStation : BlockEntity, IRotatable,
             // (FromTreeAttributes only writes the client mirror.)
             lockHolderUid = null;
 
-            // Register DocId -> position for pins; re-save a v4-loaded document as v5.
-            RegisterDocInStore();
+            // Re-save a v4-loaded document as v5.
             if (needsV5Resave)
             {
                 needsV5Resave = false;
@@ -241,15 +236,6 @@ public abstract class BlockEntityScribeWritingStation : BlockEntity, IRotatable,
         if (Api is ICoreServerAPI sapi)
         {
             sapi.Event.PlayerDisconnect -= OnPlayerDisconnect;
-
-            // Forget the live position, but do NOT clear pins: breaking a block to relocate it drops an
-            // item carrying the document, and OnBlockPlaced restores the same DocId. A pin is removed only
-            // by its owner's action (see ScribePinStore.ReconcileSnapshotsForActor), never on block removal.
-            if (PinStore is { } store && registeredDocId is { } docId)
-            {
-                store.UnregisterDoc(docId);
-            }
-            registeredDocId = null;
         }
 
         ModSystem?.UnregisterHost(Document.DocId);
@@ -306,9 +292,6 @@ public abstract class BlockEntityScribeWritingStation : BlockEntity, IRotatable,
             : new ScribeDocument();
         _guestbook = GuestbookStore.Deserialize(tree.GetBytes("guestbook"));
 
-        // A resync may have replaced the document; keep the live index pointing at the current one.
-        RegisterDocInStore();
-
         // Re-key the host registry under the now-current DocId. Each side's Document starts with a random
         // DocId; the authoritative one only arrives here. For a freshly placed block Initialize runs BEFORE
         // FromTreeAttributes, so without this the client stays keyed under a dead id and the server's open
@@ -346,23 +329,9 @@ public abstract class BlockEntityScribeWritingStation : BlockEntity, IRotatable,
                 Document.ReassignNewDocId();
             }
 
-            RegisterDocInStore();
             ModSystem?.RegisterHost(this); // re-register under the restored (or freshly-minted) DocId
             MarkDirty();
         }
-    }
-
-    /// <summary>Server-side: points the pin store's live index at this document's current position,
-    /// unregistering a stale prior DocId. No-op on the client or before the store exists.</summary>
-    private void RegisterDocInStore()
-    {
-        if (PinStore is not { } store) return;
-        if (registeredDocId is { } prior && prior != Document.DocId)
-        {
-            store.UnregisterDoc(prior);
-        }
-        registeredDocId = Document.DocId;
-        store.RegisterDoc(Document.DocId, Pos);
     }
 
     /// <summary>Server-side accessor for the pin store; null on the client.</summary>
@@ -435,7 +404,6 @@ public abstract class BlockEntityScribeWritingStation : BlockEntity, IRotatable,
         if (documentBytes is not null && ScribeDocumentCodec.TryDeserialize(documentBytes, out var doc) && doc is not null)
         {
             Document = doc;
-            RegisterDocInStore(); // an edit never changes the DocId, but keep the index authoritative
             ModSystem?.RegisterHost(this); // re-register in case the DocId changed (e.g. a fresh document in tests)
             MarkDirty(redrawOnClient: true);
             // Only the editing player's own pins reconcile to their edit (grief-proof, player-owned).

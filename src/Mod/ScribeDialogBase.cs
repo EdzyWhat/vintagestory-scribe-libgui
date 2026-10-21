@@ -103,10 +103,7 @@ public abstract partial class ScribeDialogBase : GuiDialogBlockEntityBase
     /// <summary>True when the Inbox Inventory tab (the Inbox block's own storage) is the active view.</summary>
     protected bool IsInboxInventoryView => viewMode == ScribeLecternView.InboxInventory;
 
-    /// <summary>True when the Read tab is the active view; for subclasses that rebuild their own nav column.</summary>
-    protected bool IsReadView => viewMode == ScribeLecternView.Read;
-
-    /// <summary>True when the Editor tab is the active view (see <see cref="IsReadView"/>).</summary>
+    /// <summary>True when the Editor tab is the active view.</summary>
     protected bool IsEditorView => viewMode == ScribeLecternView.Editor;
 
     /// <summary>Whether another player holds the editor lock; used to dim the Edit nav button.</summary>

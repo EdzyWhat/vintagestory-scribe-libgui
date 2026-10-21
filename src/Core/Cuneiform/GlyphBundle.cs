@@ -14,8 +14,6 @@ public sealed class GlyphBundle
 
     public int CharacterCount => _glyphs.Count;
 
-    public IEnumerable<char> Characters => _glyphs.Keys;
-
     private GlyphBundle(IReadOnlyDictionary<char, Glyph> glyphs) => _glyphs = glyphs;
 
     /// <summary>The glyph for <paramref name="character"/>, or null if none is authored.</summary>

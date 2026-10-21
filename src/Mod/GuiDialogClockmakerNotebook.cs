@@ -46,7 +46,6 @@ public sealed class GuiDialogClockmakerNotebook : GuiDialogScribeNotebook
     private string _pendingLabel = "";
 
     private readonly ScribeNumericFocusRegistry _timerFocus = new();
-    private long _timerTickId;
 
     /// <summary>Last-seen timer status; ForceRebuild runs only on a status transition, not on every server push.</summary>
     private TimerStatus _lastKnownStatus = TimerStatus.Idle;
@@ -63,17 +62,11 @@ public sealed class GuiDialogClockmakerNotebook : GuiDialogScribeNotebook
         // Seed the form's mode from the player's remembered choice.
         _pendingMode = modSystem.MySettings.PreferredTimerMode;
         modSystem.MyTimerChanged += OnTimerChanged;
-        _timerTickId = capi.Event.RegisterGameTickListener(OnTimerTick, 250);
     }
 
     public override void OnGuiClosed()
     {
         modSystem.MyTimerChanged -= OnTimerChanged;
-        if (_timerTickId != 0)
-        {
-            capi.Event.UnregisterGameTickListener(_timerTickId);
-            _timerTickId = 0;
-        }
         _timerFocus.Dispose();
         base.OnGuiClosed();
     }
@@ -357,23 +350,6 @@ public sealed class GuiDialogClockmakerNotebook : GuiDialogScribeNotebook
         _resyncRemaining = true;
     }
 
-    private void OnTimerTick(float dt)
-    {
-        // The countdown text handles its own display; the listener stays registered for status checks.
-    }
-
-    // Helpers
-
-    private static string FormatDuration(double seconds)
-    {
-        int total = (int)Math.Max(0, seconds);
-        int h = total / 3600;
-        int m = (total % 3600) / 60;
-        int s = total % 60;
-        return h > 0
-            ? $"{h:D2}:{m:D2}:{s:D2}"
-            : $"{m:D2}:{s:D2}";
-    }
 }
 
 // ScribeCountdownText

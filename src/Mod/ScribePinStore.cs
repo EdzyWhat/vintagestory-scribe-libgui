@@ -11,9 +11,7 @@ namespace Scribe;
 ///
 /// Invariants:
 /// <list type="bullet">
-/// <item>The durable reference is <c>(DocId, TaskId)</c>, never a block position. The
-/// <see cref="_docPositions"/> index is only a runtime resolver; a miss means "unresolvable right now,"
-/// never "deleted".</item>
+/// <item>The durable reference is <c>(DocId, TaskId)</c>, never a block position.</item>
 /// <item>A pin is auto-cleared only when a task vanishes from THAT player's own saved edit
 /// (<see cref="ReconcileSnapshotsForActor"/>). Breaking the lectern, a chunk unload, or a resolution miss
 /// leaves the pin live with its last-known snapshot.</item>
@@ -23,7 +21,6 @@ namespace Scribe;
 public sealed class ScribePinStore
 {
     private readonly Dictionary<string, List<ScribePinnedRef>> _pins = new();
-    private readonly Dictionary<Guid, BlockPos> _docPositions = new();
 
     // ---------------- Reads ----------------
 
@@ -38,41 +35,6 @@ public sealed class ScribePinStore
     /// <summary>The player's pin for this task, or null — exposes its snapshot without a block resolution.</summary>
     public ScribePinnedRef? GetPin(string playerUid, Guid docId, Guid taskId)
         => Find(playerUid, docId, taskId);
-
-    /// <summary>The uids of every player with at least one pin referencing this document.</summary>
-    public IReadOnlyList<string> PlayersPinning(Guid docId)
-    {
-        var result = new List<string>();
-        foreach (var (uid, list) in _pins)
-        {
-            if (list.Any(p => p.OwnerDocId == docId)) result.Add(uid);
-        }
-        return result;
-    }
-
-    // ---------------- Live DocId → position index ----------------
-
-    /// <summary>Records that <paramref name="docId"/> is hosted at <paramref name="pos"/>, overwriting any
-    /// prior mapping (a document lives in one block at a time).</summary>
-    public void RegisterDoc(Guid docId, BlockPos pos) => _docPositions[docId] = pos.Copy();
-
-    /// <summary>Forgets a document's position. Does not touch pins, so a re-place can re-register.</summary>
-    public void UnregisterDoc(Guid docId) => _docPositions.Remove(docId);
-
-    /// <summary>The registered DocIds (a snapshot copy, safe to iterate while mutating).</summary>
-    public IReadOnlyList<Guid> KnownDocIds() => _docPositions.Keys.ToList();
-
-    /// <summary>Resolves a document to its hosting position. A miss is never a deletion.</summary>
-    public bool TryResolvePos(Guid docId, out BlockPos pos)
-    {
-        if (_docPositions.TryGetValue(docId, out var p))
-        {
-            pos = p;
-            return true;
-        }
-        pos = default!;
-        return false;
-    }
 
     // ---------------- Pin / unpin ----------------
 

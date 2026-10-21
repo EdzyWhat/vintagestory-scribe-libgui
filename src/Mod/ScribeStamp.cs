@@ -275,7 +275,6 @@ internal sealed class ScribeStampState : State<ScribeStamp>
     private static float Lerp(float a, float b, float t) => a + (b - a) * t;
     /// <summary>Map <paramref name="t"/> from [lo,hi] onto 0..1, clamped (0 below lo, 1 above hi).</summary>
     private static float Seg(float t, float lo, float hi) => hi <= lo ? (t >= hi ? 1f : 0f) : Clamp01((t - lo) / (hi - lo));
-    private static float EaseOutCubic(float x) { float u = 1f - x; return 1f - u * u * u; }
     /// <summary>Sine ease-in: slow start accelerating to the end (the entering/descend translation).</summary>
     private static float EaseInSine(float x) => 1f - (float)Math.Cos((x * Math.PI) / 2.0);
     /// <summary>Sine ease-in-out: eased at both ends (the leaving/lift translation).</summary>
