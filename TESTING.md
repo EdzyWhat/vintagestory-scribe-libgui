@@ -931,3 +931,9 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
 - [ ] `000000d3` **Check full redirect flow.** Run: recipient Accept (unchanged), recipient Decline (unchanged), non-recipient Decline (silently ignored), non-recipient Accept with Cancel (no-op), non-recipient Accept with Confirm (redirect succeeds, history trace visible, original recipient's Inbox stays silent).
       *(add-task-notice-redirect-confirm 5.2)*
       - **Backlogged 2026-10-19**: change closed out before archive; in-game verification not yet done.
+
+### remove-dead-code
+
+- [x] `000000d4` **Check Clockmaker timer and HUD pinning after dead-code removal.** Open the Clockmaker's Notebook Timer tab, set a timer and watch it count down; then pin and unpin a task on the HUD.
+      *(remove-dead-code 3.2)*
+      - **Confirmed 2026-10-21**: timer works fully; pinning and unpinning work fully.

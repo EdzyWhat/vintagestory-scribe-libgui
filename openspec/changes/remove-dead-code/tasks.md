@@ -12,4 +12,4 @@
 ## 3. Verify
 
 - [x] 3.1 Run `build/verify.sh` with `VINTAGE_STORY` set: build, all Core tests, and the Atlas suite pass
-- [ ] 3.2 Playtest smoke: open the Clockmaker Timer tab, set and watch a timer; open the HUD and pin/unpin a task (add as Backlogged in TESTING.md first if deferred)
+- [x] 3.2 Playtest smoke: open the Clockmaker Timer tab, set and watch a timer; open the HUD and pin/unpin a task (add as Backlogged in TESTING.md first if deferred)
