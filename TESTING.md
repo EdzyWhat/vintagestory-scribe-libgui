@@ -932,7 +932,7 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
       *(add-task-notice-redirect-confirm 5.2)*
       - **Backlogged 2026-10-19**: change closed out before archive; in-game verification not yet done.
 
-### remove-dead-code
+## remove-dead-code
 
 - [x] `000000d4` **Check Clockmaker timer and HUD pinning after dead-code removal.** Open the Clockmaker's Notebook Timer tab, set a timer and watch it count down; then pin and unpin a task on the HUD.
       *(remove-dead-code 3.2)*
