@@ -1,6 +1,3 @@
-using System;
-using System.Text;
-
 namespace Scribe.Core;
 
 /// <summary>
@@ -44,107 +41,28 @@ public static class ScribePinCodec
     /// <summary>Hard cap on pins per player, enforced on every read so a hostile payload cannot grow the set without limit.</summary>
     public const int MaxPinsPerPlayer = 500;
 
-    /// <summary>Hard cap on players in a store blob (allocation guard).</summary>
-    public const int MaxPlayers = 10_000;
-
     /// <summary>Hard cap on a player-uid length in characters (allocation guard).</summary>
     public const int MaxUidLength = 256;
 
     // ---- SPIN: one player's pin list (network) ----
 
     public static byte[] SerializeList(IReadOnlyList<ScribePinnedRef> pins)
-    {
-        using var ms = new MemoryStream();
-        using (var w = new BinaryWriter(ms, Encoding.UTF8, leaveOpen: true))
-        {
-            w.Write(ListMagic);
-            w.Write(PinVersion);
-            WritePinList(w, pins);
-        }
-        return ms.ToArray();
-    }
+        => ScribePlayerListBlob.SerializeList(ListMagic, PinVersion, pins, WritePinList);
 
     public static bool TryDeserializeList(byte[]? bytes, out List<ScribePinnedRef>? pins)
-    {
-        pins = null;
-        if (bytes is null) return false;
-        try
-        {
-            using var ms = new MemoryStream(bytes, writable: false);
-            using var r = new BinaryReader(ms, Encoding.UTF8, leaveOpen: true);
-            int version = ReadHeader(r, ListMagic);
-            if (version < MinPinVersion || version > PinVersion) return false;
-            if (!TryReadPinList(r, bytes.Length, (byte)version, out var list)) return false;
-            pins = list;
-            return true;
-        }
-        catch (Exception ex) when (ex is EndOfStreamException or IOException or FormatException)
-        {
-            pins = null;
-            return false;
-        }
-    }
+        => ScribePlayerListBlob.TryDeserializeList<ScribePinnedRef>(bytes, ListMagic, MinPinVersion, PinVersion,
+            TryReadPinList, out pins);
 
     // ---- SPST: the whole pin store (savegame) ----
 
     public static byte[] SerializeStore(IReadOnlyDictionary<string, List<ScribePinnedRef>> store)
-    {
-        using var ms = new MemoryStream();
-        using (var w = new BinaryWriter(ms, Encoding.UTF8, leaveOpen: true))
-        {
-            w.Write(StoreMagic);
-            w.Write(PinVersion);
-            w.Write(store.Count);
-            foreach (var (uid, pins) in store)
-            {
-                w.Write(uid);
-                WritePinList(w, pins);
-            }
-        }
-        return ms.ToArray();
-    }
+        => ScribePlayerListBlob.SerializeStore(StoreMagic, PinVersion, store, WritePinList);
 
     public static bool TryDeserializeStore(byte[]? bytes, out Dictionary<string, List<ScribePinnedRef>>? store)
-    {
-        store = null;
-        if (bytes is null) return false;
-        try
-        {
-            using var ms = new MemoryStream(bytes, writable: false);
-            using var r = new BinaryReader(ms, Encoding.UTF8, leaveOpen: true);
-            int version = ReadHeader(r, StoreMagic);
-            if (version < MinPinVersion || version > PinVersion) return false;
-
-            int playerCount = r.ReadInt32();
-            if (playerCount < 0 || playerCount > bytes.Length || playerCount > MaxPlayers) return false;
-
-            var result = new Dictionary<string, List<ScribePinnedRef>>(playerCount);
-            for (int i = 0; i < playerCount; i++)
-            {
-                string uid = r.ReadString();
-                if (uid.Length > MaxUidLength) return false;
-                if (!TryReadPinList(r, bytes.Length, (byte)version, out var list)) return false;
-                result[uid] = list;
-            }
-            store = result;
-            return true;
-        }
-        catch (Exception ex) when (ex is EndOfStreamException or IOException or FormatException)
-        {
-            store = null;
-            return false;
-        }
-    }
+        => ScribePlayerListBlob.TryDeserializeStore<ScribePinnedRef>(bytes, StoreMagic, MinPinVersion, PinVersion,
+            MaxUidLength, TryReadPinList, out store);
 
     // ---- shared helpers ----
-
-    /// <summary>Reads the 4-byte magic + 1-byte version. Returns the version, or -1 on a magic mismatch.</summary>
-    private static int ReadHeader(BinaryReader r, byte[] expectedMagic)
-    {
-        var magic = r.ReadBytes(expectedMagic.Length);
-        if (!magic.AsSpan().SequenceEqual(expectedMagic)) return -1;
-        return r.ReadByte();
-    }
 
     private static void WritePinList(BinaryWriter w, IReadOnlyList<ScribePinnedRef> pins)
     {

@@ -1,8 +1,3 @@
-using System;
-using System.Collections.Generic;
-using System.IO;
-using System.Text;
-
 namespace Scribe.Core;
 
 /// <summary>
@@ -22,106 +17,28 @@ public static class ScribeQuestDecisionCodec
     private const byte Version = 1;
     private const byte MinVersion = 1;
 
-    /// <summary>Upper bound on players in a store blob (allocation guard).</summary>
-    public const int MaxPlayers = 10_000;
-
     /// <summary>Upper bound on a uid/source/quest-code string length, in characters (allocation guard).</summary>
     public const int MaxStringLength = 512;
 
     // ---- SQDL: one player's decision list (network) ----
 
     public static byte[] SerializeList(IReadOnlyList<ScribeQuestDecisionEntry> entries)
-    {
-        using var ms = new MemoryStream();
-        using (var w = new BinaryWriter(ms, Encoding.UTF8, leaveOpen: true))
-        {
-            w.Write(ListMagic);
-            w.Write(Version);
-            WriteEntryList(w, entries);
-        }
-        return ms.ToArray();
-    }
+        => ScribePlayerListBlob.SerializeList(ListMagic, Version, entries, WriteEntryList);
 
     public static bool TryDeserializeList(byte[]? bytes, out List<ScribeQuestDecisionEntry>? entries)
-    {
-        entries = null;
-        if (bytes is null) return false;
-        try
-        {
-            using var ms = new MemoryStream(bytes, writable: false);
-            using var r = new BinaryReader(ms, Encoding.UTF8, leaveOpen: true);
-            int version = ReadHeader(r, ListMagic);
-            if (version < MinVersion || version > Version) return false;
-            if (!TryReadEntryList(r, bytes.Length, out var list)) return false;
-            entries = list;
-            return true;
-        }
-        catch (Exception ex) when (ex is EndOfStreamException or IOException or FormatException)
-        {
-            entries = null;
-            return false;
-        }
-    }
+        => ScribePlayerListBlob.TryDeserializeList<ScribeQuestDecisionEntry>(bytes, ListMagic, MinVersion, Version,
+            ReadEntryList, out entries);
 
     // ---- SQDS: the whole store (savegame) ----
 
     public static byte[] SerializeStore(IReadOnlyDictionary<string, List<ScribeQuestDecisionEntry>> store)
-    {
-        using var ms = new MemoryStream();
-        using (var w = new BinaryWriter(ms, Encoding.UTF8, leaveOpen: true))
-        {
-            w.Write(StoreMagic);
-            w.Write(Version);
-            w.Write(store.Count);
-            foreach (var (uid, entries) in store)
-            {
-                w.Write(uid);
-                WriteEntryList(w, entries);
-            }
-        }
-        return ms.ToArray();
-    }
+        => ScribePlayerListBlob.SerializeStore(StoreMagic, Version, store, WriteEntryList);
 
     public static bool TryDeserializeStore(byte[]? bytes, out Dictionary<string, List<ScribeQuestDecisionEntry>>? store)
-    {
-        store = null;
-        if (bytes is null) return false;
-        try
-        {
-            using var ms = new MemoryStream(bytes, writable: false);
-            using var r = new BinaryReader(ms, Encoding.UTF8, leaveOpen: true);
-            int version = ReadHeader(r, StoreMagic);
-            if (version < MinVersion || version > Version) return false;
-
-            int playerCount = r.ReadInt32();
-            if (playerCount < 0 || playerCount > bytes.Length || playerCount > MaxPlayers) return false;
-
-            var result = new Dictionary<string, List<ScribeQuestDecisionEntry>>(playerCount);
-            for (int i = 0; i < playerCount; i++)
-            {
-                string uid = r.ReadString();
-                if (uid.Length > MaxStringLength) return false;
-                if (!TryReadEntryList(r, bytes.Length, out var list)) return false;
-                result[uid] = list;
-            }
-            store = result;
-            return true;
-        }
-        catch (Exception ex) when (ex is EndOfStreamException or IOException or FormatException)
-        {
-            store = null;
-            return false;
-        }
-    }
+        => ScribePlayerListBlob.TryDeserializeStore<ScribeQuestDecisionEntry>(bytes, StoreMagic, MinVersion, Version,
+            MaxStringLength, ReadEntryList, out store);
 
     // ---- shared helpers ----
-
-    private static int ReadHeader(BinaryReader r, byte[] expectedMagic)
-    {
-        var magic = r.ReadBytes(expectedMagic.Length);
-        if (!magic.AsSpan().SequenceEqual(expectedMagic)) return -1;
-        return r.ReadByte();
-    }
 
     private static void WriteEntryList(BinaryWriter w, IReadOnlyList<ScribeQuestDecisionEntry> entries)
     {
@@ -135,7 +52,7 @@ public static class ScribeQuestDecisionCodec
         }
     }
 
-    private static bool TryReadEntryList(BinaryReader r, int totalBytes, out List<ScribeQuestDecisionEntry> entries)
+    private static bool ReadEntryList(BinaryReader r, int totalBytes, byte version, out List<ScribeQuestDecisionEntry> entries)
     {
         entries = new List<ScribeQuestDecisionEntry>();
         int count = r.ReadInt32();
