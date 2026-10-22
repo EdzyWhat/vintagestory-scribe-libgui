@@ -20,9 +20,8 @@ public sealed class TabletHost : NotebookHost
     /// class's copy is private).</summary>
     private readonly ItemSlot _slot;
 
-    /// <summary>The tablet's base material (<c>clay-red</c>/<c>clay-blue</c>/<c>clay-fire</c>/<c>wax</c>),
-    /// used by <see cref="GetLayout"/> to pick interior proportions. Null falls back to the clay layout.</summary>
-    private readonly string? _material;
+    /// <summary>The material's style, used by <see cref="GetLayout"/> to pick interior proportions.</summary>
+    private readonly TabletStyle _style;
 
     /// <param name="slot">The player's held tablet slot, passed to the base ctor.</param>
     /// <param name="backdrop">The backdrop; defaults to the notebook page.</param>
@@ -30,7 +29,7 @@ public sealed class TabletHost : NotebookHost
     public TabletHost(ItemSlot slot, ScribeBackdropSpec? backdrop = null, string? material = null) : base(slot, backdrop)
     {
         _slot = slot;
-        _material = material;
+        _style = TabletStyle.For(material, TabletState.Wet);
     }
 
     public override string DefaultDocumentTitle => Lang.Get("scribe:doctitle-tablet");
@@ -51,23 +50,6 @@ public sealed class TabletHost : NotebookHost
     /// deliberately unequal per axis (the art is taller than wide), so the buffer reads as even by eye.</para></summary>
     public override ScribeLayout GetLayout(float pixelArtSize)
     {
-        // TitleBtnsWFrac is the fraction of window width used by the title+buttons row; higher wraps a
-        // long title later. Wax wraps sooner because its panel is narrower.
-        var props = _material == "wax"
-            ? ScribeLayoutProportions.Default with
-              {
-                  TitleBarFrac   = 0.15f,
-                  InnerHFrac     = 0.775f,
-                  SideColFrac    = 0.08f,
-                  TitleBtnsWFrac = 0.82f,
-              }
-            : ScribeLayoutProportions.Default with
-              {
-                  TitleBarFrac   = 0.11f,
-                  InnerHFrac     = 0.83f,
-                  SideColFrac    = 0.06f,
-                  TitleBtnsWFrac = 0.86f,
-              };
-        return new ScribeLayout(pixelArtSize, 1160f / 1024f, props);
+        return new ScribeLayout(pixelArtSize, 1160f / 1024f, _style.Layout);
     }
 }

@@ -29,24 +29,6 @@ public readonly record struct CuneiformGlow(
 }
 
 /// <summary>
-/// The cuneiform glow lookup, a thin adapter over the <see cref="TabletReadability"/> bundle, whose
-/// per-<c>(material, state)</c> cells hold the glow alongside ink/link/stroke values. <see cref="For"/> is
-/// the entry point for the three cuneiform call sites.
-///
-/// Glow polarity tracks backdrop luminance (an authoring property of each bundle cell): wet clay is
-/// light-mid with dark ink, so a dark seating halo; the darker hard/fired backdrops use a light halo. The
-/// two-pass render works for either polarity: crisp ink overwrites the halo inside each glyph, leaving only
-/// a fringe on the backdrop.
-/// </summary>
-internal static class CuneiformGlowTable
-{
-    /// <summary>Resolves the glow for a tablet's <paramref name="material"/> and drying
-    /// <paramref name="state"/> from its <see cref="TabletReadability"/> bundle.</summary>
-    public static CuneiformGlow For(string? material, TabletState state) =>
-        TabletReadability.For(material, state).Glow;
-}
-
-/// <summary>
 /// Mod-owned cache of blur mask filters keyed by sigma, reproducing the primitive LibGUI keeps `internal`
 /// (<c>PaintingContext.GetOrCreateBlurMask</c>). Filters are NEVER disposed per-frame: a live SKMaskFilter
 /// must outlast the SKPictureRecorder that references it.

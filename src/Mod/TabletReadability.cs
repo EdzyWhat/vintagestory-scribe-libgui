@@ -20,6 +20,10 @@ internal readonly record struct TabletReadability(
     // The 10 baked view bundles. RGB channels are 0–1; the glow's alpha is its STRENGTH and its blur/offset
     // are fractions of the em.
     //
+    // Glow polarity tracks backdrop luminance: wet clay is light-mid with dark ink, so a dark seating halo;
+    // the darker hard/fired backdrops use a light halo. Crisp ink overwrites the halo inside each glyph,
+    // leaving only a fringe on the backdrop.
+    //
     // Each cell is authored INDEPENDENTLY: this is data, not a rule. Do not "simplify" apparent overlap
     // (glow tints, stroke scale wet 1.2 / hard 1.0 / fired 0.95, offset X == Y) into shared constants; a
     // retune may diverge them.
@@ -89,13 +93,13 @@ internal readonly record struct TabletReadability(
         Glow: new CuneiformGlow(new Vector4(0.965f, 0.949f, 0.898f, 0.28f), 0.215f, 0.01f, 0.01f));
 
     /// <summary>Resolves the bundle for a tablet's <paramref name="material"/> and <paramref name="state"/>.
-    /// <c>wax</c> always resolves to its wet bundle; unrecognized materials use the <c>clay-fire</c> bundle
-    /// for the same state, matching the theme/backdrop fallback.</summary>
-    public static TabletReadability For(string? material, TabletState state) => material switch
+    /// <c>wax</c> always resolves to its wet bundle; <see cref="TabletStyle"/> resolves unrecognized materials
+    /// to <c>clay-red</c> before calling.</summary>
+    public static TabletReadability For(string material, TabletState state) => material switch
     {
         "clay-blue" => state switch { TabletState.Hard => BlueHard, TabletState.Fired => BlueFired, _ => BlueWet },
-        "clay-red"  => state switch { TabletState.Hard => RedHard,  TabletState.Fired => RedFired,  _ => RedWet },
+        "clay-fire" => state switch { TabletState.Hard => FireHard, TabletState.Fired => FireFired, _ => FireWet },
         "wax"       => WaxWet, // wax has only a wet state
-        _           => state switch { TabletState.Hard => FireHard, TabletState.Fired => FireFired, _ => FireWet },
+        _           => state switch { TabletState.Hard => RedHard,  TabletState.Fired => RedFired,  _ => RedWet },
     };
 }

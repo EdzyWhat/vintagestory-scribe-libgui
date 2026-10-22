@@ -203,8 +203,7 @@ internal static class ScribeTheme
         Vector4 Accent, Vector4 OnAccent, Vector4 Secondary,
         Vector4 Surface, Vector4 SurfaceLow, Vector4 SurfaceHigh, Vector4 Background, Vector4 Border);
 
-    /// <summary>Fire-clay colors, warm tan earthenware (backdrop center ≈ <c>#ccaf89</c>); also the fallback
-    /// for unknown materials. <c>Secondary</c> is a deep umber so the pinned wash and focus border read apart.</summary>
+    /// <summary>Fire-clay colors, warm tan earthenware (backdrop center ≈ <c>#ccaf89</c>). <c>Secondary</c> is a deep umber so the pinned wash and focus border read apart.</summary>
     private static readonly ClayColors FireColors = new(
         Accent:           new Vector4(0.55f, 0.30f, 0.15f, 1.0f),
         OnAccent:         new Vector4(0.96f, 0.90f, 0.78f, 1.0f),
@@ -253,40 +252,27 @@ internal static class ScribeTheme
         Background:       new Vector4(0.83f, 0.73f, 0.57f, 1.0f),
         Border:           new Vector4(0.44f, 0.34f, 0.18f, 0.55f));
 
-    /// <summary>The state-independent clay color set for a <paramref name="material"/> variant; unknown
-    /// materials fall back to fire, mirroring <see cref="ForTablet"/>.</summary>
-    private static ClayColors ClayColorsFor(string? material) => material switch
+    /// <summary>The state-independent clay color set for a resolved <see cref="TabletStyle.Material"/>.</summary>
+    private static ClayColors ClayColorsFor(string material) => material switch
     {
         "clay-blue" => BlueColors,
-        "clay-red" => RedColors,
+        "clay-fire" => FireColors,
         "wax" => WaxColors,
-        _ => FireColors, // clay-fire + any unrecognized material (the fire backdrop twin)
+        _ => RedColors,
     };
 
     /// <summary>The theme selector Scribe's core views call: <see cref="Light"/> when Pixel-Art Display is
     /// on, else the player's global theme (<see cref="ThemeData.Default"/>). The off path needs no art.</summary>
     public static ThemeData For(bool pixelArt) => pixelArt ? Light : ThemeData.Default;
 
-    /// <summary>The tablet-tier selector. With Pixel-Art on, returns a palette keyed to the item's
-    /// <c>material</c> (default → fire, so theme and <c>ScribeBackdrops.ForTablet</c> agree) with the body
-    /// ink from <see cref="TabletReadability.BodyInk"/> for <c>(material, state)</c>, the one state-varying
-    /// role. With it off, returns the player's global theme like <see cref="For"/>.</summary>
-    public static ThemeData ForTablet(string? material, TabletState state, bool pixelArt)
+    /// <summary>The tablet-tier selector. With Pixel-Art on, returns a palette keyed to the style's material
+    /// with the body ink from <see cref="TabletReadability.BodyInk"/>, the one state-varying role. With it
+    /// off, returns the player's global theme like <see cref="For"/>.</summary>
+    public static ThemeData ForTablet(TabletStyle style, bool pixelArt)
     {
         if (!pixelArt) return ThemeData.Default;
-        Vector4 ink = TabletReadability.For(material, state).BodyInk;
-        return ClayPalette(ink, ClayColorsFor(material));
+        return ClayPalette(style.Readability.BodyInk, ClayColorsFor(style.Material));
     }
-
-    /// <summary>The per-<c>(material, state)</c> tablet LINK ink for Link/Tracker/Craft row names. The
-    /// clay <c>Primary</c> is a mid-value fill that fails AA as small text on clay, so links use the deeper
-    /// <see cref="TabletReadability.LinkInk"/> (the clay counterpart of <c>ChalkboardLinkText</c>).
-    ///
-    /// <para>A pure map with no Pixel-Art gate: the tablet's <c>DecorateRowStyle</c> gates on Pixel-Art
-    /// Display, since with it off <c>Primary</c> is the correct link color. It stays a
-    /// <c>ScribeRowStyle.LinkColor</c> value, not a <c>ColorScheme</c> role.</para></summary>
-    public static Vector4 ForTabletLink(string? material, TabletState state) =>
-        TabletReadability.For(material, state).LinkInk;
 
     /// <summary>Darkened variant of <see cref="QuestLinkAccent"/> for the fire/red/wax clay grounds, where a
     /// mid-value color fails AA as small text. Shared because all three grounds are similarly light-mid.</summary>
@@ -299,7 +285,7 @@ internal static class ScribeTheme
     /// <summary>The tablet Quest Link accent per clay <paramref name="material"/>; <c>clay-blue</c> gets
     /// <see cref="BlueClayQuestLinkGold"/>, everything else <see cref="TabletQuestLinkDark"/>. The same in every
     /// drying state.</summary>
-    public static Vector4 ForTabletQuestLink(string? material) => material switch
+    public static Vector4 ForTabletQuestLink(string material) => material switch
     {
         "clay-blue" => BlueClayQuestLinkGold,
         _ => TabletQuestLinkDark,

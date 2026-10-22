@@ -33,9 +33,9 @@ public class GuiDialogScribeTablet : ScribeDialogBase
 {
     private IInventory? _hotbar;
 
-    /// <summary>The item's <c>material</c> variant (<c>clay-red</c>/<c>clay-blue</c>/<c>clay-fire</c>/<c>wax</c>),
-    /// used for the per-clay palette and backdrop. Null falls back to the fire palette.</summary>
-    private readonly string? _material;
+    /// <summary>The style resolved from the item's base material (<c>clay-red</c>/<c>clay-blue</c>/<c>clay-fire</c>/<c>wax</c>)
+    /// and <see cref="_state"/>: palette, ink, glow and Quest Link accent.</summary>
+    private readonly TabletStyle _style;
 
     /// <summary>The drying state (wet/hard/fired). Only a wet tablet is editable; hard and fired open read-only.</summary>
     private readonly TabletState _state;
@@ -48,8 +48,8 @@ public class GuiDialogScribeTablet : ScribeDialogBase
         TabletState state = TabletState.Wet)
         : base(new BlockPos(0), host, capi)
     {
-        _material = material;
         _state = state;
+        _style = TabletStyle.For(material, state);
 
         // Seed the editor scratch before TryOpen calls Build() (it inflates the tree before OnGuiOpened).
         // A hard/fired tablet stays in the base's Read view (scratch null).
@@ -133,13 +133,12 @@ public class GuiDialogScribeTablet : ScribeDialogBase
     protected override bool EditorRowsOpenLinks => true;
 
     /// <summary>The <see cref="TabletReadability"/> bundle for this material + state: the single source for
-    /// theme ink, link ink, cuneiform glow, and stroke-weight scale. Recomputed per read (state can change
-    /// via <c>/scribe tablet hard|fired</c>); cheap.</summary>
-    private TabletReadability Readability => TabletReadability.For(_material, _state);
+    /// theme ink, link ink, cuneiform glow, and stroke-weight scale.</summary>
+    private TabletReadability Readability => _style.Readability;
 
-    /// <summary>Per-clay palette keyed to <see cref="_material"/>, agreeing with the backdrop. Pixel-Art
+    /// <summary>Per-clay palette keyed to the style's material, agreeing with the backdrop. Pixel-Art
     /// off falls back to the player's global theme.</summary>
-    protected override ThemeData ResolveTheme(bool pixelArt) => ScribeTheme.ForTablet(_material, _state, pixelArt);
+    protected override ThemeData ResolveTheme(bool pixelArt) => ScribeTheme.ForTablet(_style, pixelArt);
 
     /// <summary>Tints the title-bar pencil + drag-grip with the tablet's dark ink at partial alpha so they
     /// read as engraved. The base applies it via <see cref="SKBlendMode.SrcIn"/>, which fades only the
@@ -169,8 +168,8 @@ public class GuiDialogScribeTablet : ScribeDialogBase
         {
             style = style with
             {
-                LinkColor = ScribeTheme.ForTabletLink(_material, _state),
-                QuestLinkColor = ScribeTheme.ForTabletQuestLink(_material),
+                LinkColor = Readability.LinkInk,
+                QuestLinkColor = _style.QuestLinkAccent,
             };
         }
 
@@ -190,7 +189,7 @@ public class GuiDialogScribeTablet : ScribeDialogBase
             // Stroke-by-stroke reveal of new text, behind a player opt-in (re-derived per build).
             CuneiformProgression = modSystem.MySettings.CuneiformProgression,
             // Outer glow lifting the ink off the backdrop: dark halo when wet, light when hard/fired.
-            CuneiformGlow = CuneiformGlowTable.For(_material, _state),
+            CuneiformGlow = Readability.Glow,
             // Firms the ink up as the tablet dries (wet 0.9 → fired 1.1); non-tablet surfaces keep base weight.
             CuneiformStrokeWeightScale = Readability.StrokeWeightScale,
             // Cuneiform's line box (FontSize×LineHeightRatio, ~27.7px) is taller than the 22px Latin
@@ -235,7 +234,7 @@ public class GuiDialogScribeTablet : ScribeDialogBase
                 jitterStrength: CuneiformMetrics.DefaultJitterStrength,
                 jitterSeed: CuneiformMetrics.SeedFromString(displayTitle),
                 rotationDegrees: CuneiformMetrics.DefaultRotationDegrees,
-                glow: CuneiformGlowTable.For(_material, _state),
+                glow: Readability.Glow,
                 strokeWeightScale: Readability.StrokeWeightScale,
                 glyphDrawScale: CuneiformMetrics.GlyphDrawScale,
                 caretHeightScale: CuneiformMetrics.CaretHeightScale));
@@ -263,7 +262,7 @@ public class GuiDialogScribeTablet : ScribeDialogBase
             // Fixed seed: a text-derived one would re-wobble the whole title on every keystroke.
             jitterSeed: TitleJitterSeed,
             progression: modSystem.MySettings.CuneiformProgression,
-            glow: CuneiformGlowTable.For(_material, _state),
+            glow: Readability.Glow,
             strokeWeightScale: Readability.StrokeWeightScale,
             // Wraps to a second line instead of clipping; Enter still commits.
             singleLine: false);

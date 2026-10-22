@@ -347,7 +347,7 @@ public class ItemScribeTablet : Item, IScribeDocumentItem
         var stack = slot.Itemstack;
         var (material, state) = ResolveMaterialState(stack);
         var host = new TabletHost(slot,
-            ScribeBackdrops.ForTablet(material, state), material);
+            TabletStyle.For(material, state).Backdrop, material);
         var modSystem = capi.ModLoader.GetModSystem<ScribeModSystem>();
         modSystem.RegisterHost(host);
         // Tell the server we opened this tablet (it never sees client-only dialog opens) for the one-time PickedUp entry.

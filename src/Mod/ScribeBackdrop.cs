@@ -93,8 +93,8 @@ internal static class ScribeBackdrops
     /// <summary>Selects the tablet backdrop for a stack's <c>material</c> variant and drying state, so the item
     /// and its dialog agree on the mapping. The clay type is the item's registered variant
     /// (<c>clay-red</c>/<c>clay-blue</c>/<c>clay-fire</c>); <c>wax</c> gets <see cref="Wax"/> and has no hard/fired
-    /// states. An unknown or absent material resolves to red.</summary>
-    public static ScribeBackdropSpec ForTablet(string? material, TabletState state)
+    /// states. Any other material resolves to red.</summary>
+    public static ScribeBackdropSpec ForTablet(string material, TabletState state)
     {
         if (material == "wax") return Wax;
         return (material, state) switch
