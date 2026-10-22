@@ -29,6 +29,13 @@ adding a handler framework or base class.
 - **`Clamp01` became `Scribe.Core.ScribeMath.Clamp01`** (in Core so it is unit-testable) implemented with
   `Math.Clamp`, which treats out-of-range and NaN inputs the same way the three hand-written copies did.
 
+- **Dropped: `SendToClient` and moving `TryReadGuid`.** The two notebook-save echoes send different fields, and
+  `TryReadGuid` is already a member of the `ScribeModSystem` partial class, so every handler can reach it.
+- **Handler tests came first.** The user chose to cover the guard layer before touching it: the handlers became
+  `internal` (matching `OnServerReceivedNotebookSave`) and `ServerPacketHandlerScenarios` drives them.
+- **`ResolveStation` instead of `WithStation`**: returning the station avoids a lambda per packet and keeps each handler's
+  body at the same indentation.
+
 ## Handler coverage map (task 1.1)
 
 Atlas scenarios do not send packets. They call the logic behind the handlers directly (`SetPinForPlayer`,

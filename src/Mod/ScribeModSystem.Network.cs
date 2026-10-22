@@ -1,13 +1,5 @@
-using System;
-using System.Collections.Generic;
-using Gui.Rendering;             // SkiaAssetLoader
-using Gui.Rendering.Text;        // FontRegistry, FontWeight
-using Gui.Sound;                 // ISoundPlayer, SoundPlayer (UI click sound)
 using Scribe.Core;
-using SkiaSharp;
-using Vintagestory.API.Client;
 using Vintagestory.API.Common;
-using Vintagestory.API.Config;
 using Vintagestory.API.Server;
 
 namespace Scribe;
@@ -23,34 +15,39 @@ public sealed partial class ScribeModSystem
         }
     }
 
+    /// <summary>The server-side station (Lectern, Scriptorium, ...) a packet addresses by DocId, or null if this
+    /// is not a server, the id is malformed, or no such station is registered.</summary>
+    private BlockEntityScribeWritingStation? ResolveStation(byte[]? docIdBytes)
+        => sapi is null ? null : TryResolveHost(docIdBytes) as BlockEntityScribeWritingStation;
+
+    /// <summary>Reads the (DocId, TaskId) pair that task-addressed packets carry; logs and returns false for a
+    /// malformed pair so the handler can drop the packet. <paramref name="packetName"/> labels the log line.</summary>
+    private bool TryReadDocTask(string packetName, IServerPlayer fromPlayer, byte[]? docIdBytes, byte[]? taskIdBytes,
+        out Guid docId, out Guid taskId)
+    {
+        if (TryReadGuid(docIdBytes, out docId) && TryReadGuid(taskIdBytes, out taskId)) return true;
+
+        docId = taskId = Guid.Empty;
+        Trace("{0} from {1}: MALFORMED packet (docId/taskId not 16 bytes) — ignored", packetName, fromPlayer.PlayerName);
+        return false;
+    }
+
     internal void OnServerReceivedEdit(IServerPlayer fromPlayer, ScribeEditDocumentMessage message)
     {
-        if (sapi is null) return;
-        if (TryResolveHost(message.DocIdBytes) is BlockEntityScribeWritingStation station)
+        if (ResolveStation(message.DocIdBytes) is { } station && !station.ApplyEdit(fromPlayer, message.DocumentBytes))
         {
-            if (!station.ApplyEdit(fromPlayer, message.DocumentBytes))
-            {
-                station.SendSaveFailedAck(sapi, fromPlayer);
-            }
+            station.SendSaveFailedAck(sapi!, fromPlayer);
         }
     }
 
     internal void OnServerReceivedReleaseLock(IServerPlayer fromPlayer, ScribeReleaseLockMessage message)
     {
-        if (sapi is null) return;
-        if (TryResolveHost(message.DocIdBytes) is BlockEntityScribeWritingStation station)
-        {
-            station.ReleaseLock(fromPlayer.PlayerUID);
-        }
+        ResolveStation(message.DocIdBytes)?.ReleaseLock(fromPlayer.PlayerUID);
     }
 
     internal void OnServerReceivedRequestAccess(IServerPlayer fromPlayer, ScribeRequestAccessMessage message)
     {
-        if (sapi is null) return;
-        if (TryResolveHost(message.DocIdBytes) is BlockEntityScribeWritingStation station)
-        {
-            station.OnRequestAccess(fromPlayer, message.WantEditor, message.QuickAdd);
-        }
+        ResolveStation(message.DocIdBytes)?.OnRequestAccess(fromPlayer, message.WantEditor, message.QuickAdd);
     }
 
     /// <summary>
@@ -58,11 +55,7 @@ public sealed partial class ScribeModSystem
     /// </summary>
     internal void OnServerReceivedSetPin(IServerPlayer fromPlayer, ScribeSetPinMessage message)
     {
-        if (!TryReadGuid(message.DocId, out var docId) || !TryReadGuid(message.TaskId, out var taskId))
-        {
-            Trace("set-pin from {0}: MALFORMED packet (docId/taskId not 16 bytes) — ignored", fromPlayer.PlayerName);
-            return;
-        }
+        if (!TryReadDocTask("set-pin", fromPlayer, message.DocId, message.TaskId, out var docId, out var taskId)) return;
         Trace("set-pin received from {0}: pinned={1} doc={2} task={3}", fromPlayer.PlayerName, message.Pinned, docId, taskId);
         var insertEdge = ScribePlayerSettings.NormalizePinInsert((Scribe.Core.ScribePinInsert)message.PinInsert);
         SetPinForPlayer(fromPlayer, docId, taskId, message.Pinned, message.SnapshotText, message.SnapshotDone,
@@ -73,11 +66,7 @@ public sealed partial class ScribeModSystem
 
     internal void OnServerReceivedCompleteTask(IServerPlayer fromPlayer, ScribeCompleteTaskMessage message)
     {
-        if (!TryReadGuid(message.DocId, out var docId) || !TryReadGuid(message.TaskId, out var taskId))
-        {
-            Trace("complete-task from {0}: MALFORMED packet (docId/taskId not 16 bytes) — ignored", fromPlayer.PlayerName);
-            return;
-        }
+        if (!TryReadDocTask("complete-task", fromPlayer, message.DocId, message.TaskId, out var docId, out var taskId)) return;
         // The completion policy is a client preference carried in the packet; an unknown/hostile byte normalizes to Sink.
         var policy = ScribePlayerSettings.NormalizePolicy((ScribeCompletionPolicy)message.Policy);
         var behavior = ScribePlayerSettings.NormalizeSubtaskBehavior((ScribeSubtaskBehavior)message.SubtaskBehavior);
@@ -87,22 +76,14 @@ public sealed partial class ScribeModSystem
 
     internal void OnServerReceivedEditPinnedTask(IServerPlayer fromPlayer, ScribeEditPinnedTaskMessage message)
     {
-        if (!TryReadGuid(message.DocId, out var docId) || !TryReadGuid(message.TaskId, out var taskId))
-        {
-            Trace("edit-pinned from {0}: MALFORMED packet (docId/taskId not 16 bytes) — ignored", fromPlayer.PlayerName);
-            return;
-        }
+        if (!TryReadDocTask("edit-pinned", fromPlayer, message.DocId, message.TaskId, out var docId, out var taskId)) return;
         Trace("edit-pinned received from {0}: doc={1} task={2}", fromPlayer.PlayerName, docId, taskId);
         EditPinnedTaskForPlayer(fromPlayer, docId, taskId, message.Text ?? "");
     }
 
     internal void OnServerReceivedDeleteTask(IServerPlayer fromPlayer, ScribeDeleteTaskMessage message)
     {
-        if (!TryReadGuid(message.DocId, out var docId) || !TryReadGuid(message.TaskId, out var taskId))
-        {
-            Trace("delete-task from {0}: MALFORMED packet (docId/taskId not 16 bytes) — ignored", fromPlayer.PlayerName);
-            return;
-        }
+        if (!TryReadDocTask("delete-task", fromPlayer, message.DocId, message.TaskId, out var docId, out var taskId)) return;
         var behavior = ScribePlayerSettings.NormalizeSubtaskBehavior((ScribeSubtaskBehavior)message.SubtaskBehavior);
         Trace("delete-task received from {0}: doc={1} task={2} subtask={3}", fromPlayer.PlayerName, docId, taskId, behavior);
         DeleteTaskForPlayer(fromPlayer, docId, taskId, behavior);
@@ -110,21 +91,13 @@ public sealed partial class ScribeModSystem
 
     internal void OnServerReceivedSetTrackerQuantity(IServerPlayer fromPlayer, ScribeSetTrackerQuantityMessage message)
     {
-        if (!TryReadGuid(message.DocId, out var docId) || !TryReadGuid(message.TaskId, out var taskId))
-        {
-            Trace("set-tracker-qty from {0}: MALFORMED packet (docId/taskId not 16 bytes) — ignored", fromPlayer.PlayerName);
-            return;
-        }
+        if (!TryReadDocTask("set-tracker-qty", fromPlayer, message.DocId, message.TaskId, out var docId, out var taskId)) return;
         SetTrackerQuantityForPlayer(fromPlayer, docId, taskId, message.Quantity);
     }
 
     internal void OnServerReceivedSetQuestObjectiveProgress(IServerPlayer fromPlayer, ScribeSetQuestObjectiveProgressMessage message)
     {
-        if (!TryReadGuid(message.DocId, out var docId) || !TryReadGuid(message.TaskId, out var taskId))
-        {
-            Trace("set-questobjective-progress from {0}: MALFORMED packet (docId/taskId not 16 bytes) — ignored", fromPlayer.PlayerName);
-            return;
-        }
+        if (!TryReadDocTask("set-questobjective-progress", fromPlayer, message.DocId, message.TaskId, out var docId, out var taskId)) return;
         SetQuestObjectiveProgressForPlayer(fromPlayer, docId, taskId, message.Quantity);
     }
 
@@ -351,16 +324,12 @@ public sealed partial class ScribeModSystem
 
     internal void OnServerReceivedRecordVisitor(IServerPlayer fromPlayer, ScribeRecordVisitorMessage message)
     {
-        if (sapi is null) return;
-        if (TryResolveHost(message.DocIdBytes) is BlockEntityScribeWritingStation station)
-            station.RecordVisitor(sapi, fromPlayer);
+        ResolveStation(message.DocIdBytes)?.RecordVisitor(sapi!, fromPlayer);
     }
 
     internal void OnServerReceivedEditGuestbookNote(IServerPlayer fromPlayer, ScribeEditGuestbookNoteMessage message)
     {
-        if (sapi is null) return;
-        if (TryResolveHost(message.DocIdBytes) is BlockEntityScribeWritingStation station)
-            station.UpdateGuestbookNote(sapi, fromPlayer, message.InGameDate ?? "", message.Note ?? "");
+        ResolveStation(message.DocIdBytes)?.UpdateGuestbookNote(sapi!, fromPlayer, message.InGameDate ?? "", message.Note ?? "");
     }
 
     private void OnClientReceivedGuestbookSync(ScribeGuestbookSyncMessage message)
