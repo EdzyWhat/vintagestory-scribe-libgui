@@ -937,3 +937,9 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
 - [x] `000000d4` **Check Clockmaker timer and HUD pinning after dead-code removal.** Open the Clockmaker's Notebook Timer tab, set a timer and watch it count down; then pin and unpin a task on the HUD.
       *(remove-dead-code 3.2)*
       - **Confirmed 2026-10-21**: timer works fully; pinning and unpinning work fully.
+
+## add-tablet-style-facade
+
+- [ ] `000000d5` **Check all 10 tablet variants after the TabletStyle facade.** Open a red, blue and fire tablet in each of wet, hard and fired, plus a wax tablet. Confirm the ink, backdrop, glow, Quest Link color and layout look as before.
+      *(add-tablet-style-facade 3.2)*
+      - **Backlogged 2026-10-22**: playtest deferred; branch `add-tablet-style-facade` is committed but not merged to main.

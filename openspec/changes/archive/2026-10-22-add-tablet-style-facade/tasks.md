@@ -12,4 +12,4 @@
 ## 3. Verify
 
 - [x] 3.1 Run `build/verify.sh`; confirm Core and Atlas pass
-- [ ] 3.2 Playtest: open each of the 10 tablet variants (red, blue, fire x wet/hard/fired, plus wax) and confirm ink, backdrop, glow, quest-link color and layout look unchanged
+- [x] 3.2 Playtest: open each of the 10 tablet variants (red, blue, fire x wet/hard/fired, plus wax) and confirm ink, backdrop, glow, quest-link color and layout look unchanged
