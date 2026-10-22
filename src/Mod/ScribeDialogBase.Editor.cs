@@ -456,7 +456,7 @@ public abstract partial class ScribeDialogBase
         // picker dims at the cap but stays clickable). Below the cap, item-bound kinds can't be created from a bare
         // footer click (they need a Handbook-supplied target), so the click is a guide gesture; nothing is mutated.
         if (!CanAddTaskUnderPolicy()) { NotifyTabletFull(); return; }
-        if (kind.RequiresItemContext) { DispatchItemKindGuide(kind); return; }
+        if (kind.RequiresItemContext) { DispatchItemKindGuide(); return; }
         if (focusedEditIndex is { } leaving) NormalizeRowOnCommit(leaving);
         // Task/Note ignore the item code argument.
         int at = NewTaskInsertIndex();

@@ -1,5 +1,3 @@
-using System;
-using System.Collections.Generic;
 using Gui.Rendering;             // EdgeInsets
 using Gui.Rendering.Text;        // TextStyle, FontWeight
 using Gui.Widgets.Basic;         // Text, Divider, Button, ButtonVariant
@@ -109,7 +107,7 @@ internal sealed class ScribeSettingsContent : StatelessWidget
                         },
                         onChanged: v => onMutate(s => s.CompletionPolicy = v))),
 
-                PairedControls(colors, scale,
+                PairedControls(scale,
                     LabeledControl(
                         "settings-trackercompletion", colors, scale,
                         new Dropdown<ScribeTrackerCompletion>(
@@ -133,7 +131,7 @@ internal sealed class ScribeSettingsContent : StatelessWidget
                             },
                             onChanged: v => onMutate(s => s.SubtaskBehavior = v)))),
 
-                PairedControls(colors, scale,
+                PairedControls(scale,
                     LabeledControl(
                         "settings-newtaskinsert", colors, scale,
                         new Dropdown<ScribeNewTaskInsert>(
@@ -160,7 +158,7 @@ internal sealed class ScribeSettingsContent : StatelessWidget
                     value: settings.MuteUiSounds,
                     onChanged: v => onMutate(s => s.MuteUiSounds = v)),
 
-                PairedControls(colors, scale,
+                PairedControls(scale,
                     HuggingCheckbox(
                         "settings-timerdisappear", colors, scale,
                         value: settings.TimerAutoDisappear,
@@ -175,7 +173,7 @@ internal sealed class ScribeSettingsContent : StatelessWidget
         // Quest policies are shown only when vsquest is installed (inert otherwise).
         if (showQuestSettings)
         {
-            children.Add(PairedControls(colors, scale,
+            children.Add(PairedControls(scale,
                 LabeledControl(
                     "settings-questacceptpolicy", colors, scale,
                     new Dropdown<ScribeQuestAcceptPolicy>(
@@ -226,7 +224,7 @@ internal sealed class ScribeSettingsContent : StatelessWidget
             {
                 // Task/note ROW text font only (the empty-string default keeps the built-in body font).
                 // Paired with the theme-picker button because a full-width button reads as oversized.
-                PairedControls(colors, scale,
+                PairedControls(scale,
                     LabeledControl(
                         "settings-taskfont", colors, scale,
                         new Dropdown<string>(
@@ -244,7 +242,7 @@ internal sealed class ScribeSettingsContent : StatelessWidget
 
                 // Pixel Art Size is the Lectern's single driving width (10px grid, snapped on blur); the
                 // window text scale is a percent snapping to a 5% notch on blur.
-                PairedControls(colors, scale,
+                PairedControls(scale,
                     LabeledControl(
                         "settings-pixelartsize", colors, scale,
                         IntField("pixelartsize", settings.PixelArtSize, step: 10,
@@ -255,7 +253,7 @@ internal sealed class ScribeSettingsContent : StatelessWidget
                         FontScaleField("windowfontscale", settings.WindowFontScale, v => onMutate(s => s.WindowFontScale = v)))),
 
                 // Cuneiform press-in only applies while Cuneiform tablets is on, so it sits alone below.
-                PairedControls(colors, scale,
+                PairedControls(scale,
                     HuggingCheckbox(
                         "settings-pixelartdisplay", colors, scale,
                         value: settings.PixelArtDisplay,
@@ -298,7 +296,7 @@ internal sealed class ScribeSettingsContent : StatelessWidget
             mainAxisSize: MainAxisSize.Min,
             children: new Widget[]
             {
-                PairedControls(colors, scale,
+                PairedControls(scale,
                     HuggingCheckbox(
                         "settings-hudcollapsed", colors, scale,
                         value: settings.HudCollapsed,
@@ -308,7 +306,7 @@ internal sealed class ScribeSettingsContent : StatelessWidget
                         value: settings.StormCorruption,
                         onChanged: v => onMutate(s => s.StormCorruption = v))),
 
-                PairedControls(colors, scale,
+                PairedControls(scale,
                     HuggingCheckbox(
                         "settings-hudshowicons", colors, scale,
                         value: settings.HudShowIcons,
@@ -326,7 +324,7 @@ internal sealed class ScribeSettingsContent : StatelessWidget
                         onChanged: v => onMutate(s => s.HudAnchor = v))),
 
                 // Numeric fields, not sliders (sliders hijack scroll); each clamps ON BLUR via a Core Clamp* static.
-                PairedControls(colors, scale,
+                PairedControls(scale,
                     LabeledControl(
                         "settings-hudmaxrows", colors, scale,
                         IntField("hudmaxrows", settings.HudMaxRows, step: 1,
@@ -338,7 +336,7 @@ internal sealed class ScribeSettingsContent : StatelessWidget
                             onChanged: v => onMutate(s => s.HudRowWidth = v),
                             clamp: ScribePlayerSettings.ClampHudRowWidth))),
 
-                PairedControls(colors, scale,
+                PairedControls(scale,
                     LabeledControl(
                         "settings-hudoffset", colors, scale,
                         new Row(
@@ -444,7 +442,7 @@ internal sealed class ScribeSettingsContent : StatelessWidget
         new Text(text, Pegged(ScribeRowConstants.BaseSettingsFontSize * scale * 1.08f, colors.OnSurface, FontWeight.Bold));
 
     /// <summary>Two controls side by side as equal-width columns.</summary>
-    private static Widget PairedControls(ColorScheme colors, float scale, Widget left, Widget right) =>
+    private static Widget PairedControls(float scale, Widget left, Widget right) =>
         new Row(
             spacing: 12 * scale,
             mainAxisSize: MainAxisSize.Max,

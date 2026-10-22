@@ -1,4 +1,3 @@
-using System;                    // Action (footer Settings gear seam)
 using Gui.Rendering;             // WorldAnchor (Anchor opt-out)
 using Gui.Rendering.Text;        // TextStyle (cuneiform title seam overrides)
 using Gui.Widgets.Framework;     // Widget, ThemeData, ColorScheme
@@ -171,7 +170,7 @@ public class GuiDialogScribeTablet : ScribeDialogBase
             style = style with
             {
                 LinkColor = ScribeTheme.ForTabletLink(_material, _state),
-                QuestLinkColor = ScribeTheme.ForTabletQuestLink(_material, _state),
+                QuestLinkColor = ScribeTheme.ForTabletQuestLink(_material),
             };
         }
 

@@ -171,7 +171,7 @@ internal sealed class HudPinsContent : StatelessWidget
         // Fully opaque black glow for contrast over busy world backgrounds.
         Vector4 glow = new(0f, 0f, 0f, 1.0f);
 
-        var children = new List<Widget> { BuildHeader(colors, glow) };
+        var children = new List<Widget> { BuildHeader(glow) };
 
         // Quest prompt banner: shown regardless of collapse state so a collapsed HUD doesn't hide it. Wrapped in a
         // slide-in keyed by the prompt's own identity: a new prompt slides in, the same prompt across rebuilds stays settled. The "questprompt:" key prefix
@@ -199,8 +199,8 @@ internal sealed class HudPinsContent : StatelessWidget
             var items = rows
                 .Select(r => new ScribeAnimatedListItem(
                     Id: r.TaskId,
-                    Child: BuildRow(r, colors, glow),
-                    Ghost: BuildFrozenGhost(r, colors, glow)))
+                    Child: BuildRow(r, glow),
+                    Ghost: BuildFrozenGhost(r, glow)))
                 .ToList();
 
             children.Add(new ScribeAnimatedList(
@@ -234,7 +234,7 @@ internal sealed class HudPinsContent : StatelessWidget
             if (timerData is { Status: Scribe.Core.TimerStatus.Running or Scribe.Core.TimerStatus.Fired })
             {
                 children.Add(new Divider());
-                children.Add(BuildTimerRow(timerData, colors, glow, capiForTimer));
+                children.Add(BuildTimerRow(timerData, glow, capiForTimer));
             }
         }
 
@@ -253,7 +253,7 @@ internal sealed class HudPinsContent : StatelessWidget
 
     /// <summary>The collapse header: clickable chevron + title, and a gear opening settings. Present collapsed
     /// too. The gear has its own GestureDetector so tapping it doesn't toggle collapse.</summary>
-    private Widget BuildHeader(ColorScheme colors, Vector4 glow)
+    private Widget BuildHeader(Vector4 glow)
     {
         var titleStyle = new TextStyle
         {
@@ -404,7 +404,7 @@ internal sealed class HudPinsContent : StatelessWidget
     ///
     /// <para>Collapse on removal is not here: the departed identity leaves the set and
     /// <see cref="ScribeAnimatedList"/> collapses a <see cref="BuildFrozenGhost"/>.</para></summary>
-    private Widget BuildRow(HudPinRow row, ColorScheme colors, Vector4 glow)
+    private Widget BuildRow(HudPinRow row, Vector4 glow)
     {
         // HUD text is explicit near-white rather than theme.OnSurface: it always renders over the world and needs
         // the contrast. Sunk rows are more muted.
@@ -582,7 +582,7 @@ internal sealed class HudPinsContent : StatelessWidget
     /// live row can't be frozen (clickable checkbox, client state gone), so this twin has the text at ZERO opacity,
     /// matching the already-faded row (<see cref="ScribeFadeText"/> ramped it to ~0) so the collapse closes empty
     /// space. No ValueKey: the container owns the ghost's lifetime.</summary>
-    private Widget BuildFrozenGhost(HudPinRow row, ColorScheme colors, Vector4 glow)
+    private Widget BuildFrozenGhost(HudPinRow row, Vector4 glow)
     {
         var textStyle = new TextStyle
         {
@@ -634,7 +634,7 @@ internal sealed class HudPinsContent : StatelessWidget
         return ghost;
     }
 
-    private Widget BuildTimerRow(Scribe.Core.TimerStore timer, ColorScheme colors, Vector4 glow, ICoreClientAPI? capi)
+    private Widget BuildTimerRow(Scribe.Core.TimerStore timer, Vector4 glow, ICoreClientAPI? capi)
     {
         bool fired = timer.Status == Scribe.Core.TimerStatus.Fired;
 

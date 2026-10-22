@@ -1,5 +1,3 @@
-using System.Collections.Generic;
-using System.Linq;
 using System.Text;                 // StringBuilder (.scribeprobe dev dump)
 using Scribe.Core;
 using Vintagestory.API.Client;
@@ -197,7 +195,7 @@ internal static class ScribeCraftRecipeProbe
                 // `requiresLitres`, so it degrades to a note.
                 if (resolved is not null && resolved.MatterState == EnumMatterState.Liquid)
                 {
-                    string noteText = Lang.Get("scribe:scribe-gui-craft-liquid-note", DisplayName(capi, cell));
+                    string noteText = Lang.Get("scribe:scribe-gui-craft-liquid-note", DisplayName(cell));
                     if (seenNotes.Add(noteText)) notes.Add(noteText);
                     continue;
                 }
@@ -373,7 +371,7 @@ internal static class ScribeCraftRecipeProbe
         return Lang.Get("scribe:scribe-gui-craft-recipe-ordinal", ordinal);
     }
 
-    private static string DisplayName(ICoreClientAPI capi, CraftingRecipeIngredient ingredient)
+    private static string DisplayName(CraftingRecipeIngredient ingredient)
     {
         var stack = ingredient.ResolvedItemStack;
         if (stack is not null) return stack.GetName();

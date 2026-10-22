@@ -1,4 +1,3 @@
-using System;
 
 namespace Scribe.Core;
 
@@ -119,7 +118,7 @@ public static class ScribeCompletion
         if (behavior == ScribeSubtaskBehavior.DiscardChildren)
             return ApplyDiscardParent(doc, idx, taskId, nowDone, policy, runStart, runEnd);
 
-        return ApplyBoundParent(doc, idx, taskId, nowDone, policy, runEnd);
+        return ApplyBoundParent(doc, idx, nowDone, policy, runEnd);
     }
 
     /// <summary>Standalone trash of <paramref name="taskId"/>. A depth-1 row, a depth-0 row with an empty
@@ -171,7 +170,7 @@ public static class ScribeCompletion
             AffectedTaskIds: new[] { taskId }, DeletedTaskIds: deleted);
     }
 
-    private static LocalOutcome ApplyBoundParent(ScribeDocument doc, int parentIndex, Guid taskId,
+    private static LocalOutcome ApplyBoundParent(ScribeDocument doc, int parentIndex,
         bool nowDone, ScribeCompletionPolicy policy, int runEnd)
     {
         var completable = new List<Guid>();

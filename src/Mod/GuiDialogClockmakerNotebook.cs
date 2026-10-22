@@ -174,7 +174,6 @@ public sealed class GuiDialogClockmakerNotebook : GuiDialogScribeNotebook
     private Widget BuildSetTimerForm(ColorScheme colors, TextStyle bodyStyle, TextStyle smallStyle, float scale)
     {
         float fieldH = 34f * scale;
-        float fieldW = 70f * scale;
 
         // Label field.
         var labelController = new TextEditingController(_pendingLabel);

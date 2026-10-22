@@ -1,6 +1,3 @@
-using System;                    // Action
-using System.Linq;
-using Gui;                       // GuiDialog
 using Scribe.Core;
 using Vintagestory.API.Client;   // ICoreClientAPI, GuiDialog, LinkTextComponent
 using Vintagestory.API.Config;   // Lang
@@ -185,7 +182,7 @@ public abstract partial class ScribeDialogBase
     /// Handbook page supplies. Handbook closed: opens the overview with the search box focused via the
     /// <c>"handbooksearch"</c> link protocol. Handbook open: shows an error telling the player to use "Add to Scribe"
     /// at the bottom of the entry. No-op when the survival mod's handbook isn't loaded.</summary>
-    private void DispatchItemKindGuide(ScribeAddKind kind)
+    private void DispatchItemKindGuide()
     {
         GuiDialog? openHandbook = capi.Gui.OpenedGuis
             .FirstOrDefault(d => d.ToggleKeyCombinationCode == "handbook");

@@ -297,9 +297,9 @@ internal static class ScribeTheme
     private static readonly Vector4 BlueClayQuestLinkGold = new(0.62f, 0.46f, 0.14f, 1.0f);
 
     /// <summary>The tablet Quest Link accent per clay <paramref name="material"/>; <c>clay-blue</c> gets
-    /// <see cref="BlueClayQuestLinkGold"/>, everything else <see cref="TabletQuestLinkDark"/>. Not
-    /// <paramref name="state"/>-dependent.</summary>
-    public static Vector4 ForTabletQuestLink(string? material, TabletState state) => material switch
+    /// <see cref="BlueClayQuestLinkGold"/>, everything else <see cref="TabletQuestLinkDark"/>. The same in every
+    /// drying state.</summary>
+    public static Vector4 ForTabletQuestLink(string? material) => material switch
     {
         "clay-blue" => BlueClayQuestLinkGold,
         _ => TabletQuestLinkDark,
