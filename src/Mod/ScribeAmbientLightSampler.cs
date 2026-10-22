@@ -1,8 +1,8 @@
-using System;
 using Scribe.Core;                       // ScribeBrightnessCurve, ScribePlayerSettings
 using Vintagestory.API.Client;           // ICoreClientAPI
 using Vintagestory.API.Common;           // EntityPlayer, CollectibleObject.GetLightHsv, IWorldAccessor.BlockLightLevels
 using Vintagestory.API.MathTools;        // Vec4f, Vec3f, BlockPos, ColorUtil
+using static Scribe.Core.ScribeMath;
 
 namespace Scribe;
 
@@ -281,7 +281,6 @@ internal sealed class ScribeAmbientLightSampler
     private static int QuantizeStep(float v, int steps) =>
         (int)MathF.Round(Clamp01(v) * steps);
 
-    private static float Clamp01(float v) => v < 0f ? 0f : (v > 1f ? 1f : v);
 
     /// <summary>DEV diagnostic (<c>.scribelight</c>): an unsmoothed one-shot snapshot of what the sampler sees
     /// at the player, for calibrating the curve. Does not touch smoothing/quantization state; static so it runs

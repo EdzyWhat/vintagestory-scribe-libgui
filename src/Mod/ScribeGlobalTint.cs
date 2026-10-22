@@ -1,5 +1,3 @@
-using System;                     // TimeSpan
-using System.Collections.Generic;
 using Gui.Core.Framework;         // RenderProxyBox, RenderObject
 using Gui.Rendering;              // PaintingContext
 using Gui.Widgets.Framework;      // SingleChildWidget, Widget, Key, Theme, ThemeData, ColorScheme
@@ -157,7 +155,7 @@ internal sealed class ScribeGlobalTint : SingleChildWidget
         return made;
     }
 
-    private static int Q(float v) => (int)(System.MathF.Round((v < 0f ? 0f : v > 1f ? 1f : v) * 255f));
+    private static int Q(float v) => (int)(System.MathF.Round(Scribe.Core.ScribeMath.Clamp01(v) * 255f));
 
     private sealed class GlobalTintRender : RenderProxyBox
     {

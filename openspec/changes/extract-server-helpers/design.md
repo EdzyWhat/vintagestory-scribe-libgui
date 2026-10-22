@@ -22,7 +22,27 @@ adding a handler framework or base class.
   line so existing log greps still match.
 - **`Clamp01` lives in one internal static class** (`ScribeMath`) in Mod. Moving it into Core (testable) is
   optional and only if no Mod type is needed.
-- **`ScribeLang` helpers take the lookup flags as parameters**, so `HistoryDisplay`'s quiet lookup is preserved.
+- **Dropped: the `ScribeLang` helpers.** Audit of the call sites found three one-line
+  `HasTranslation ? Get : fallback` ternaries (two in `ScribeQuestCatalog`, one in
+  `ScribeProgressionFrameworkQuestCatalog`); `HistoryDisplay.HasKey` is an existence check with different flags, not
+  the same pattern. A helper would add a file and save no lines, so it is not worth it.
+- **`Clamp01` became `Scribe.Core.ScribeMath.Clamp01`** (in Core so it is unit-testable) implemented with
+  `Math.Clamp`, which treats out-of-range and NaN inputs the same way the three hand-written copies did.
+
+## Handler coverage map (task 1.1)
+
+Atlas scenarios do not send packets. They call the logic behind the handlers directly (`SetPinForPlayer`,
+`CompleteTaskForPlayer`, `lectern.ApplyEdit`, `lectern.OnRequestAccess`, `ApplyTaskNoticeAction`), and only
+`OnServerReceivedNotebookSave` is invoked as a handler (`TabletNotebookDocIdStampRaceScenarios`,
+`EditorAssignmentCompletionSyncScenarios`). The wrappers this change would touch are the guard layer in front of that
+logic (null `sapi`, host lookup, 16-byte GUID checks and their trace text), and no automated test reaches it:
+
+| Handler group | Reached by an automated test? |
+|---|---|
+| Edit, ReleaseLock, RequestAccess, RecordVisitor, EditGuestbookNote (station lookup) | No (logic behind them is) |
+| SetPin, CompleteTask, EditPinnedTask, DeleteTask, SetTrackerQuantity, SetQuestObjectiveProgress (doc+task GUID guard) | No (logic behind them is) |
+| Manual-history Add / SetText / Delete (entry GUID guard) | No |
+| NotebookSave echo (`SendToClient`) | Yes, handler is called directly |
 
 ## Risks / Trade-offs
 

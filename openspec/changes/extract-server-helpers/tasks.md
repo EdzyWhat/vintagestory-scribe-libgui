@@ -1,11 +1,11 @@
 ## 1. Map coverage
 
-- [ ] 1.1 Record in `design.md` which Atlas scenarios exercise each packet handler in `ScribeModSystem.Network.cs`; verify the list names every handler to be changed and marks the uncovered ones
+- [x] 1.1 Record in `design.md` which Atlas scenarios exercise each packet handler in `ScribeModSystem.Network.cs`; verify the list names every handler to be changed and marks the uncovered ones
 
 ## 2. Small helpers
 
-- [ ] 2.1 Add the shared `Clamp01` and replace the copies in `ScribeAmbientLightSampler`, `ScribeStamp`, `ScribeGlobalTint.Q`; verify build and identical results for 0, 0.5, 1, and out-of-range inputs via a small test
-- [ ] 2.2 Add `ScribeLang.GetOrNull`/`GetOr` and use them in the two quest catalogs and `HistoryDisplay` (keeping its flags); verify build and the History display unchanged in a smoke check
+- [x] 2.1 Add the shared `Clamp01` and replace the copies in `ScribeAmbientLightSampler`, `ScribeStamp`, `ScribeGlobalTint.Q`; verify build and identical results for 0, 0.5, 1, and out-of-range inputs via a small test
+- [x] 2.2 Skipped: only three one-line lang ternaries exist, so a helper would save no lines (see design.md)
 
 ## 3. Network handlers (one commit per group)
 

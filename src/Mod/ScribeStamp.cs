@@ -1,4 +1,3 @@
-using System;
 using Gui.Rendering.Text;         // TextStyle, FontWeight
 using Gui.Widgets.Animations;     // AnimationController, AnimationStatus, Curve, Curves
 using Gui.Widgets.Basic;          // Text, Container
@@ -7,6 +6,7 @@ using Gui.Widgets.Layout;         // Stack, Positioned, SizedBox, Alignment
 using Gui.Widgets.Painting;       // Opacity, Transform, BoxStyle
 using OpenTK.Mathematics;         // Vector2, Vector4
 using SkiaSharp;                  // SKBitmap, SKMatrix
+using static Scribe.Core.ScribeMath;
 
 namespace Scribe;
 
@@ -271,7 +271,6 @@ internal sealed class ScribeStampState : State<ScribeStamp>
     }
 
     // ---- small easing / mapping helpers (kept local; the row animations use Curves for their eased 0→1) ----
-    private static float Clamp01(float x) => x < 0f ? 0f : x > 1f ? 1f : x;
     private static float Lerp(float a, float b, float t) => a + (b - a) * t;
     /// <summary>Map <paramref name="t"/> from [lo,hi] onto 0..1, clamped (0 below lo, 1 above hi).</summary>
     private static float Seg(float t, float lo, float hi) => hi <= lo ? (t >= hi ? 1f : 0f) : Clamp01((t - lo) / (hi - lo));
