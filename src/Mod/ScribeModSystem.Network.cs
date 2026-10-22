@@ -23,7 +23,7 @@ public sealed partial class ScribeModSystem
         }
     }
 
-    private void OnServerReceivedEdit(IServerPlayer fromPlayer, ScribeEditDocumentMessage message)
+    internal void OnServerReceivedEdit(IServerPlayer fromPlayer, ScribeEditDocumentMessage message)
     {
         if (sapi is null) return;
         if (TryResolveHost(message.DocIdBytes) is BlockEntityScribeWritingStation station)
@@ -35,7 +35,7 @@ public sealed partial class ScribeModSystem
         }
     }
 
-    private void OnServerReceivedReleaseLock(IServerPlayer fromPlayer, ScribeReleaseLockMessage message)
+    internal void OnServerReceivedReleaseLock(IServerPlayer fromPlayer, ScribeReleaseLockMessage message)
     {
         if (sapi is null) return;
         if (TryResolveHost(message.DocIdBytes) is BlockEntityScribeWritingStation station)
@@ -44,7 +44,7 @@ public sealed partial class ScribeModSystem
         }
     }
 
-    private void OnServerReceivedRequestAccess(IServerPlayer fromPlayer, ScribeRequestAccessMessage message)
+    internal void OnServerReceivedRequestAccess(IServerPlayer fromPlayer, ScribeRequestAccessMessage message)
     {
         if (sapi is null) return;
         if (TryResolveHost(message.DocIdBytes) is BlockEntityScribeWritingStation station)
@@ -56,7 +56,7 @@ public sealed partial class ScribeModSystem
     /// <summary>
     /// Pin/unpin by (DocId, TaskId); see <see cref="SetPinForPlayer"/>. Only the affected player is re-pushed.
     /// </summary>
-    private void OnServerReceivedSetPin(IServerPlayer fromPlayer, ScribeSetPinMessage message)
+    internal void OnServerReceivedSetPin(IServerPlayer fromPlayer, ScribeSetPinMessage message)
     {
         if (!TryReadGuid(message.DocId, out var docId) || !TryReadGuid(message.TaskId, out var taskId))
         {
@@ -71,7 +71,7 @@ public sealed partial class ScribeModSystem
             message.SnapshotLinkLabel, message.SnapshotDepth, insertEdge);
     }
 
-    private void OnServerReceivedCompleteTask(IServerPlayer fromPlayer, ScribeCompleteTaskMessage message)
+    internal void OnServerReceivedCompleteTask(IServerPlayer fromPlayer, ScribeCompleteTaskMessage message)
     {
         if (!TryReadGuid(message.DocId, out var docId) || !TryReadGuid(message.TaskId, out var taskId))
         {
@@ -85,7 +85,7 @@ public sealed partial class ScribeModSystem
         CompleteTaskForPlayer(fromPlayer, docId, taskId, policy, behavior);
     }
 
-    private void OnServerReceivedEditPinnedTask(IServerPlayer fromPlayer, ScribeEditPinnedTaskMessage message)
+    internal void OnServerReceivedEditPinnedTask(IServerPlayer fromPlayer, ScribeEditPinnedTaskMessage message)
     {
         if (!TryReadGuid(message.DocId, out var docId) || !TryReadGuid(message.TaskId, out var taskId))
         {
@@ -96,7 +96,7 @@ public sealed partial class ScribeModSystem
         EditPinnedTaskForPlayer(fromPlayer, docId, taskId, message.Text ?? "");
     }
 
-    private void OnServerReceivedDeleteTask(IServerPlayer fromPlayer, ScribeDeleteTaskMessage message)
+    internal void OnServerReceivedDeleteTask(IServerPlayer fromPlayer, ScribeDeleteTaskMessage message)
     {
         if (!TryReadGuid(message.DocId, out var docId) || !TryReadGuid(message.TaskId, out var taskId))
         {
@@ -108,7 +108,7 @@ public sealed partial class ScribeModSystem
         DeleteTaskForPlayer(fromPlayer, docId, taskId, behavior);
     }
 
-    private void OnServerReceivedSetTrackerQuantity(IServerPlayer fromPlayer, ScribeSetTrackerQuantityMessage message)
+    internal void OnServerReceivedSetTrackerQuantity(IServerPlayer fromPlayer, ScribeSetTrackerQuantityMessage message)
     {
         if (!TryReadGuid(message.DocId, out var docId) || !TryReadGuid(message.TaskId, out var taskId))
         {
@@ -118,7 +118,7 @@ public sealed partial class ScribeModSystem
         SetTrackerQuantityForPlayer(fromPlayer, docId, taskId, message.Quantity);
     }
 
-    private void OnServerReceivedSetQuestObjectiveProgress(IServerPlayer fromPlayer, ScribeSetQuestObjectiveProgressMessage message)
+    internal void OnServerReceivedSetQuestObjectiveProgress(IServerPlayer fromPlayer, ScribeSetQuestObjectiveProgressMessage message)
     {
         if (!TryReadGuid(message.DocId, out var docId) || !TryReadGuid(message.TaskId, out var taskId))
         {
@@ -349,14 +349,14 @@ public sealed partial class ScribeModSystem
         }, exceptPlayer);
     }
 
-    private void OnServerReceivedRecordVisitor(IServerPlayer fromPlayer, ScribeRecordVisitorMessage message)
+    internal void OnServerReceivedRecordVisitor(IServerPlayer fromPlayer, ScribeRecordVisitorMessage message)
     {
         if (sapi is null) return;
         if (TryResolveHost(message.DocIdBytes) is BlockEntityScribeWritingStation station)
             station.RecordVisitor(sapi, fromPlayer);
     }
 
-    private void OnServerReceivedEditGuestbookNote(IServerPlayer fromPlayer, ScribeEditGuestbookNoteMessage message)
+    internal void OnServerReceivedEditGuestbookNote(IServerPlayer fromPlayer, ScribeEditGuestbookNoteMessage message)
     {
         if (sapi is null) return;
         if (TryResolveHost(message.DocIdBytes) is BlockEntityScribeWritingStation station)
@@ -472,21 +472,21 @@ public sealed partial class ScribeModSystem
         return host;
     }
 
-    private void OnServerReceivedAddHistoryEntry(IServerPlayer fromPlayer, ScribeAddHistoryEntryMessage message)
+    internal void OnServerReceivedAddHistoryEntry(IServerPlayer fromPlayer, ScribeAddHistoryEntryMessage message)
     {
         if (!TryReadGuid(message.EntryId, out var entryId)) return;
         var host = ResolveManualEntryHost(fromPlayer, message.TargetInventoryId, message.TargetSlotId);
         host?.AddManualEntry(sapi!, fromPlayer, entryId, (message.Text ?? "").Trim());
     }
 
-    private void OnServerReceivedSetHistoryEntryText(IServerPlayer fromPlayer, ScribeSetHistoryEntryTextMessage message)
+    internal void OnServerReceivedSetHistoryEntryText(IServerPlayer fromPlayer, ScribeSetHistoryEntryTextMessage message)
     {
         if (!TryReadGuid(message.EntryId, out var entryId)) return;
         var host = ResolveManualEntryHost(fromPlayer, message.TargetInventoryId, message.TargetSlotId);
         host?.SetManualEntryText(fromPlayer, entryId, (message.Text ?? "").Trim());
     }
 
-    private void OnServerReceivedDeleteHistoryEntry(IServerPlayer fromPlayer, ScribeDeleteHistoryEntryMessage message)
+    internal void OnServerReceivedDeleteHistoryEntry(IServerPlayer fromPlayer, ScribeDeleteHistoryEntryMessage message)
     {
         if (!TryReadGuid(message.EntryId, out var entryId)) return;
         var host = ResolveManualEntryHost(fromPlayer, message.TargetInventoryId, message.TargetSlotId);
