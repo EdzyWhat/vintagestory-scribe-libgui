@@ -4,13 +4,19 @@
 # any difference means a code change slipped in. Used by the comment-convention sweep (see
 # openspec/changes/adopt-current-behavior-comment-convention).
 #
-# Usage: ./build/verify-comment-only.sh [BASE_REF]      (BASE_REF defaults to HEAD)
+# Usage: ./build/verify-comment-only.sh [--ignore-order] [BASE_REF]      (BASE_REF defaults to HEAD)
+#
+# --ignore-order also accepts code that only moved: types relocated to other files or classes split into
+# partials. Moving code reorders types and members in the IL dump, so build/sort-il.py sorts both before
+# the diff; every instruction is still compared.
 #
 # Needs VINTAGE_STORY (the game install) like the normal build, and ilspycmd
 # (~/.dotnet/tools/ilspycmd). Builds land in each tree's own gitignored bin/; nothing is staged into the Mods
 # folder. Exits 0 if every checked assembly's IL is identical, 1 if any differs, 2 on setup error.
 set -euo pipefail
 
+SORT_IL=0
+if [ "${1:-}" = "--ignore-order" ]; then SORT_IL=1; shift; fi
 BASE_REF="${1:-HEAD}"
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 ILSPY="${ILSPYCMD:-$HOME/.dotnet/tools/ilspycmd}"
@@ -40,7 +46,10 @@ list_dlls() {
 
 # Data-section labels (I_0001CDA0) are file offsets: the debug directory embeds each tree's own
 # PDB path, so the offsets shift between two trees even when the code is identical. Mask them.
-normalize_il() { sed -E 's/I_[0-9A-F]{8}/I_OFFSET/g'; }
+normalize_il() {
+  if [ "$SORT_IL" = 1 ]; then sed -E 's/I_[0-9A-F]{8}/I_OFFSET/g' | python3 "$REPO_ROOT/build/sort-il.py"
+  else sed -E 's/I_[0-9A-F]{8}/I_OFFSET/g'; fi
+}
 
 echo "Building base ($BASE_REF)..."
 git -C "$REPO_ROOT" worktree add --detach "$BASE_TREE" "$BASE_REF" >/dev/null 2>&1
