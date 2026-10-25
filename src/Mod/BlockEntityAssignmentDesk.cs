@@ -11,7 +11,7 @@ namespace Scribe;
 /// page art as a placeholder; <see cref="PageAspect"/> is a fixed <c>W × 1.2W</c> so the dialog layout does
 /// not depend on the art.
 /// </summary>
-public sealed class BlockEntityAssignmentDesk : BlockEntityScribeWritingStation
+public sealed class BlockEntityAssignmentDesk : BlockEntityScribeInventoryStation
 {
     protected override ScribeBackdropSpec PageBackdrop => ScribeBackdrops.LecternPage;
 
@@ -28,11 +28,7 @@ public sealed class BlockEntityAssignmentDesk : BlockEntityScribeWritingStation
 
     // ── Staging slot ─────────────────────────────────────────────────────────
     // A Scribe-items-only slot the Create Assignments tab uses to stage an existing document for
-    // multi-row selection and batch-send, plus the Task Notice supply/output slots. Same lazy-init/
-    // persistence/packet-routing shape as BlockEntityScriptorium's inventory.
-
-    /// <summary>Staging + Task Notice supply/output slots (the "Send a Notice" delivery mode).</summary>
-    private const int SlotCount = 3;
+    // multi-row selection and batch-send, plus the Task Notice supply/output slots.
 
     public const int StagingSlotIndex = 0;
 
@@ -44,91 +40,13 @@ public sealed class BlockEntityAssignmentDesk : BlockEntityScribeWritingStation
     /// notice here for the sender to collect and hand-deliver.</summary>
     public const int NoticeOutputSlotIndex = 2;
 
-    /// <summary>Tree sub-key for the inventory; a tree lacking it loads with empty slots.</summary>
-    private const string InventoryTreeKey = "assignmentDeskInventory";
+    protected override int InventorySlotCount => 3;
 
-    /// <summary>Created lazily via <see cref="EnsureInventory"/> because chunk-load runs FromTreeAttributes
-    /// first while a fresh place runs Initialize first.</summary>
-    private InventoryGeneric? inventory;
+    protected override string InventoryTreeKey => "assignmentDeskInventory";
 
-    /// <summary>The Assignment Desk's staging inventory (the Create Assignments tab watches this).</summary>
-    public InventoryGeneric Inventory
-    {
-        get
-        {
-            EnsureInventory();
-            return inventory!;
-        }
-    }
+    protected override string InventoryChannelPrefix => "scribeassignmentdesk-";
 
-    private void EnsureInventory()
-    {
-        inventory ??= new InventoryGeneric(SlotCount, null, null,
-            (slotId, self) => slotId == StagingSlotIndex
-                ? new ItemSlotScribeDocument(self)
-                : new ItemSlotTaskNotice(self));
-    }
-
-    public override void Initialize(ICoreAPI api)
-    {
-        EnsureInventory();
-        base.Initialize(api);
-
-        // Bind the inventory to the block-entity packet channel. Without LateInitialize + Pos, LibGUI's
-        // SlotController silently drops every slot click ("Skipped slot activation … not network-ready").
-        inventory!.LateInitialize("scribeassignmentdesk-" + Pos, api);
-        inventory.Pos = Pos;
-    }
-
-    public override void ToTreeAttributes(ITreeAttribute tree)
-    {
-        base.ToTreeAttributes(tree);
-        EnsureInventory();
-        var invTree = new TreeAttribute();
-        inventory!.ToTreeAttributes(invTree);
-        tree[InventoryTreeKey] = invTree;
-    }
-
-    public override void FromTreeAttributes(ITreeAttribute tree, IWorldAccessor worldForResolving)
-    {
-        EnsureInventory();
-        base.FromTreeAttributes(tree, worldForResolving);
-        if (tree.GetTreeAttribute(InventoryTreeKey) is { } invTree)
-        {
-            inventory!.FromTreeAttributes(invTree);
-        }
-    }
-
-    /// <summary>Standard vanilla container packet flow (mirrors <c>BlockEntityScriptorium</c>): packet id
-    /// &lt; 1000 goes to the inventory's network util; 1000/1001 open/close it for the player. Rides the
-    /// block-entity packet channel, NOT the mod's "scribe" channel.</summary>
-    public override void OnReceivedClientPacket(IPlayer player, int packetid, byte[] data)
-    {
-        if (packetid < 1000)
-        {
-            Inventory.InvNetworkUtil.HandleClientPacket(player, packetid, data);
-            MarkDirty(true);
-            return;
-        }
-
-        if (packetid == 1000)
-        {
-            player.InventoryManager?.OpenInventory(Inventory);
-        }
-        else if (packetid == 1001)
-        {
-            player.InventoryManager?.CloseInventory(Inventory);
-        }
-    }
-
-    /// <summary>Drops the staged item when the block is broken. The block's own document is carried onto
-    /// the item by <see cref="BlockScribeWritingStation.GetDrops"/>.</summary>
-    public override void OnBlockBroken(IPlayer? byPlayer = null)
-    {
-        base.OnBlockBroken(byPlayer);
-        if (Api is ICoreServerAPI)
-        {
-            Inventory.DropAll(Pos.ToVec3d().Add(0.5, 0.5, 0.5));
-        }
-    }
+    protected override ItemSlot CreateSlot(int slotId, InventoryBase inventory) => slotId == StagingSlotIndex
+        ? new ItemSlotScribeDocument(inventory)
+        : new ItemSlotTaskNotice(inventory);
 }

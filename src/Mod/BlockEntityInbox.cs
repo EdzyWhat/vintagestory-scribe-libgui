@@ -14,7 +14,7 @@ namespace Scribe;
 /// Lectern's page art as a placeholder backdrop; <see cref="PageAspect"/> is a fixed <c>W × 1.2W</c>,
 /// same as <see cref="BlockEntityAssignmentDesk"/>.
 /// </summary>
-public sealed class BlockEntityInbox : BlockEntityScribeWritingStation
+public sealed class BlockEntityInbox : BlockEntityScribeInventoryStation
 {
     protected override ScribeBackdropSpec PageBackdrop => ScribeBackdrops.LecternPage;
 
@@ -67,49 +67,28 @@ public sealed class BlockEntityInbox : BlockEntityScribeWritingStation
 
     // ── Mixed restricted/open inventory ──────────────────────────────────────
     // The first RestrictedSlotCount slots accept only Scribe items (ItemSlotScribeDocument), the rest
-    // accept anything. Lazy-init/persistence/packet-routing mirror BlockEntityScriptorium's inventory.
+    // accept anything.
 
-    /// <summary>12 slots: indices 0-7 are Scribe-items-only, 8-11 are open (see <see cref="EnsureInventory"/>).
+    /// <summary>12 slots: indices 0-7 are Scribe-items-only, 8-11 are open (see <see cref="CreateSlot"/>).
     /// Public so <see cref="GuiDialogScribeInbox"/> and the Atlas tests can reference the split.</summary>
     public const int SlotCount = 12;
 
     /// <summary>Slots below this index accept only Scribe items (<see cref="ItemSlotScribeDocument"/>); the rest are open.</summary>
     public const int RestrictedSlotCount = 8;
 
-    /// <summary>Tree sub-key for the inventory; a tree lacking it loads with empty slots.</summary>
-    private const string InventoryTreeKey = "inboxInventory";
+    protected override int InventorySlotCount => SlotCount;
 
-    /// <summary>Created lazily via <see cref="EnsureInventory"/> because chunk-load runs FromTreeAttributes
-    /// first while a fresh place runs Initialize first.</summary>
-    private InventoryGeneric? inventory;
+    protected override string InventoryTreeKey => "inboxInventory";
 
-    /// <summary>The Inbox's mixed restricted/open inventory (the Inbox Inventory tab watches this).</summary>
-    public InventoryGeneric Inventory
-    {
-        get
-        {
-            EnsureInventory();
-            return inventory!;
-        }
-    }
+    protected override string InventoryChannelPrefix => "scribeinbox-";
 
-    private void EnsureInventory()
-    {
-        inventory ??= new InventoryGeneric(SlotCount, null, null,
-            (slotId, self) => slotId < RestrictedSlotCount
-                ? new ItemSlotScribeDocument(self)
-                : new ItemSlot(self));
-    }
+    protected override ItemSlot CreateSlot(int slotId, InventoryBase inventory) => slotId < RestrictedSlotCount
+        ? new ItemSlotScribeDocument(inventory)
+        : new ItemSlot(inventory);
 
     public override void Initialize(ICoreAPI api)
     {
-        EnsureInventory();
         base.Initialize(api);
-
-        // Bind the inventory to the block-entity packet channel. Without LateInitialize + Pos, LibGUI's
-        // SlotController silently drops every slot click ("Skipped slot activation … not network-ready").
-        inventory!.LateInitialize("scribeinbox-" + Pos, api);
-        inventory.Pos = Pos;
 
         // Inbox-instance presence signal, in addition to the base class's coarse OnAssignmentParticleTick.
         if (api is ICoreClientAPI)
@@ -163,59 +142,5 @@ public sealed class BlockEntityInbox : BlockEntityScribeWritingStation
 
         emitter!.SpawnAt(capi, Pos, seedBurst: !inboxNoticeParticlesWereActive);
         inboxNoticeParticlesWereActive = true;
-    }
-
-    public override void ToTreeAttributes(ITreeAttribute tree)
-    {
-        base.ToTreeAttributes(tree);
-        EnsureInventory();
-        var invTree = new TreeAttribute();
-        inventory!.ToTreeAttributes(invTree);
-        tree[InventoryTreeKey] = invTree;
-    }
-
-    public override void FromTreeAttributes(ITreeAttribute tree, IWorldAccessor worldForResolving)
-    {
-        EnsureInventory();
-        base.FromTreeAttributes(tree, worldForResolving);
-        // A tree without the inventory sub-tree leaves the slots empty.
-        if (tree.GetTreeAttribute(InventoryTreeKey) is { } invTree)
-        {
-            inventory!.FromTreeAttributes(invTree);
-        }
-    }
-
-    /// <summary>Standard vanilla container packet flow (mirrors <c>BlockEntityScriptorium</c>): packet id
-    /// &lt; 1000 goes to the inventory's network util; 1000/1001 open/close it for the player. Rides the
-    /// block-entity packet channel, NOT the mod's "scribe" channel.</summary>
-    public override void OnReceivedClientPacket(IPlayer player, int packetid, byte[] data)
-    {
-        if (packetid < 1000)
-        {
-            Inventory.InvNetworkUtil.HandleClientPacket(player, packetid, data);
-            MarkDirty(true);
-            return;
-        }
-
-        if (packetid == 1000)
-        {
-            player.InventoryManager?.OpenInventory(Inventory);
-        }
-        else if (packetid == 1001)
-        {
-            player.InventoryManager?.CloseInventory(Inventory);
-        }
-    }
-
-    /// <summary>Drops stored items when the block is broken so a stored Task Notice is never destroyed.
-    /// Server-only; this BE is still alive here. The block's own document is carried onto the item by
-    /// <see cref="BlockScribeWritingStation.GetDrops"/>.</summary>
-    public override void OnBlockBroken(IPlayer? byPlayer = null)
-    {
-        base.OnBlockBroken(byPlayer);
-        if (Api is ICoreServerAPI)
-        {
-            Inventory.DropAll(Pos.ToVec3d().Add(0.5, 0.5, 0.5));
-        }
     }
 }
