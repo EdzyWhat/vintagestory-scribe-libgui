@@ -197,6 +197,10 @@ public sealed partial class ScribeModSystem : ModSystem
     /// <summary>Client cache of THIS player's timer state; null means none received yet (treat as Idle).</summary>
     public TimerStore? MyTimer { get; private set; }
 
+    /// <summary>The form values of the timer this player last started this session; null before the first start.
+    /// Prefills the Notebook's new-timer form. Not persisted.</summary>
+    public TimerFormValues? LastStartedTimerForm { get; set; }
+
     /// <summary>Raised on the client when the server pushes timer state.</summary>
     public event Action? MyTimerChanged;
 

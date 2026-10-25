@@ -48,9 +48,25 @@ public sealed class GuiDialogClockmakerNotebook : GuiDialogScribeNotebook
         : base(host, capi)
     {
         // Seed the form's mode from the player's remembered choice.
-        _pendingMode = modSystem.MySettings.PreferredTimerMode;
+        ApplyFormValues(modSystem.LastStartedTimerForm
+            ?? TimerFormValues.Blank(modSystem.MySettings.PreferredTimerMode));
         _timerView = new TimerViewTracker(modSystem.MyTimer?.Status ?? TimerStatus.Idle);
         modSystem.MyTimerChanged += OnTimerChanged;
+    }
+
+    private void ApplyFormValues(TimerFormValues v)
+    {
+        _pendingLabel = v.Label;
+        _pendingHours = v.Hours;
+        _pendingMinutes = v.Minutes;
+        _pendingSecs = v.Seconds;
+        _pendingMode = v.Mode;
+    }
+
+    private void ClearForm()
+    {
+        ApplyFormValues(TimerFormValues.Blank(modSystem.MySettings.PreferredTimerMode));
+        if (IsTimerView && IsOpened()) ForceRebuild();
     }
 
     public override void OnGuiClosed()
@@ -245,7 +261,18 @@ public sealed class GuiDialogClockmakerNotebook : GuiDialogScribeNotebook
             mainAxisSize: MainAxisSize.Min,
             children: new Widget[]
             {
-                new SizedBox(width: 260, child: labelRow),
+                new SizedBox(width: 260, child: new Row(
+                    spacing: 8,
+                    crossAxisAlignment: CrossAxisAlignment.End,
+                    children: new Widget[]
+                    {
+                        new Expanded(labelRow),
+                        new ScribeRowButton(
+                            iconName: "scribeclear",
+                            iconColor: colors.OnSurfaceVariant,
+                            size: fieldH,
+                            onTap: ClearForm),
+                    })),
                 timeRow,
                 new SizedBox(width: 260, child: modeRow),
                 startBtn,
@@ -298,6 +325,8 @@ public sealed class GuiDialogClockmakerNotebook : GuiDialogScribeNotebook
     {
         double duration = _pendingHours * 3600.0 + _pendingMinutes * 60.0 + _pendingSecs;
         if (duration <= 0) return;
+        modSystem.LastStartedTimerForm = new TimerFormValues(
+            _pendingLabel.Trim(), _pendingHours, _pendingMinutes, _pendingSecs, _pendingMode);
         capi.Network.GetChannel(ScribeModSystem.NetworkChannelName).SendPacket(new ScribeSetTimerMessage
         {
             DurationSeconds = duration,

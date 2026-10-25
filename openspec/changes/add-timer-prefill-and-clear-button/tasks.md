@@ -1,12 +1,12 @@
 ## 1. Form values
 
-- [ ] 1.1 Add Core record `TimerFormValues` with `Blank(TimerMode preferred)`; verify with Core tests for the blank values and for value equality
-- [ ] 1.2 Hold the last started values on `ScribeModSystem` and set them in `SendStartTimer`; verify by building the Mod project
+- [x] 1.1 Add Core record `TimerFormValues` with `Blank(TimerMode preferred)`; verify with Core tests for the blank values and for value equality
+- [x] 1.2 Hold the last started values on `ScribeModSystem` and set them in `SendStartTimer`; verify by building the Mod project
 
 ## 2. Notebook form
 
-- [ ] 2.1 Seed the dialog's form fields from the remembered values (or `Blank`) in the constructor; verify with `build/verify.sh`
-- [ ] 2.2 Add a circle-X clear button on the idle form that resets the fields to `Blank(PreferredTimerMode)` and rebuilds the form; verify with `build/verify.sh`
+- [x] 2.1 Seed the dialog's form fields from the remembered values (or `Blank`) in the constructor; verify with `build/verify.sh`
+- [x] 2.2 Add a circle-X clear button on the idle form that resets the fields to `Blank(PreferredTimerMode)` and rebuilds the form; verify with `build/verify.sh`
 
 ## 3. Verify
 
