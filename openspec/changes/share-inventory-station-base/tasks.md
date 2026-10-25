@@ -10,4 +10,4 @@
 ## 3. Verify
 
 - [x] 3.1 Run `build/verify.sh`; confirm Core and Atlas pass
-- [ ] 3.2 Playtest: place each block, put items in, relog, confirm they persist, then break the block and confirm the items drop
+- [x] 3.2 Playtest: place each block, put items in, relog, confirm they persist, then break the block and confirm the items drop
