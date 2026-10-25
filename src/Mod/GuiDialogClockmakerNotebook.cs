@@ -63,6 +63,12 @@ public sealed class GuiDialogClockmakerNotebook : GuiDialogScribeNotebook
         _pendingMode = v.Mode;
     }
 
+    /// <summary>Raised when any form field changes, so the clear button can show or hide.</summary>
+    private event Action? FormChanged;
+
+    private bool FormHasContent() =>
+        _pendingLabel.Length > 0 || _pendingHours != 0 || _pendingMinutes != 0 || _pendingSecs != 0;
+
     private void ClearForm()
     {
         ApplyFormValues(TimerFormValues.Blank(modSystem.MySettings.PreferredTimerMode));
@@ -215,7 +221,7 @@ public sealed class GuiDialogClockmakerNotebook : GuiDialogScribeNotebook
                     labelController,
                     null,
                     inputFieldStyle,
-                    onChanged: text => _pendingLabel = text),
+                    onChanged: text => { _pendingLabel = text; FormChanged?.Invoke(); }),
             });
 
         // H / M / S steppers.
@@ -225,9 +231,9 @@ public sealed class GuiDialogClockmakerNotebook : GuiDialogScribeNotebook
             crossAxisAlignment: CrossAxisAlignment.End,
             children: new Widget[]
             {
-                BuildTimeUnit("th", _pendingHours,   0, 23, 1,  "h", v => _pendingHours   = v, inputFieldStyle, smallStyle),
-                BuildTimeUnit("tm", _pendingMinutes, 0, 59, 1,  "m", v => _pendingMinutes = v, inputFieldStyle, smallStyle),
-                BuildTimeUnit("ts", _pendingSecs,    0, 55, 5,  "s", v => _pendingSecs    = v, inputFieldStyle, smallStyle),
+                BuildTimeUnit("th", _pendingHours,   0, 23, 1,  "h", v => { _pendingHours = v; FormChanged?.Invoke(); }, inputFieldStyle, smallStyle),
+                BuildTimeUnit("tm", _pendingMinutes, 0, 59, 1,  "m", v => { _pendingMinutes = v; FormChanged?.Invoke(); }, inputFieldStyle, smallStyle),
+                BuildTimeUnit("ts", _pendingSecs,    0, 55, 5,  "s", v => { _pendingSecs = v; FormChanged?.Invoke(); }, inputFieldStyle, smallStyle),
             });
 
         // Mode toggle: one stateful widget owns the toggle state so it can SetState without remounting the Button.
@@ -262,16 +268,19 @@ public sealed class GuiDialogClockmakerNotebook : GuiDialogScribeNotebook
             children: new Widget[]
             {
                 new SizedBox(width: 260, child: new Row(
-                    spacing: 8,
+                    spacing: 2,
                     crossAxisAlignment: CrossAxisAlignment.End,
                     children: new Widget[]
                     {
                         new Expanded(labelRow),
-                        new ScribeRowButton(
-                            iconName: "scribeclear",
-                            iconColor: colors.OnSurfaceVariant,
-                            size: fieldH,
-                            onTap: ClearForm),
+                        // Bottom-aligned with the field: the label caption sits above it.
+                        new Padding(EdgeInsets.Ltrb(0, 0, 0, (fieldH - 18f) / 2f), new ScribeTimerClearButton(
+                            hasContent: FormHasContent,
+                            subscribe: h => FormChanged += h,
+                            unsubscribe: h => FormChanged -= h,
+                            onClear: ClearForm,
+                            size: 18f,
+                            color: colors.OnSurfaceVariant)),
                     })),
                 timeRow,
                 new SizedBox(width: 260, child: modeRow),

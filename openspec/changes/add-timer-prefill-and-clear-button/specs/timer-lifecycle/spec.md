@@ -20,11 +20,19 @@ While no timer is active, the Clockmaker's Notebook Timer tab's new-timer form S
 - **THEN** the form shows its defaults, with the mode taken from the player's preferred timer mode
 
 ### Requirement: The new-timer form has a clear button
-The new-timer form SHALL show a circle-X clear button. Pressing it SHALL empty the name, set hours, minutes and seconds to zero, and return the mode to the player's preferred timer mode. It SHALL NOT start, stop or clear any timer, and SHALL NOT affect the values the next prefill uses until a new timer is started.
+The new-timer form SHALL show a borderless, backgroundless circle-X clear button beside the name field, but only while the form has content (a non-empty name or any non-zero hours, minutes or seconds). With an empty name and a zero duration the button SHALL NOT be shown. Pressing it SHALL empty the name, set hours, minutes and seconds to zero, and return the mode to the player's preferred timer mode. It SHALL NOT start, stop or clear any timer, and SHALL NOT affect the values the next prefill uses until a new timer is started.
 
 #### Scenario: Clearing the prefilled form
 - **WHEN** the form is prefilled and the player presses the clear button
 - **THEN** the name is empty, the duration reads 0 h 0 m 0 s, and the mode is the preferred mode
+
+#### Scenario: Button hidden on an empty form
+- **WHEN** the name is empty and hours, minutes and seconds are all zero
+- **THEN** no clear button is shown
+
+#### Scenario: Button appears as the player types
+- **WHEN** the player types a name or raises a duration field on an empty form
+- **THEN** the clear button appears without the form losing focus
 
 #### Scenario: The HUD has no clear button
 - **WHEN** a timer is fired and shown on the Pinned Task HUD

@@ -222,3 +222,62 @@ internal sealed class ScribeTimerIconState : State<ScribeTimerIcon>
             curve: Curves.EaseInOutBack,
             child: new ScribeVsIconGlyph("scribetimer", Widget.Size, Widget.Color));
 }
+
+/// <summary>
+/// A borderless circle-X that clears the new-timer form. It shows only while <see cref="HasContent"/> is true and
+/// re-evaluates it whenever the dialog raises <see cref="FormChanged"/>, so typing into the form shows or hides it
+/// without rebuilding the form (which would drop the label field's focus). Hidden, it still reserves its width so
+/// the label field does not resize.
+/// </summary>
+internal sealed class ScribeTimerClearButton : StatefulWidget
+{
+    public readonly Func<bool> HasContent;
+    public readonly Action<Action> Subscribe;
+    public readonly Action<Action> Unsubscribe;
+    public readonly Action OnClear;
+    public readonly float Size;
+    public readonly Vector4 Color;
+
+    public ScribeTimerClearButton(Func<bool> hasContent, Action<Action> subscribe, Action<Action> unsubscribe,
+        Action onClear, float size, Vector4 color)
+    {
+        HasContent = hasContent; Subscribe = subscribe; Unsubscribe = unsubscribe;
+        OnClear = onClear; Size = size; Color = color;
+    }
+
+    public override State CreateState() => new ScribeTimerClearButtonState();
+}
+
+internal sealed class ScribeTimerClearButtonState : State<ScribeTimerClearButton>
+{
+    private bool _visible;
+
+    public override void InitState()
+    {
+        base.InitState();
+        _visible = Widget.HasContent();
+        Widget.Subscribe(OnFormChanged);
+    }
+
+    private void OnFormChanged()
+    {
+        bool visible = Widget.HasContent();
+        if (visible != _visible) SetState(() => _visible = visible);
+    }
+
+    public override void Dispose()
+    {
+        Widget.Unsubscribe(OnFormChanged);
+        base.Dispose();
+    }
+
+    public override Widget Build(BuildContext context)
+    {
+        if (!_visible) return new SizedBox(width: Widget.Size, height: Widget.Size);
+        return new GestureDetector(
+            onTap: _ => Widget.OnClear(),
+            child: new SizedBox(
+                width: Widget.Size, height: Widget.Size,
+                child: new Center(child: new ScribeVsIconGlyph("scribeclear", Widget.Size, Widget.Color))));
+    }
+}
