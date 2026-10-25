@@ -226,8 +226,8 @@ internal sealed class ScribeTimerIconState : State<ScribeTimerIcon>
 /// <summary>
 /// A borderless circle-X that clears the new-timer form. It shows only while <see cref="HasContent"/> is true and
 /// re-evaluates it whenever the dialog raises <see cref="FormChanged"/>, so typing into the form shows or hides it
-/// without rebuilding the form (which would drop the label field's focus). Hidden, it still reserves its width so
-/// the label field does not resize.
+/// without rebuilding the form (which would drop the label field's focus). Hidden, it keeps its footprint so the
+/// layout around it does not shift.
 /// </summary>
 internal sealed class ScribeTimerClearButton : StatefulWidget
 {

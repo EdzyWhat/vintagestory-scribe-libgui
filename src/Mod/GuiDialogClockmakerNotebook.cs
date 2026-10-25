@@ -197,6 +197,7 @@ public sealed class GuiDialogClockmakerNotebook : GuiDialogScribeNotebook
     private Widget BuildSetTimerForm(ColorScheme colors, TextStyle bodyStyle, TextStyle smallStyle, float scale)
     {
         float fieldH = 34f * scale;
+        const float clearSize = 18f;
 
         // Label field.
         var labelController = new TextEditingController(_pendingLabel);
@@ -267,21 +268,25 @@ public sealed class GuiDialogClockmakerNotebook : GuiDialogScribeNotebook
             mainAxisSize: MainAxisSize.Min,
             children: new Widget[]
             {
-                new SizedBox(width: 260, child: new Row(
+                // The clear button hangs off the right of the label field. An equal empty slot on the left keeps the
+                // field exactly centered whether or not the button is showing.
+                new Row(
                     spacing: 2,
+                    mainAxisSize: MainAxisSize.Min,
                     crossAxisAlignment: CrossAxisAlignment.End,
                     children: new Widget[]
                     {
-                        new Expanded(labelRow),
+                        new SizedBox(width: clearSize, height: clearSize),
+                        new SizedBox(width: 260, child: labelRow),
                         // Bottom-aligned with the field: the label caption sits above it.
-                        new Padding(EdgeInsets.Ltrb(0, 0, 0, (fieldH - 18f) / 2f), new ScribeTimerClearButton(
+                        new Padding(EdgeInsets.Ltrb(0, 0, 0, (fieldH - clearSize) / 2f), new ScribeTimerClearButton(
                             hasContent: FormHasContent,
                             subscribe: h => FormChanged += h,
                             unsubscribe: h => FormChanged -= h,
                             onClear: ClearForm,
-                            size: 18f,
+                            size: clearSize,
                             color: colors.OnSurfaceVariant)),
-                    })),
+                    }),
                 timeRow,
                 new SizedBox(width: 260, child: modeRow),
                 startBtn,
