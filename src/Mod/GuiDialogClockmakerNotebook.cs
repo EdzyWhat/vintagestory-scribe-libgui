@@ -36,7 +36,7 @@ public sealed class GuiDialogClockmakerNotebook : GuiDialogScribeNotebook
     private readonly ScribeNumericFocusRegistry _timerFocus = new();
 
     /// <summary>Last-seen timer status; ForceRebuild runs only on a status transition, not on every server push.</summary>
-    private TimerStatus _lastKnownStatus = TimerStatus.Idle;
+    private readonly TimerViewTracker _timerView;
 
     /// <summary>Monotonic-clock timestamps (ms, <c>capi.World.ElapsedMilliseconds</c>) of the last Idle-to-Running
     /// (engage) and to-Fired (lock) transitions; 0 = not yet. Held on the host because the gearworks State is torn
@@ -49,6 +49,7 @@ public sealed class GuiDialogClockmakerNotebook : GuiDialogScribeNotebook
     {
         // Seed the form's mode from the player's remembered choice.
         _pendingMode = modSystem.MySettings.PreferredTimerMode;
+        _timerView = new TimerViewTracker(modSystem.MyTimer?.Status ?? TimerStatus.Idle);
         modSystem.MyTimerChanged += OnTimerChanged;
     }
 
@@ -318,16 +319,16 @@ public sealed class GuiDialogClockmakerNotebook : GuiDialogScribeNotebook
     internal new void RefreshTimerView()
     {
         var newStatus = modSystem.MyTimer?.Status ?? TimerStatus.Idle;
-        if (newStatus == _lastKnownStatus) return;
+        var previous = _timerView.Status;
+        if (!_timerView.TryAdvance(newStatus)) return;
 
         // Stamp the transitions the gearworks animates off. They live on the host so they survive the ForceRebuild
         // below. Engage = anything to Running; lock = to Fired.
         long now = capi.World.ElapsedMilliseconds;
-        if (newStatus == TimerStatus.Running && _lastKnownStatus != TimerStatus.Running) _engageStartMs = now;
+        if (newStatus == TimerStatus.Running && previous != TimerStatus.Running) _engageStartMs = now;
         if (newStatus == TimerStatus.Fired) _fireLockMs = now;
         if (newStatus == TimerStatus.Idle) { _engageStartMs = 0; _fireLockMs = 0; }
 
-        _lastKnownStatus = newStatus;
         _resyncRemaining = true;
         if (IsTimerView && IsOpened()) ForceRebuild();
     }
