@@ -2,7 +2,9 @@
 
 ## Purpose
 TBD - created by archiving change timer-auto-disappear-setting. Update Purpose after archive.
+
 ## Requirements
+
 ### Requirement: A fired timer is shown until cleared
 When a player's Clockmaker's Notebook timer counts down to zero it SHALL enter a fired state and
 SHALL be shown in the fired state on the player's Pinned Task HUD and on the Clockmaker's Notebook
@@ -74,3 +76,61 @@ auto-clear window resumes rather than restarting from zero.
   and rejoins
 - **THEN** the fired timer clears after roughly the remaining window rather than a fresh 30 seconds
 
+### Requirement: The Timer tab shows the cleared state after a timer is cleared
+After a fired or running timer is cleared (by Stop Timer or from the HUD), the Clockmaker's Notebook Timer tab
+SHALL return to the new-timer form, regardless of whether the Notebook was opened before or after the timer
+started or fired.
+
+#### Scenario: Stop Timer after reopening the Notebook on a fired timer
+- **WHEN** a player starts a timer, closes the Notebook, waits for the timer to fire, reopens the Notebook, and presses Stop Timer
+- **THEN** the Timer tab shows the new-timer form and no blinking 00:00 or Stop Timer button remains
+
+#### Scenario: Stop Timer on a running timer in a Notebook opened mid-run
+- **WHEN** a player opens the Notebook while a timer is running and presses Stop Timer
+- **THEN** the Timer tab shows the new-timer form
+
+### Requirement: A new timer appears on the HUD after a previous one ended
+Starting a timer SHALL show it on the Pinned Task HUD even if an earlier timer was cancelled or ended and the HUD
+was closed in between, without requiring any HUD setting to be changed.
+
+#### Scenario: Start a timer after the previous one was cleared
+- **WHEN** a player clears a timer, then starts a new one
+- **THEN** the new timer appears on the HUD at the configured anchor position
+
+### Requirement: The new-timer form prefills with the last timer's values
+While no timer is active, the Clockmaker's Notebook Timer tab's new-timer form SHALL be prefilled with the name, hours, minutes, seconds and mode of the timer the player most recently started in the current game session, however that timer ended (fired and dismissed, auto-cleared, or stopped while running). Before the player has started any timer in the session, the form SHALL use its normal defaults. The prefill SHALL NOT persist across game restarts.
+
+#### Scenario: Form refills after a fired timer is dismissed
+- **WHEN** a player starts a timer named "Bread" for 0 h 12 m 30 s in real-time mode, it fires, and the player dismisses it
+- **THEN** the Timer tab's form shows "Bread", 0 h, 12 m, 30 s and real-time mode
+
+#### Scenario: Form refills after a running timer is stopped
+- **WHEN** a player stops a running timer from the Timer tab
+- **THEN** the form shows that timer's name, duration and mode
+
+#### Scenario: Form refills after the timer auto-clears
+- **WHEN** a fired timer is cleared automatically by the "Timer disappears" preference
+- **THEN** the next time the Timer tab shows the form, it holds that timer's values
+
+#### Scenario: No timer started yet this session
+- **WHEN** a player opens the Timer tab before starting any timer since launching the game
+- **THEN** the form shows its defaults, with the mode taken from the player's preferred timer mode
+
+### Requirement: The new-timer form has a clear button
+The new-timer form SHALL show a borderless, backgroundless circle-X clear button hanging off the right of the name field, with the name field staying centered whether or not it is shown, but only while the form has content (a non-empty name or any non-zero hours, minutes or seconds). With an empty name and a zero duration the button SHALL NOT be shown. Pressing it SHALL empty the name, set hours, minutes and seconds to zero, and return the mode to the player's preferred timer mode. It SHALL NOT start, stop or clear any timer, and SHALL NOT affect the values the next prefill uses until a new timer is started.
+
+#### Scenario: Clearing the prefilled form
+- **WHEN** the form is prefilled and the player presses the clear button
+- **THEN** the name is empty, the duration reads 0 h 0 m 0 s, and the mode is the preferred mode
+
+#### Scenario: Button hidden on an empty form
+- **WHEN** the name is empty and hours, minutes and seconds are all zero
+- **THEN** no clear button is shown
+
+#### Scenario: Button appears as the player types
+- **WHEN** the player types a name or raises a duration field on an empty form
+- **THEN** the clear button appears without the form losing focus
+
+#### Scenario: The HUD has no clear button
+- **WHEN** a timer is fired and shown on the Pinned Task HUD
+- **THEN** the row is still cleared by clicking it and shows no clear button
