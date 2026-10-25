@@ -940,6 +940,6 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
 
 ## add-tablet-style-facade
 
-- [ ] `000000d5` **Check all 10 tablet variants after the TabletStyle facade.** Open a red, blue and fire tablet in each of wet, hard and fired, plus a wax tablet. Confirm the ink, backdrop, glow, Quest Link color and layout look as before.
+- [x] `000000d5` **Check all 10 tablet variants after the TabletStyle facade.** Open a red, blue and fire tablet in each of wet, hard and fired, plus a wax tablet. Confirm the ink, backdrop, glow, Quest Link color and layout look as before.
       *(add-tablet-style-facade 3.2)*
-      - **Backlogged 2026-10-22**: playtest deferred; branch `add-tablet-style-facade` is committed but not merged to main.
+      - **Confirmed 2026-10-25**: all 10 variants (red/blue/fire in wet, hard, fired, plus wax) look as before.
