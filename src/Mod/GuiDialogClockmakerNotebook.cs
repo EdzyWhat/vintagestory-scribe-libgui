@@ -277,7 +277,7 @@ public sealed class GuiDialogClockmakerNotebook : GuiDialogScribeNotebook
                     children: new Widget[]
                     {
                         new SizedBox(width: clearSize, height: clearSize),
-                        new SizedBox(width: 260, child: labelRow),
+                        new SizedBox(width: 234, child: labelRow),
                         // Bottom-aligned with the field: the label caption sits above it.
                         new Padding(EdgeInsets.Ltrb(0, 0, 0, (fieldH - clearSize) / 2f), new ScribeTimerClearButton(
                             hasContent: FormHasContent,
