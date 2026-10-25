@@ -6,6 +6,18 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.4.4] - 2026-10-25
+
+### Fixed
+- **After a timer fired, reopening the Clockmaker's Notebook left its Timer page stale.** The Stop button and the blinking 00:00 stayed in place, and pressing Stop did not reset the page. The page now matches the live timer when the Notebook opens.
+
+### Added
+- **The Notebook's new-timer form now prefills from the last timer you started** (name, hours, minutes, seconds and mode), so repeating a timer takes one press. The values are kept for the session only. A small circle-X beside the name field, shown only while the form has content, wipes the form. It is Notebook only; the HUD is unchanged.
+
+### Changed
+- Internal: the Scriptorium, Assignment Desk and Inbox now share one slot-inventory implementation, and the tablet styling resolves through one place. Saved worlds load unchanged and nothing looks different.
+- Internal: removed 11 unused lang keys, dead code and superfluous comments. No effect on players.
+
 ## [1.4.3] - 2026-10-07
 
 ### Fixed
