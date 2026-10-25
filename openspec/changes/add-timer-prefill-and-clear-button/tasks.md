@@ -11,5 +11,5 @@
 ## 3. Verify
 
 - [x] 3.1 Run `build/verify.sh`; confirm Core and Atlas pass
-- [ ] 3.2 Playtest: start a named timer, let it fire, dismiss it, reopen the Notebook and confirm name, h/m/s and mode are prefilled
-- [ ] 3.3 Playtest: stop a running timer and confirm the same prefill; press the circle-X and confirm the fields blank
+- [x] 3.2 Playtest: start a named timer, let it fire, dismiss it, reopen the Notebook and confirm name, h/m/s and mode are prefilled
+- [x] 3.3 Playtest: stop a running timer and confirm the same prefill; press the circle-X and confirm the fields blank
