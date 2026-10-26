@@ -946,15 +946,21 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
 
 ## bump-libgui-4-0-0
 
-- [ ] `000000e6` **Check startup log.** Launch the game once with only the restaged build, load a world, then search `client-main.log` for `gui` 4.0.0, the `[scribe] patched Gui.NativeLibraryLoader.Register` line, and any `[GUI]` or Scribe errors.
+- [x] `000000e6` **Check startup log.** Launch the game once with only the restaged build, load a world, then search `client-main.log` for `gui` 4.0.0, the `[scribe] patched Gui.NativeLibraryLoader.Register` line, and any `[GUI]` or Scribe errors.
       *(bump-libgui-4-0-0 3.2)*
-- [ ] `000000e7` **Open every block dialog.** Open the Clockmaker's Notebook, Lectern, Scriptorium, Assignment Desk, Inbox and a tablet. Confirm backdrops, glows and icons are drawn whole (nothing clipped or missing) and that closing and reopening each works.
+      - **Confirmed 2026-10-26**: `client-main.log` lists `mod@gui_4.0.0.zip` in load order and `[GUI] Native libHarfBuzzSharp loaded` from the 4.0.0 cache (harfbuzz 8.3.1); no `[GUI]` or Scribe errors. The `[scribe] patched Gui.NativeLibraryLoader.Register` line is Linux-only, so it is not expected on macOS. The GL shader-link and `after final compo` errors also appear in the 2026-10-25 (3.1.0) log, so they are not from the upgrade.
+- [x] `000000e7` **Open every block dialog.** Open the Clockmaker's Notebook, Lectern, Scriptorium, Assignment Desk, Inbox and a tablet. Confirm backdrops, glows and icons are drawn whole (nothing clipped or missing) and that closing and reopening each works.
       *(bump-libgui-4-0-0 4.2)*
-- [ ] `000000e8` **Exercise the HUD.** Pin tasks, then start a timer, cancel it, and start another without touching any HUD setting; do the same after letting one fire and clearing it. Confirm the timer row reappears each time, and that the gear button and anchor settings still work.
+      - **Confirmed 2026-10-26**: Notebook, Lectern, Scriptorium, Assignment Desk, Inbox and a tablet all open, draw whole and reopen fine on gui 4.0.0.
+- [x] `000000e8` **Exercise the HUD.** Pin tasks, then start a timer, cancel it, and start another without touching any HUD setting; do the same after letting one fire and clearing it. Confirm the timer row reappears each time, and that the gear button and anchor settings still work.
       *(bump-libgui-4-0-0 4.3)*
-- [ ] `000000e9` **Check hover and tooltips.** Hover rows (delete and pin buttons), item tooltips and collapsing rows, and open a Scribe dialog over the inventory or Handbook. Confirm hover states follow the mouse, tooltips close, and nothing under a dialog stays highlighted.
+      - **Confirmed 2026-10-26**: pins, timer cancel/restart and fire/clear, gear button and anchor settings all work on gui 4.0.0; the timer row reappeared each time. The OhCubed bug was never reproduced on 3.1.0 either, so this does not show it is fixed.
+- [x] `000000e9` **Check hover and tooltips.** Hover rows (delete and pin buttons), item tooltips and collapsing rows, and open a Scribe dialog over the inventory or Handbook. Confirm hover states follow the mouse, tooltips close, and nothing under a dialog stays highlighted.
       *(bump-libgui-4-0-0 4.4)*
-- [ ] `000000ea` **Check fields and sounds.** Type in a cuneiform field and a multiline field (caret, selection, scrolling), open Scribe Settings, then toggle `MuteUiSounds` and click buttons. Confirm no text glitches and sounds mute and unmute correctly with no doubled clicks.
+      - **Confirmed 2026-10-26**: row hover and delete/pin buttons, tooltips, collapsing rows, and a Scribe dialog over the inventory/Handbook all behave normally on gui 4.0.0.
+- [x] `000000ea` **Check fields and sounds.** Type in a cuneiform field and a multiline field (caret, selection, scrolling), open Scribe Settings, then toggle `MuteUiSounds` and click buttons. Confirm no text glitches and sounds mute and unmute correctly with no doubled clicks.
       *(bump-libgui-4-0-0 4.5)*
-- [ ] `000000eb` **Resize and rescale.** With a dialog and the HUD open, resize the game window and change GUI scale. Confirm layout and hit areas follow, and the HUD stays visible and in position.
+      - **Confirmed 2026-10-26**: cuneiform and multiline fields (caret, selection, scrolling), Settings, and MuteUiSounds on/off all behave correctly on gui 4.0.0.
+- [x] `000000eb` **Resize and rescale.** With a dialog and the HUD open, resize the game window and change GUI scale. Confirm layout and hit areas follow, and the HUD stays visible and in position.
       *(bump-libgui-4-0-0 4.6)*
+      - **Confirmed 2026-10-26**: window resize and GUI scale change with a dialog and the HUD open; layout, hit areas and HUD position all followed.
