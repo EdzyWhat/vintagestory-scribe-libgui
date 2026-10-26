@@ -6,6 +6,11 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.4.5] - 2026-10-26
+
+### Changed
+- **Scribe now requires LibGUI (`gui`) 4.0.0.** Update the LibGUI mod alongside Scribe; with LibGUI 3.1.0 the game will not load Scribe. Nothing in Scribe looks or behaves differently. LibGUI 4.0.0 itself brings faster repainting, fixes hover states lingering on windows behind a dialog, and carries its own fix for the Linux startup crash.
+
 ## [1.4.4] - 2026-10-25
 
 ### Fixed
