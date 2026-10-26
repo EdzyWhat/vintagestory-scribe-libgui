@@ -101,7 +101,7 @@ keep, sink to bottom, unpin, or delete.
 ## Requirements
 
 - Vintage Story **1.22.x** (targets .NET 10)
-- **[LibGUI](https://mods.vintagestory.at/libgui)** (`gui` mod, **3.1.0**) — a hard
+- **[LibGUI](https://mods.vintagestory.at/libgui)** (`gui` mod, **4.0.0**) — a hard
   dependency; install it alongside Scribe on every client and server.
 
 ## Building from source
@@ -151,10 +151,10 @@ mods on its mod path — it never sees your installed `VintagestoryData/Mods` fo
 Scribe's hard dependency on the `gui` (LibGUI) mod has to be staged too, or the mod loader
 skips Scribe and every scenario fails at `SetBlock` with *"Unknown block code
 scribe:scribelectern"*. `Integration.Tests.csproj` handles this by copying the installed
-`gui_3.1.0.zip` into the test output directory (from `$(VintagestoryDataMods)`, defaulting to
+`gui_4.0.0.zip` into the test output directory (from `$(VintagestoryDataMods)`, defaulting to
 the macOS install path), and `AssemblyInfo.cs` stages it via `[assembly:
-AtlasMods("gui_3.1.0.zip")]`. On a non-macOS machine, or if the mod version changes, override
-the path (`-p:VintagestoryDataMods=<your Mods folder>`) and update the `gui_3.1.0.zip`
+AtlasMods("gui_4.0.0.zip")]`. On a non-macOS machine, or if the mod version changes, override
+the path (`-p:VintagestoryDataMods=<your Mods folder>`) and update the `gui_4.0.0.zip`
 filename in both places in lockstep.
 
 `FixtureBuilders` is excluded from normal runs: it's a one-time world-builder scenario, not

@@ -943,3 +943,18 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
 - [x] `000000d5` **Check all 10 tablet variants after the TabletStyle facade.** Open a red, blue and fire tablet in each of wet, hard and fired, plus a wax tablet. Confirm the ink, backdrop, glow, Quest Link color and layout look as before.
       *(add-tablet-style-facade 3.2)*
       - **Confirmed 2026-10-25**: all 10 variants (red/blue/fire in wet, hard, fired, plus wax) look as before.
+
+## bump-libgui-4-0-0
+
+- [ ] `000000e6` **Check startup log.** Launch the game once with only the restaged build, load a world, then search `client-main.log` for `gui` 4.0.0, the `[scribe] patched Gui.NativeLibraryLoader.Register` line, and any `[GUI]` or Scribe errors.
+      *(bump-libgui-4-0-0 3.2)*
+- [ ] `000000e7` **Open every block dialog.** Open the Clockmaker's Notebook, Lectern, Scriptorium, Assignment Desk, Inbox and a tablet. Confirm backdrops, glows and icons are drawn whole (nothing clipped or missing) and that closing and reopening each works.
+      *(bump-libgui-4-0-0 4.2)*
+- [ ] `000000e8` **Exercise the HUD.** Pin tasks, then start a timer, cancel it, and start another without touching any HUD setting; do the same after letting one fire and clearing it. Confirm the timer row reappears each time, and that the gear button and anchor settings still work.
+      *(bump-libgui-4-0-0 4.3)*
+- [ ] `000000e9` **Check hover and tooltips.** Hover rows (delete and pin buttons), item tooltips and collapsing rows, and open a Scribe dialog over the inventory or Handbook. Confirm hover states follow the mouse, tooltips close, and nothing under a dialog stays highlighted.
+      *(bump-libgui-4-0-0 4.4)*
+- [ ] `000000ea` **Check fields and sounds.** Type in a cuneiform field and a multiline field (caret, selection, scrolling), open Scribe Settings, then toggle `MuteUiSounds` and click buttons. Confirm no text glitches and sounds mute and unmute correctly with no doubled clicks.
+      *(bump-libgui-4-0-0 4.5)*
+- [ ] `000000eb` **Resize and rescale.** With a dialog and the HUD open, resize the game window and change GUI scale. Confirm layout and hit areas follow, and the HUD stays visible and in position.
+      *(bump-libgui-4-0-0 4.6)*

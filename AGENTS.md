@@ -42,26 +42,22 @@ these first, in order:
      `git -C <path> pull` if something looks off. `vsapi` mirrors `VintagestoryAPI.dll`
      (interfaces/base classes); there is **no open equivalent for `VintagestoryLib.dll`**
      (the engine implementation) — that one still requires decompiling (see 3 below).
-   - `./reference/vslibgui/` (LibGUI source) and `./.wiki/` (LibGUI wiki) — gitignored, local
-     to this repo. Full details, including a **load-bearing version-skew warning** (we ship
-     `gui` 3.1.0; the clone + GitHub upstream are stuck at 2.0.0 with no newer tag) in
-     `docs/libgui-reference.md` — read that before trusting the clone on anything from 3.1.0
-     (`DefaultTextStyle`, `VtmlConverter`, `MarqueeText`, `AnimatedText`, `ErrorBoundary`,
-     `LayoutBuilder`, `FocusScope`, `SettingsDialog`, theme presets). Core framework mechanics
-     (`Widget`/`Element`/`State`/reconciliation) are unlikely to have changed and the clone is
-     trustworthy for those. Re-clone if missing:
+   - `./reference/vslibgui/` (LibGUI source, matches the `gui` 4.0.0 we ship) and `./.wiki/`
+     (older LibGUI wiki; the current docs live in the source at `reference/vslibgui/Gui/docs/` and
+     at https://ripls56.github.io/vslibgui/) — gitignored, local to this repo. Details in
+     `docs/libgui-reference.md`. Re-clone if missing:
      `git clone --depth 1 https://github.com/ripls56/vslibgui.git reference/vslibgui` and
      `git clone --depth 1 https://github.com/ripls56/vslibgui.wiki.git .wiki`.
 3. **Decompiling the shipped DLLs directly** — for `VintagestoryLib.dll` (no open source
-   exists) or when the local clones above are silent, version-skewed, or contradict what
+   exists) or when the local clones above are silent or contradict what
    you're seeing. Decompile with `ilspycmd` (`~/.dotnet/tools/ilspycmd`) and read the shipped
    source + doc-comments; they are written for modders like us and are the most authoritative
    answer to "how does this actually work." **Prefer `VintagestoryLib.dll`**
    (`/Applications/Vintage Story.app/VintagestoryLib.dll`) — it holds the *implementations*
    (render API, scissor stack, client platform) and its comments are especially descriptive.
    `VintagestoryAPI.dll` holds the interfaces/base classes and their XML doc-comments. For
-   LibGUI specifically, decompile `Gui.dll` from the shipped mod zip (not the 2.0.0 clone) when
-   the version-skew warning above applies. When you learn something non-obvious this way, add
+   LibGUI specifically, decompile `Gui.dll` from the shipped mod zip only when the source clone is silent or
+   contradicts the game. When you learn something non-obvious this way, add
    it to `VSAPI-NOTES.md` so it's not re-derived next time. (`ilspycmd -t <FullTypeName> <dll>`
    dumps one type; `-l c <dll>` lists classes.)
 4. The wiki (useful for vanilla precedent and worked examples, but 2/3 above are ground truth

@@ -12,31 +12,23 @@ each session.
 > [`libgui-migration-guide.md`](libgui-migration-guide.md) and the adopted-facts log in
 > `VSAPI-NOTES.md` (§ "LibGUI").
 
-> ⚠️ **Version skew — read before trusting the local source clone.** We ship against **gui 3.1.0**
-> (see `src/Mod/modinfo.json`), but the local `./reference/vslibgui/` clone and the GitHub upstream
-> are both stuck at **2.0.0** (upstream `main` = commit `42503d9`, and there is **no 3.1.0 tag or
-> branch** — the author ships compiled DLLs to the mod portal ahead of pushing source). So the clone
-> below is a 2.0.0 reference, useful for the shared core but **wrong on anything new in 3.1.0**
-> (`DefaultTextStyle`, `TextStyle.Merge`, `VtmlConverter`, `MarqueeText`, `AnimatedText`,
-> `ErrorBoundary`, `LayoutBuilder`, `FocusScope`, `SettingsDialog`, theme presets). **For 3.1.0
-> ground truth, decompile the shipped DLL** — this is the authoritative source, not GitHub:
-> ```
-> ~/.dotnet/tools/ilspycmd -l c "$HOME/Library/Application Support/VintagestoryData/Mods/gui_3.1.0.zip → Gui.dll"
-> # extract the zip first; Gui.pdb ships alongside, so line numbers are accurate.
-> ```
+> **Source matches the shipped version.** We ship against **gui 4.0.0** (see `src/Mod/modinfo.json`)
+> and the local `./reference/vslibgui/` clone is the 4.0.0 source (upstream `main`, commit `4df757c`), with
+> current docs in `reference/vslibgui/Gui/docs/` and at https://ripls56.github.io/vslibgui/. Prefer reading
+> the source over decompiling `Gui.dll`. Older notes below that say "2.0.0" or "3.1.0" describe when a fact was
+> learned, not a limit of the clone.
 
 ## Where to look things up (do this before guessing)
 
 Local, gitignored clones exist — **search them with ripgrep before assuming a top-level summary is
 complete** (the wiki and the source disagree in at least one important place; see the variable-height
-note below), but heed the version-skew warning above:
+note below), and prefer the source clone to decompiling:
 
 - **Wiki** → `./.wiki/*.md` — e.g. `rg -i "variableHeight" ./.wiki/`
-- **Full source (2.0.0)** → `./reference/vslibgui/` — ground truth vs. the wiki *for the 2.0.0 core*.
-  E.g. `rg -n "public ListView" ./reference/vslibgui/`. **Do not trust it for 3.1.0-only APIs** —
-  decompile `Gui.dll` from `gui_3.1.0.zip` for those.
+- **Full source (4.0.0)** → `./reference/vslibgui/` — ground truth vs. the wiki.
+  E.g. `rg -n "public ListView" ./reference/vslibgui/`. Current docs: `./reference/vslibgui/Gui/docs/`.
 
-Re-clone if missing (note: these fetch **2.0.0**, not the 3.1.0 we ship):
+Re-clone if missing:
 ```
 git clone --depth 1 https://github.com/ripls56/vslibgui.wiki.git .wiki
 git clone --depth 1 https://github.com/ripls56/vslibgui.git reference/vslibgui
@@ -54,7 +46,7 @@ and the GitHub source.
 |---|---|
 | Repo | `github.com/ripls56/vslibgui` (portal name **libGUI**) |
 | **Dependency modid** | **`gui`** (generic — collision risk); assembly **`Gui.dll`** |
-| License / version | MIT / **v3.1.0 shipped** (we depend on it); local source clone + GitHub upstream are **2.0.0 only** — see the version-skew warning above |
+| License / version | MIT / **v4.0.0 shipped** (we depend on it); local source clone is 4.0.0 |
 | Target | VS **1.22.0–1.22.3**, **net10.0** |
 | Side | `Universal`, `requiredOnClient: true`, `requiredOnServer: false` (rendering is client-only) |
 | Maturity | Young: ~1861 downloads, 2 consumers (HudUI, ChatUI — both by the author), 2 retracted early releases |

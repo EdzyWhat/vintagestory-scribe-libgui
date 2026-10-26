@@ -10,6 +10,6 @@
   "requiredOnServer": true,
   "dependencies": {
     "game": "1.22.0",
-    "gui": "3.1.0"
+    "gui": "4.0.0"
   }
 }
