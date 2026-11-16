@@ -14,8 +14,11 @@ Calendar Handbook (TheJimmyBlaze) and Wall Calendar (nikok).
 - **Dates are stored as year, month and day**, never as a day count since world creation.
   If the stored day is past the end of its month, it is shown clamped to the last day. This only
   matters if a world's days per month changes, which is not expected.
-- **Years count from 1** everywhere in Scribe, derived from `Calendar.TotalDays`, never the game's
-  1386-based `Calendar.Year`. The year view runs from Year 1 to 10 years ahead of today.
+- **Displayed years count from 1** everywhere in Scribe, derived from `Calendar.TotalDays`, never the
+  game's 1386-based `Calendar.Year`. The date text the server stores as an identity (Guest Book dedup,
+  History, assignments) keeps its existing form and is never shown when a timestamp exists. Dates stored as
+  text before timestamps existed keep their stored text. The year view runs from Year 1 to 10 years ahead
+  of today.
 - **Calendar shape comes from one place.** Vanilla Vintage Story always has 12 months, each with the
   world's days per month. The month length is asked for, never assumed, so a mod with uneven months
   (Solar Years) can be supported later.
@@ -37,7 +40,7 @@ Calendar Handbook (TheJimmyBlaze) and Wall Calendar (nikok).
 - **Dates use month names, never numbers**, so day-first and month-first cannot be misread.
 - **Date order follows the language** (`scribe:date-format`). Vintage Story has a single `en`
   language, with no US or UK variant, and a mostly non-US audience, so the default stays day-first.
-  A Setting can override the order: language default, day-month, or month-day.
+  A Setting can override the order: language default, day-month-year, month-day-year, or year-month-day.
 - **Full month names first.** They are tried at a slightly smaller font on the HUD and Pinned rows.
   Short month names (12 new lang keys, translated per locale) are only added if that looks bad.
 - **Completed dated tasks stay on the calendar,** struck through and dimmed.
@@ -58,8 +61,10 @@ Calendar Handbook (TheJimmyBlaze) and Wall Calendar (nikok).
 - **Reminders are computed on the client** from the pin snapshot, which gains the task's date.
 
 ### Repeats
-- **"Repeat yearly" is a checkbox in the row menu.** Checking off a repeating task marks it done,
-  then at the next midnight its date moves to next year and the check clears. It stays one task, and
+- **"Repeat yearly" is a checkbox in the row menu.** Checking off a repeating task marks it done.
+  Once its date has passed, its date moves to the next occurrence on or after today and the check
+  clears. Change 4 applies this lazily on the server whenever a document is loaded or viewed, so
+  documents left unloaded roll over correctly later. It stays one task, and
   the calendar shows only its next occurrence.
 
 ## Changes
@@ -69,7 +74,7 @@ Calendar Handbook (TheJimmyBlaze) and Wall Calendar (nikok).
 | 1 | `add-task-row-context-menu`: right-click menu on task rows (Edit, Pin/Unpin, Delete) | none |
 | 2 | `add-dated-task-core`: date field, save-format bump, calendar shape, date formatting, status rules | none |
 | 3 | Notebook dating: Add/Change/Clear date and Repeat yearly in the row menu, date chip, date picker | 1, 2 |
-| 4 | Pins, HUD and reminders: pin snapshot date, badges, due and overdue states, reminder Settings | 2 |
+| 4 | Pins, HUD and reminders: pin snapshot date, badges, due and overdue states, reminder Settings, repeat rollover | 2 |
 | 5 | Calendar block and dialog: wall block, split view (filterable list plus month view), Today button | 2, 3 |
 | 6 | Year view: 12-month grid, year navigation (world start to 10 years ahead), Today button | 5 |
 | 7 | Calendar block face: month name, day grid, today marker, marks on days with tasks | 5 |
