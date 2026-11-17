@@ -40,7 +40,7 @@ internal readonly record struct ScribeReadRowData(
     int TargetQuantity = 1, int CurrentQuantity = 0, string? LinkTarget = null, int Depth = 0,
     bool IsAcceptedAssignment = false, string? QuestProgressText = null,
     string? AssignerName = null, string? AssignedDate = null, string? AcceptedDate = null,
-    bool IsStaticVsQuestObjective = false, string? ExtraInfo = null)
+    bool IsStaticVsQuestObjective = false, string? ExtraInfo = null, ScribeRowChip? Chip = null)
 {
     public bool IsTask => Kind == ScribeBlockKind.Task;
     public bool IsTracker => Kind == ScribeBlockKind.Tracker;
@@ -287,7 +287,7 @@ internal sealed class ScribeReadContentState : State<ScribeReadContent>
                         Index: b.Index, Kind: b.Kind, Done: b.Done, Pinned: b.Pinned, TaskId: b.TaskId, Text: b.Text,
                         DisplayStack: b.DisplayStack, DisplayName: b.DisplayName,
                         TargetQuantity: b.TargetQuantity, CurrentQuantity: b.CurrentQuantity, LinkTarget: b.LinkTarget,
-                        IsStaticVsQuestObjective: b.IsStaticVsQuestObjective),
+                        IsStaticVsQuestObjective: b.IsStaticVsQuestObjective, Chip: b.Chip),
                     style, Widget.AssignedStampBitmap)))
             .ToList();
 
@@ -756,7 +756,12 @@ internal sealed class ScribeReadRowState : State<ScribeReadRow>
                 child: textChild);
         }
 
-        children.Add(new Expanded(child: textChild));
+        // The date chip sits under the text in the same column; the column is always present so a row that gains or
+        // loses a date keeps its text widget mounted.
+        children.Add(new Expanded(child: new Column(
+            crossAxisAlignment: CrossAxisAlignment.Stretch,
+            mainAxisSize: MainAxisSize.Min,
+            children: new Widget[] { textChild, ScribeDateChipView.Build(Widget.Data.Chip, style) })));
 
         // A Depth-1 subtask adds a left inset so it reads as nested under its parent, matching the editor row
         // so the indent is identical across a view switch; depth-0 rows get none.

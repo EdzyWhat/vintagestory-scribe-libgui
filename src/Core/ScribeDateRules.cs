@@ -29,6 +29,16 @@ public readonly record struct ScribeDateStatus(ScribeDateStatusKind Kind, int Da
 /// </summary>
 public static class ScribeDateRules
 {
+    /// <summary>Whether the UI offers dates on <paramref name="block"/>: a plain task that did not come from an
+    /// assignment. Other kinds keep a date they carry but are never dated through the menu.</summary>
+    public static bool IsDatable(ScribeBlock block) =>
+        block.Kind == ScribeBlockKind.Task && block.Assignment is null;
+
+    /// <summary>Whether <paramref name="block"/> repeats yearly: a plain task with a date and Repeat yearly on.
+    /// Completion never deletes such a task.</summary>
+    public static bool IsRepeatingTask(ScribeBlock block) =>
+        block.Kind == ScribeBlockKind.Task && block.Date is not null && block.RepeatYearly;
+
     /// <summary>The block's status relative to <paramref name="today"/>, or null for an undated or
     /// non-completable block.</summary>
     public static ScribeDateStatus? Classify(ScribeBlock block, ScribeDate today, IScribeCalendarShape shape)

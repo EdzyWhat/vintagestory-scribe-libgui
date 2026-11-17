@@ -58,6 +58,18 @@ public static class ScribeCompletion
         };
     }
 
+    /// <summary>
+    /// The policy a completion acts under: <see cref="ScribeCompletionPolicy.Sink"/> when
+    /// <paramref name="policy"/> is <see cref="ScribeCompletionPolicy.Delete"/> and any of
+    /// <paramref name="blocks"/> repeats yearly (<see cref="ScribeDateRules.IsRepeatingTask"/>), so a repeating
+    /// task is never deleted by a completion; otherwise <paramref name="policy"/> unchanged. Keep, Sink,
+    /// Unpin and UnpinSink never delete a task and are not overridden.
+    /// </summary>
+    public static ScribeCompletionPolicy EffectivePolicy(ScribeCompletionPolicy policy, IEnumerable<ScribeBlock> blocks) =>
+        policy == ScribeCompletionPolicy.Delete && blocks.Any(ScribeDateRules.IsRepeatingTask)
+            ? ScribeCompletionPolicy.Sink
+            : policy;
+
     /// <summary>The result of <see cref="ApplyLocal"/>. <see cref="Toggled"/> is false when the id was
     /// unknown or non-completable (Text), leaving the document unchanged. <see cref="DocChanged"/> is true
     /// for any content change (the flip, or a policy delete/sink). <see cref="ShouldRemovePin"/> is the pin
@@ -153,7 +165,7 @@ public static class ScribeCompletion
         ScribeCompletionPolicy policy)
     {
         doc.Blocks[idx].Done = nowDone;
-        var decision = Decide(nowDone, policy);
+        var decision = Decide(nowDone, EffectivePolicy(policy, new[] { doc.Blocks[idx] }));
         var deleted = Array.Empty<Guid>();
         switch (decision.DocAction)
         {
@@ -183,7 +195,7 @@ public static class ScribeCompletion
             }
         }
 
-        var decision = Decide(nowDone, policy);
+        var decision = Decide(nowDone, EffectivePolicy(policy, GroupBlocks(doc, parentIndex, runEnd)));
         var deleted = Array.Empty<Guid>();
         if (nowDone)
         {
@@ -210,6 +222,18 @@ public static class ScribeCompletion
     private static LocalOutcome ApplyDiscardParent(ScribeDocument doc, int parentIndex, Guid taskId,
         bool nowDone, ScribeCompletionPolicy policy, int runStart, int runEnd)
     {
+        // A group with a repeating task keeps its children under every policy: the parent alone is completed and,
+        // when the effective policy sinks, it moves with its children so a subtask stays under its parent.
+        if (GroupBlocks(doc, parentIndex, runEnd).Any(ScribeDateRules.IsRepeatingTask))
+        {
+            doc.Blocks[parentIndex].Done = nowDone;
+            var kept = Decide(nowDone, EffectivePolicy(policy, GroupBlocks(doc, parentIndex, runEnd)));
+            if (kept.DocAction == ScribeCompletionDocAction.SinkToBottom) doc.MoveRangeToBottom(parentIndex, runEnd);
+            return new LocalOutcome(Toggled: true, NowDone: nowDone, DocChanged: true,
+                ShouldRemovePin: kept.ShouldRemovePin,
+                AffectedTaskIds: new[] { taskId }, DeletedTaskIds: Array.Empty<Guid>());
+        }
+
         var discarded = new Guid[runEnd - runStart];
         for (int i = runStart; i < runEnd; i++) discarded[i - runStart] = doc.Blocks[i].TaskId;
         doc.DeleteRange(runStart, runEnd);
@@ -222,6 +246,12 @@ public static class ScribeCompletion
         return new LocalOutcome(Toggled: true, NowDone: nowDone, DocChanged: true,
             ShouldRemovePin: leaf.ShouldRemovePin,
             AffectedTaskIds: leaf.AffectedTaskIds, DeletedTaskIds: deleted);
+    }
+
+    /// <summary>The parent at <paramref name="parentIndex"/> and its owned run up to <paramref name="runEnd"/>.</summary>
+    private static IEnumerable<ScribeBlock> GroupBlocks(ScribeDocument doc, int parentIndex, int runEnd)
+    {
+        for (int i = parentIndex; i < runEnd; i++) yield return doc.Blocks[i];
     }
 
     /// <summary>Deletes the completable task with <paramref name="taskId"/>, preserving the order of the

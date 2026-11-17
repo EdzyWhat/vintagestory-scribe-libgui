@@ -494,6 +494,24 @@ public abstract partial class ScribeDialogBase
     };
 
     /// <summary>The viewer's Date order, read fresh each build so a settings change shows on the next rebuild.</summary>
+    /// <summary>The date chip a read or editor row shows for <paramref name="b"/>; null when the dialog shows no
+    /// row dates, the block is not datable or has no date.</summary>
+    private ScribeRowChip? BuildRowChip(ScribeBlock b)
+    {
+        if (!SupportsRowDates || !ScribeDateRules.IsDatable(b)) return null;
+        var world = capi.World;
+        var shape = ScribeWorldCalendar.Shape(world);
+        if (ScribeDateRules.Classify(b, ScribeWorldCalendar.Today(world), shape) is not { } status) return null;
+
+        var text = ScribeDateChipText.For(status);
+        string date = ScribeWorldCalendar.Format(world, b.Date!.Value, DateOrder);
+        string line = text.StatusLangKey is null
+            ? Lang.Get("scribe:" + text.TemplateLangKey, date)
+            : Lang.Get("scribe:" + text.TemplateLangKey,
+                Lang.Get("scribe:" + text.StatusLangKey, text.Count), date);
+        return new ScribeRowChip(line, status.Kind);
+    }
+
     private protected ScribeDateOrder DateOrder => modSystem.MySettings.DateOrder;
 
     /// <summary>The live row style, derived from current settings each build (not cached at open) so a font-scale change repaints the open dialog. Passes through <see cref="DecorateRowStyle"/> for tier-specific behavior.</summary>
@@ -540,6 +558,10 @@ public abstract partial class ScribeDialogBase
 
     /// <summary>Whether the Read View / Editor renders the shared Row 2 subtitle + Row 3 tab header. True by default; only <see cref="GuiDialogScribeTablet"/> turns it off.</summary>
     private protected virtual bool SupportsTabHeader => true;
+
+    /// <summary>Whether the row menu offers dates and the rows show a date chip. True by default; the Tablet and the
+    /// Assignment Desk turn it off. A client-side hint only: the server decides what it applies.</summary>
+    private protected virtual bool SupportsRowDates => true;
 
     /// <summary>Whether EDITOR rows make their Link/Tracker/Craft name label click-to-open-Handbook. False by default (surfaces with a read view activate links there); the tablet, with no read/edit split, overrides it true.</summary>
     protected virtual bool EditorRowsOpenLinks => false;
@@ -600,7 +622,7 @@ public abstract partial class ScribeDialogBase
                         ExtraInfo: b.ExtraInfo,
                         QuestProgressText: questProgress,
                         AssignerName: assignerName, AssignedDate: assignedDate, AcceptedDate: acceptedDate,
-                        IsStaticVsQuestObjective: isStaticVsQuestObjective);
+                        IsStaticVsQuestObjective: isStaticVsQuestObjective, Chip: BuildRowChip(b));
                 })
                 // Drop only empty-text Tasks; notes may be empty and Tracker/Link rows carry no text of their own.
                 .Where(r => !r.IsTask || !string.IsNullOrWhiteSpace(r.Text))
@@ -656,7 +678,7 @@ public abstract partial class ScribeDialogBase
                     TargetQuantity: b.TargetQuantity, CurrentQuantity: b.CurrentQuantity, LinkTarget: iconLinkTarget,
                     Depth: b.Depth, IsAcceptedAssignment: isAcceptedAssignment, ExtraInfo: b.ExtraInfo,
                     AssignerName: assignerName, AssignedDate: assignedDate, AcceptedDate: acceptedDate,
-                    IsStaticVsQuestObjective: isStaticVsQuestObjective);
+                    IsStaticVsQuestObjective: isStaticVsQuestObjective, Chip: BuildRowChip(b));
             })
             .ToList();
 

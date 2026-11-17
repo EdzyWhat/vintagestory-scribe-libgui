@@ -619,6 +619,37 @@ public sealed class ScribeDocument
         return null;
     }
 
+    /// <summary>Sets the date of the datable task with <paramref name="taskId"/>, keeping its Repeat yearly flag
+    /// and its identity. Returns false (unchanged) for an unknown id, a block that is not datable (see
+    /// <see cref="ScribeDateRules.IsDatable"/>), or a date the block already has.</summary>
+    public bool TrySetTaskDate(Guid taskId, ScribeDate date)
+    {
+        if (FindByTaskId(taskId) is not { } block || !ScribeDateRules.IsDatable(block) || block.Date == date) return false;
+        block.Date = date;
+        return true;
+    }
+
+    /// <summary>Clears the date, and with it the Repeat yearly flag, of the datable task with
+    /// <paramref name="taskId"/>. Returns false (unchanged) for an unknown id, a block that is not datable, or
+    /// a block with no date.</summary>
+    public bool TryClearTaskDate(Guid taskId)
+    {
+        if (FindByTaskId(taskId) is not { } block || !ScribeDateRules.IsDatable(block) || block.Date is null) return false;
+        block.Date = null;
+        return true;
+    }
+
+    /// <summary>Sets Repeat yearly on the datable task with <paramref name="taskId"/>. Returns false (unchanged)
+    /// for an unknown id, a block that is not datable, an undated block (the flag needs a date), or a flag that
+    /// already has that value.</summary>
+    public bool TrySetTaskRepeat(Guid taskId, bool repeat)
+    {
+        if (FindByTaskId(taskId) is not { } block || !ScribeDateRules.IsDatable(block)
+            || block.Date is null || block.RepeatYearly == repeat) return false;
+        block.RepeatYearly = repeat;
+        return true;
+    }
+
     /// <summary>
     /// Moves the task with the given TaskId to the END, preserving the order of all others (the "sink to the
     /// bottom" of the Sink policy). Returns false (unchanged) for an unknown id, a non-completable (Text)

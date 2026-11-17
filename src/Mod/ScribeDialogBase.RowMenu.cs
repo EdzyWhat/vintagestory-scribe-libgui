@@ -49,22 +49,48 @@ public abstract partial class ScribeDialogBase
 
         bool pinLive = view != ScribeRowMenuView.Read || !ReadViewIsReadOnly || ReadViewCompletionAndPinLive;
         bool isPinned = view == ScribeRowMenuView.PinTab || IsPinnedForMe(taskId);
-        var actions = ScribeRowMenuEntries.For(view, ReadViewIsReadOnly, pinLive, isPinned);
+        var block = RowMenuBlock(view, taskId);
+        bool canDate = SupportsRowDates && view != ScribeRowMenuView.PinTab && block is not null
+            && ScribeDateRules.IsDatable(block) && !(view == ScribeRowMenuView.Read && ReadViewIsReadOnly);
+        var actions = ScribeRowMenuEntries.For(view, ReadViewIsReadOnly, pinLive, isPinned,
+            canDate, hasDate: block?.Date is not null);
 
-        // Delete sits in its own group below the other entries.
+        // Delete sits in its own group; Edit and the date group follow the document
+        // while the menu is open (Refreshable), Pin or Unpin and Delete keep what the menu opened with.
         return actions
-            .Select((action, i) => new ScribeRowMenuItem(
-                RowMenuLabelKey(action),
-                () => RunRowMenuAction(view, action, taskId),
-                SeparatorBefore: i > 0 && action == ScribeRowMenuAction.Delete))
+            .Select((action, i) =>
+            {
+                bool toggle = action == ScribeRowMenuAction.RepeatYearly;
+                return new ScribeRowMenuItem(
+                    RowMenuLabelKey(action),
+                    () => RunRowMenuAction(view, action, taskId),
+                    CloseOnChoose: !toggle,
+                    SeparatorBefore: i > 0 && action == ScribeRowMenuAction.Delete,
+                    Checked: toggle ? block?.RepeatYearly == true : null,
+                    Refreshable: action == ScribeRowMenuAction.Edit || action is ScribeRowMenuAction.AddDate
+                        or ScribeRowMenuAction.ChangeDate or ScribeRowMenuAction.ClearDate or ScribeRowMenuAction.RepeatYearly);
+            })
             .ToList();
     }
+
+    /// <summary>The block a row menu in <paramref name="view"/> acts on: the live document's in the read view, the
+    /// scratch copy's in the editor, none on the Pin Tab (a pin snapshot carries no date).</summary>
+    private ScribeBlock? RowMenuBlock(ScribeRowMenuView view, Guid taskId) => view switch
+    {
+        ScribeRowMenuView.Read => host.Document.FindByTaskId(taskId),
+        ScribeRowMenuView.Editor => scratch?.FindByTaskId(taskId),
+        _ => null,
+    };
 
     private static string RowMenuLabelKey(ScribeRowMenuAction action) => action switch
     {
         ScribeRowMenuAction.Edit => "scribe:scribe-gui-rowmenu-edit",
         ScribeRowMenuAction.Pin => "scribe:scribe-gui-rowmenu-pin",
         ScribeRowMenuAction.Unpin => "scribe:scribe-gui-rowmenu-unpin",
+        ScribeRowMenuAction.AddDate => "scribe:scribe-gui-rowmenu-adddate",
+        ScribeRowMenuAction.ChangeDate => "scribe:scribe-gui-rowmenu-changedate",
+        ScribeRowMenuAction.ClearDate => "scribe:scribe-gui-rowmenu-cleardate",
+        ScribeRowMenuAction.RepeatYearly => "scribe:scribe-gui-rowmenu-repeatyearly",
         _ => "scribe:scribe-gui-rowmenu-delete",
     };
 
@@ -100,6 +126,9 @@ public abstract partial class ScribeDialogBase
             case ScribeRowMenuAction.Delete:
                 DeleteRowFromReadView(taskId);
                 break;
+            default:
+                RunDateAction(ScribeRowMenuView.Read, action, taskId);
+                break;
         }
     }
 
@@ -120,8 +149,98 @@ public abstract partial class ScribeDialogBase
             case ScribeRowMenuAction.Delete:
                 DeleteEditorBlock(index);
                 break;
+            default:
+                RunDateAction(ScribeRowMenuView.Editor, action, taskId);
+                break;
         }
     }
+
+    // ---------------- Dates ----------------
+
+    /// <summary>Runs a date entry: Add and Change date open the picker; Clear date and Repeat yearly apply at once.</summary>
+    private void RunDateAction(ScribeRowMenuView view, ScribeRowMenuAction action, Guid taskId)
+    {
+        var block = RowMenuBlock(view, taskId);
+        if (block is null || !ScribeDateRules.IsDatable(block)) return;
+
+        switch (action)
+        {
+            case ScribeRowMenuAction.AddDate:
+            case ScribeRowMenuAction.ChangeDate:
+                OpenDatePicker(view, taskId, block);
+                break;
+            case ScribeRowMenuAction.ClearDate:
+                ApplyRowDate(view, taskId, ScribeDateOperation.ClearDate, default, repeat: false);
+                break;
+            case ScribeRowMenuAction.RepeatYearly:
+                ApplyRowDate(view, taskId, ScribeDateOperation.SetRepeat, default, repeat: !block.RepeatYearly);
+                break;
+        }
+    }
+
+    /// <summary>Opens the date picker on the row, starting at its date or today. A read view refuses first while another
+    /// player holds the editor lock, so the picker never opens for a change the server would refuse.</summary>
+    private void OpenDatePicker(ScribeRowMenuView view, Guid taskId, ScribeBlock block)
+    {
+        if (view == ScribeRowMenuView.Read && RefuseWhileLockedByOther()) return;
+        var today = ScribeWorldCalendar.Today(capi.World);
+        var model = new ScribeDatePickerModel(ScribeWorldCalendar.Shape(capi.World), block.Date ?? today);
+        RowMenu.OpenPicker(taskId, model, today, date => ApplyRowDate(view, taskId, ScribeDateOperation.SetDate, date, repeat: false));
+    }
+
+    /// <summary>Shows the standard locked message and returns true when another player holds the editor lock.</summary>
+    private bool RefuseWhileLockedByOther()
+    {
+        if (!host.IsLockedByOther(capi.World.Player.PlayerUID)) return false;
+        capi.TriggerIngameError(this, "scribe-lectern-locked", Lang.Get("scribe:scribe-gui-locked"));
+        return true;
+    }
+
+    /// <summary>Applies a date operation to a row. The editor changes the scratch copy, saved with the rest of the editor's
+    /// edits. The read view applies it optimistically to a codec round-trip copy and sends it to the server, whose
+    /// authoritative document (or its re-send after a refusal) replaces the copy.</summary>
+    private void ApplyRowDate(ScribeRowMenuView view, Guid taskId, ScribeDateOperation operation, ScribeDate date, bool repeat)
+    {
+        if (view == ScribeRowMenuView.Editor)
+        {
+            if (scratch is null || !ApplyDateOperation(scratch, taskId, operation, date, repeat)) return;
+            isDirty = true;
+            // The row is reused by the rebuild, so re-home focus through pendingFocusRow rather than mount-only autoFocus.
+            if (focusedEditIndex is { } idx && idx < editorFocusNodes.Count) pendingFocusRow = idx;
+            RebuildBody();
+            return;
+        }
+
+        if (RefuseWhileLockedByOther()) return;
+
+        var bytes = ScribeDocumentCodec.Serialize(host.Document);
+        if (ScribeDocumentCodec.TryDeserialize(bytes, out var copy) && copy is not null
+            && ApplyDateOperation(copy, taskId, operation, date, repeat))
+        {
+            host.ApplyLocalOptimisticEdit(copy);
+            RefreshReadView();
+        }
+
+        capi.Network.GetChannel(ScribeModSystem.NetworkChannelName).SendPacket(new ScribeSetTaskDateMessage
+        {
+            DocId = host.Document.DocId.ToByteArray(),
+            TaskId = taskId.ToByteArray(),
+            Operation = (byte)operation,
+            Year = operation == ScribeDateOperation.SetDate ? date.Year : 0,
+            Month = operation == ScribeDateOperation.SetDate ? date.Month : 0,
+            Day = operation == ScribeDateOperation.SetDate ? date.Day : 0,
+            Repeat = repeat,
+        });
+    }
+
+    private static bool ApplyDateOperation(ScribeDocument doc, Guid taskId, ScribeDateOperation operation, ScribeDate date, bool repeat) =>
+        operation switch
+        {
+            ScribeDateOperation.SetDate => doc.TrySetTaskDate(taskId, date),
+            ScribeDateOperation.ClearDate => doc.TryClearTaskDate(taskId),
+            ScribeDateOperation.SetRepeat => doc.TrySetTaskRepeat(taskId, repeat),
+            _ => false,
+        };
 
     private void RunPinRowAction(ScribeRowMenuAction action, Guid taskId)
     {
@@ -202,8 +321,14 @@ public abstract partial class ScribeDialogBase
     /// <summary>Per-frame menu upkeep and the item-row scroll an Edit entry asked for. Runs after layout.</summary>
     private void ServiceRowMenu()
     {
-        if (rowMenuHost is { IsOpen: true } open && rowMenuOpenedIn != RowMenuView) open.Close();
-        rowMenuHost?.Tick();
+        if (rowMenuHost is { } menu)
+        {
+            if ((menu.IsOpen || menu.IsPickerOpen) && ScribeRowMenuRules.ClosesOnViewChange(rowMenuOpenedIn, RowMenuView)) menu.CloseAll();
+            // A read-view picker whose Set would be refused (another player took the editor lock) closes.
+            if (menu.IsPickerOpen && ScribeRowMenuRules.PickerShouldClose(true, false, rowMenuOpenedIn,
+                    host.IsLockedByOther(capi.World.Player.PlayerUID))) menu.ClosePicker();
+            menu.Tick();
+        }
 
         if (pendingEditScrollTaskId is not { } scrollId) return;
         if (!isEditorMode || editScrollFramesLeft-- <= 0)
@@ -236,11 +361,6 @@ public abstract partial class ScribeDialogBase
         pendingEditScrollTaskId = null;
     }
 
-    /// <summary>Escape closes an open row menu and nothing else: the dialog stays open and the focused field keeps its text.</summary>
-    private bool TryCloseRowMenuOnEscape()
-    {
-        if (rowMenuHost is not { IsOpen: true } menu) return false;
-        menu.Close();
-        return true;
-    }
+    /// <summary>Escape closes the open date picker or row menu and nothing else: the dialog stays open and the focused field keeps its text.</summary>
+    private bool TryCloseRowMenuOnEscape() => rowMenuHost?.CloseTopmost() ?? false;
 }

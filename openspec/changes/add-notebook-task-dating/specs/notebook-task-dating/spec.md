@@ -122,6 +122,10 @@ row SHALL close it and open that row's menu again; a right-click on empty space 
 picker does not handle mouse-wheel scrolling itself. Escape SHALL close the open picker or the open menu,
 whichever is open.
 
+#### Scenario: Today returns the picker to today
+- **WHEN** a player has stepped the picker to another date and presses Today
+- **THEN** the month, day and year show today's date and the task is unchanged until Set
+
 #### Scenario: Cancel changes nothing
 - **WHEN** a player changes the picker's fields and presses Cancel
 - **THEN** the task's date is unchanged

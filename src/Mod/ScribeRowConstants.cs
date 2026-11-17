@@ -191,6 +191,31 @@ internal static class ScribeRowConstants
     /// <summary>Read View "Other" pill (freeform Text + Quest objectives).</summary>
     public static readonly Vector4 ReadFilterOther = NavActiveGuestbook;
 
+    // ── Date chip colors ──────────────────────────────────────────────────────────────────────────
+    // Placeholder values tuned in playtest against the Notebook, Lectern and Chalkboard backdrops. The four
+    // are distinct so a task's standing reads from color as well as text.
+
+    /// <summary>Date chip of a task due today: a warm amber.</summary>
+    public static readonly Vector4 DateChipDue = new(0.86f, 0.55f, 0.10f, 1f);
+
+    /// <summary>Date chip of an overdue task: a warmer red.</summary>
+    public static readonly Vector4 DateChipOverdue = new(0.80f, 0.26f, 0.18f, 1f);
+
+    /// <summary>Date chip of an upcoming task: a muted neutral.</summary>
+    public static readonly Vector4 DateChipUpcoming = new(0.50f, 0.47f, 0.42f, 1f);
+
+    /// <summary>Date chip of a completed task: the neutral, dimmed further.</summary>
+    public static readonly Vector4 DateChipDone = new(0.50f, 0.47f, 0.42f, 0.55f);
+
+    /// <summary>The chip color for a task in <paramref name="kind"/>.</summary>
+    public static Vector4 DateChipColor(ScribeDateStatusKind kind) => kind switch
+    {
+        ScribeDateStatusKind.DueToday => DateChipDue,
+        ScribeDateStatusKind.Overdue => DateChipOverdue,
+        ScribeDateStatusKind.Done => DateChipDone,
+        _ => DateChipUpcoming,
+    };
+
     /// <summary>The HUD's near-white row-text color. Deliberately not <c>Vector4.One</c>: that is the
     /// LibGUI 3.1.0 <c>TextStyle.Merge</c> "unset" sentinel (see the note on
     /// <see cref="ScribeQuestPromptActions.AccentButton"/>), so pure white would silently fail to

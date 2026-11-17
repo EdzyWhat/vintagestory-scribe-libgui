@@ -105,7 +105,14 @@ Calendar Handbook (TheJimmyBlaze) and Wall Calendar (nikok).
 - **Exact reminder times.** These could be a Clockmaker's Notebook feature, matching how timers are
   gated. Time of day is simple enough technology (sundial-level) that it should not require a temporal
   gear.
-- **Full repeat design:** other intervals, per-year completion history.
+- **Repeat cadences.** Replace the single "Repeat yearly" checkbox with a **Repeat** entry that opens a
+  submenu (like a macOS Finder submenu: hover the entry and a second menu opens beside it) listing Does not
+  repeat, Daily, Monthly, Yearly and Custom. Custom opens its own window modeled on Google Calendar's "Custom
+  recurrence": "Repeat every N [day/month/year]" with a number stepper and a unit dropdown, and an "Ends"
+  group (Never, On a date, After N occurrences); no days-of-week row, since the world has no weekdays. This
+  needs a save-format change (a cadence and an end rule per block instead of one flag), rollover and
+  reminder rules for each cadence, and a submenu widget in the row menu host. Per-year completion history
+  stays out of scope.
 - **Per-task lead time and reminder time.**
 - **Month colors and seasonal art.**
 - **Event colors** (a small fixed palette that reads on Scribe's backdrops).

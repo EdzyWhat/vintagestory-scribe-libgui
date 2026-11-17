@@ -15,6 +15,7 @@ using Gui.Widgets.Layout;        // Column, Positioned, SizedBox, CrossAxisAlign
 using Gui.Widgets.Overlay;       // Overlay, OverlayEntry
 using Gui.Widgets.Painting;      // BoxStyle, CompositedTransformFollower, CompositedTransformTarget, HitTestBehavior
 using OpenTK.Mathematics;        // Vector2, Vector4
+using Scribe.Core;
 using Vintagestory.API.Config;   // Lang
 
 namespace Scribe;
@@ -26,8 +27,13 @@ namespace Scribe;
 /// toggle entry keeps it open so the player can see its new state.</param>
 /// <param name="SeparatorBefore">Whether a thin divider line is drawn above the entry, grouping it apart from the
 /// entries before it.</param>
+/// <param name="Checked">Null for an action entry; true or false for a toggle entry, which draws a leading
+/// checkbox in that state and never closes the menu when chosen.</param>
+/// <param name="Refreshable">Whether <see cref="ScribeRowMenuHost"/> replaces the entry while the menu is open when
+/// the document changes (Edit and the date group). Other entries keep what the menu opened with.</param>
 internal sealed record ScribeRowMenuItem(
-    string LabelLangKey, Action OnChoose, bool CloseOnChoose = true, bool SeparatorBefore = false);
+    string LabelLangKey, Action OnChoose, bool CloseOnChoose = true, bool SeparatorBefore = false,
+    bool? Checked = null, bool Refreshable = false);
 
 /// <summary>Where a secondary press landed: the row's build context, its render object and the pointer position
 /// in the same window coordinates the render objects report through <c>LocalToGlobal</c>.</summary>
@@ -88,11 +94,19 @@ internal sealed class ScribeRowMenuHost : IDisposable
 
     private OverlayEntry? barrierEntry;
     private OverlayEntry? menuEntry;
+    private ScribeRowPress lastPress;
+
+    // The date picker: an overlay pair like the menu, owned here so one Tick closes either for a vanished row.
+    private OverlayEntry? pickerBarrierEntry;
+    private OverlayEntry? pickerEntry;
+    private Guid pickerTaskId;
+    private Placement pickerPlacement;
     private Guid openTaskId;
     private IReadOnlyList<ScribeRowMenuItem> openItems = Array.Empty<ScribeRowMenuItem>();
     private BuildContext openContext;
     private OverlayState? openOverlay;
     private ColorScheme openColors;
+    private ButtonStyle openButtonStyle;
     private Placement placement;
     private ScribeAmbientLightSampler.Shade openShade;
 
@@ -111,6 +125,17 @@ internal sealed class ScribeRowMenuHost : IDisposable
 
     /// <summary>True while a row menu is showing.</summary>
     internal bool IsOpen => menuEntry is not null;
+
+    /// <summary>True while a date picker is showing. A menu and a picker are never open together.</summary>
+    internal bool IsPickerOpen => pickerEntry is not null;
+
+    /// <summary>The link a row's overlays anchor to, or null when no row for <paramref name="taskId"/> is mounted.</summary>
+    internal LayerLink? LinkOf(Guid taskId)
+    {
+        for (int i = mounted.Count - 1; i >= 0; i--)
+            if (mounted[i].TaskId == taskId) return mounted[i].Link;
+        return null;
+    }
 
     /// <summary>A row mounted. <paramref name="renderOf"/> returns the row's current render object.</summary>
     internal void RowMounted(Guid taskId, LayerLink link, Func<RenderObject?> renderOf)
@@ -140,18 +165,41 @@ internal sealed class ScribeRowMenuHost : IDisposable
         if (overlay is null) return;
         openOverlay = overlay;
         openColors = reuseColors ?? Theme.Of(press.Context).ColorScheme;
+        // The overlay sits outside the dialog's theme, so the dialog's button look is captured here.
+        if (reuseColors is null) openButtonStyle = Theme.Of(press.Context).ButtonStyle;
 
         openTaskId = taskId;
         openItems = items;
         openContext = press.Context;
+        lastPress = press;
         openShade = shade();
-        placement = Place(press, items.Count);
+        placement = Place(press, EstimateWidth(style()), MenuHeight(items));
 
         barrierEntry = new OverlayEntry(BuildBarrier());
         menuEntry = new OverlayEntry(BuildFollower());
         // Barrier first so the menu paints on top of it.
         overlay.Insert(barrierEntry);
         overlay.Insert(menuEntry);
+    }
+
+    /// <summary>Closes the menu and any date picker.</summary>
+    internal void CloseAll()
+    {
+        ClosePicker();
+        Close();
+    }
+
+    /// <summary>Closes the topmost open overlay (the picker, else the menu). Returns whether one was open.</summary>
+    internal bool CloseTopmost()
+    {
+        if (IsPickerOpen)
+        {
+            ClosePicker();
+            return true;
+        }
+        if (!IsOpen) return false;
+        Close();
+        return true;
     }
 
     /// <summary>Closes the menu if it is open.</summary>
@@ -183,6 +231,7 @@ internal sealed class ScribeRowMenuHost : IDisposable
             pendingReopen = null;
             Open(next.TaskId, next.Press, next.Overlay, next.Colors);
         }
+        TickPicker();
         if (!IsOpen) return;
         var live = LiveRow();
         if (live is null) { Close(); return; }
@@ -191,10 +240,109 @@ internal sealed class ScribeRowMenuHost : IDisposable
             refollow = false;
             RebuildFollower();
         }
-        if (live.Value.RenderOf() is { } ro && IsScrolledOutOfView(ro)) Close();
+        if (live.Value.RenderOf() is { } ro && IsScrolledOutOfView(ro))
+        {
+            Close();
+            return;
+        }
+        FollowDocument();
     }
 
-    public void Dispose() => Close();
+    /// <summary>Re-resolves the open menu's entries and refreshes the Edit entry and date group when they changed;
+    /// closes the menu when the task still exists but has no entries left.</summary>
+    private void FollowDocument()
+    {
+        var fresh = itemsFor(openTaskId);
+        if (fresh.Count == 0)
+        {
+            Close();
+            return;
+        }
+        RefreshItems(fresh);
+    }
+
+    /// <summary>Replaces the refreshable entries (Edit and the date group) of the open menu with those of
+    /// <paramref name="fresh"/>, keeping the other entries as the menu opened with them, and recomputes the
+    /// placement because the entry count changes the menu's height. Does nothing when the refreshable entries
+    /// are unchanged. The comparison ignores <see cref="ScribeRowMenuItem.OnChoose"/>, a new closure each time.</summary>
+    internal void RefreshItems(IReadOnlyList<ScribeRowMenuItem> fresh)
+    {
+        if (!IsOpen) return;
+
+        static IEnumerable<ScribeRowMenuItemKey> Keys(IEnumerable<ScribeRowMenuItem> items) =>
+            items.Select(i => new ScribeRowMenuItemKey(i.LabelLangKey, i.Checked, i.CloseOnChoose, i.SeparatorBefore, i.Refreshable));
+        if (!ScribeRowMenuRules.RefreshableEntriesChanged(Keys(openItems), Keys(fresh))) return;
+
+        var kept = new Queue<ScribeRowMenuItem>(openItems.Where(i => !i.Refreshable));
+        var merged = new List<ScribeRowMenuItem>(fresh.Count);
+        foreach (var item in fresh)
+            merged.Add(item.Refreshable || kept.Count == 0 ? item : kept.Dequeue());
+        openItems = merged;
+
+        var row = RenderOf(openTaskId);
+        placement = Place(lastPress with { RowRender = row }, EstimateWidth(style()), MenuHeight(merged));
+        RebuildFollower();
+    }
+
+    public void Dispose() => CloseAll();
+
+    // ---- Date picker ----
+
+    /// <summary>Opens the date picker beside the row for <paramref name="taskId"/>, closing any menu or picker
+    /// first. <paramref name="onSet"/> receives the model's date when the player chooses Set.</summary>
+    internal void OpenPicker(Guid taskId, ScribeDatePickerModel model, ScribeDate today, Action<ScribeDate> onSet)
+    {
+        CloseAll();
+        var overlay = openOverlay;
+        if (overlay is null || LinkOf(taskId) is null) return;
+
+        pickerTaskId = taskId;
+        pickerPlacement = Place(lastPress with { RowRender = RenderOf(taskId) },
+            ScribeDatePickerPanel.Width, ScribeDatePickerPanel.EstimatedHeight);
+        var shadeNow = shade();
+
+        pickerBarrierEntry = new OverlayEntry(BuildBarrier());
+        pickerEntry = new OverlayEntry(BuildPickerFollower(model, today, onSet, shadeNow));
+        overlay.Insert(pickerBarrierEntry);
+        overlay.Insert(pickerEntry);
+    }
+
+    /// <summary>Closes the date picker if it is open.</summary>
+    internal void ClosePicker()
+    {
+        if (pickerEntry is null && pickerBarrierEntry is null) return;
+        pickerEntry?.Remove();
+        pickerEntry = null;
+        pickerBarrierEntry?.Remove();
+        pickerBarrierEntry = null;
+    }
+
+    /// <summary>Closes the picker when no row for its task is mounted or the row has scrolled out of view.</summary>
+    private void TickPicker()
+    {
+        if (!IsPickerOpen) return;
+        var row = RenderOf(pickerTaskId);
+        if (ScribeRowMenuRules.PickerShouldClose(row is not null, row is not null && IsScrolledOutOfView(row),
+                ScribeRowMenuView.Editor, lockedByOther: false)) ClosePicker();
+    }
+
+    private Widget BuildPickerFollower(ScribeDatePickerModel model, ScribeDate today, Action<ScribeDate> onSet, ScribeAmbientLightSampler.Shade shadeNow)
+    {
+        var link = LinkOf(pickerTaskId) ?? new LayerLink();
+        return new CompositedTransformFollower(
+            link,
+            offset: pickerPlacement.Offset,
+            child: new ScribeDatePickerPanel(
+                model, openColors, openButtonStyle, today,
+                onSet: () =>
+                {
+                    ClosePicker();
+                    onSet(model.ToDate());
+                },
+                onCancel: ClosePicker,
+                shade: shadeNow),
+            showAbove: pickerPlacement.Above);
+    }
 
     // ---- Geometry ----
 
@@ -212,14 +360,8 @@ internal sealed class ScribeRowMenuHost : IDisposable
 
     /// <summary>Below the row at the pointer's x; above the row when the menu would pass the window's bottom edge,
     /// and shifted left when it would pass the right edge.</summary>
-    private Placement Place(ScribeRowPress press, int entryCount)
+    private Placement Place(ScribeRowPress press, float width, float height)
     {
-        var rowStyle = style();
-        float width = EstimateWidth(rowStyle);
-        float tileHeight = TileLabelSize * 1.4f + 2f * (rowStyle.UseCuneiform ? CuneiformTilePadY : TilePadY);
-        int separators = openItems.Count(i => i.SeparatorBefore);
-        float height = entryCount * tileHeight + separators * (1f + 2f * SeparatorMarginY) + 2f * PanelPadding;
-
         if (press.RowRender is not { } row)
             return new Placement(new Vector2(0f, MenuGap), Above: false);
 
@@ -238,6 +380,13 @@ internal sealed class ScribeRowMenuHost : IDisposable
         return new Placement(new Vector2(dx, above ? -MenuGap : rowHeight + MenuGap), above);
     }
 
+    private float MenuHeight(IReadOnlyList<ScribeRowMenuItem> items)
+    {
+        float tileHeight = TileLabelSize * 1.4f + 2f * (style().UseCuneiform ? CuneiformTilePadY : TilePadY);
+        int separators = items.Count(i => i.SeparatorBefore);
+        return items.Count * tileHeight + separators * (1f + 2f * SeparatorMarginY) + 2f * PanelPadding;
+    }
+
     private float MinWidth(ScribeRowStyle rowStyle) => rowStyle.UseCuneiform ? CuneiformMenuMinWidth : MenuMinWidth;
 
     /// <summary>The menu's width for edge placement: the widest label's approximate width plus padding, between the
@@ -246,7 +395,7 @@ internal sealed class ScribeRowMenuHost : IDisposable
     {
         float min = MinWidth(rowStyle);
         float glyph = TileLabelSize * (rowStyle.UseCuneiform ? 1.1f : 0.6f);
-        float widest = openItems.Max(i => Lang.Get(i.LabelLangKey).Length) * glyph + 2f * (TilePadX + PanelPadding) + 2f;
+        float widest = (openItems.Count == 0 ? 0 : openItems.Max(i => Lang.Get(i.LabelLangKey).Length)) * glyph + 2f * (TilePadX + PanelPadding) + 2f;
         return Math.Clamp(widest, min, min * MaxWidthFactor);
     }
 
@@ -296,7 +445,7 @@ internal sealed class ScribeRowMenuHost : IDisposable
         var context = openContext;
         var overlay = openOverlay;
         var colors = openColors;
-        Close();
+        CloseAll();
         if (e.Button != PointerButton.Right) return;
         pendingReopen = null;
 
@@ -352,7 +501,8 @@ internal sealed class ScribeRowMenuHost : IDisposable
                 TilePadX,
                 TileCorner,
                 TileLabelSize,
-                button => Choose(item, button)));
+                button => Choose(item, button),
+                item.Checked));
         }
 
         // One flat raised surface; the hovered entry gets its own accent fill inside the panel padding.
@@ -387,7 +537,7 @@ internal sealed class ScribeRowMenuHost : IDisposable
     private void Choose(ScribeRowMenuItem item, PointerButton button)
     {
         if (button != PointerButton.Left) return;
-        if (item.CloseOnChoose) Close();
+        if (ScribeRowMenuRules.ClosesOnChoose(item.CloseOnChoose, item.Checked)) Close();
         item.OnChoose();
     }
 
@@ -488,7 +638,7 @@ internal sealed class ScribeRowMenuTile : StatefulWidget
 {
     public ScribeRowMenuTile(
         Func<TextStyle, Widget> buildLabel, ColorScheme colors, float padY, float padX, float corner, float fontSize,
-        Action<PointerButton> onChoose)
+        Action<PointerButton> onChoose, bool? isChecked = null)
     {
         BuildLabel = buildLabel;
         Colors = colors;
@@ -497,6 +647,7 @@ internal sealed class ScribeRowMenuTile : StatefulWidget
         Corner = corner;
         FontSize = fontSize;
         OnChoose = onChoose;
+        IsChecked = isChecked;
     }
 
     public Func<TextStyle, Widget> BuildLabel { get; }
@@ -507,12 +658,28 @@ internal sealed class ScribeRowMenuTile : StatefulWidget
     public float FontSize { get; }
     public Action<PointerButton> OnChoose { get; }
 
+    /// <summary>Null for an action entry; true or false draws a leading checkbox in that state.</summary>
+    public bool? IsChecked { get; }
+
     public override State CreateState() => new ScribeRowMenuTileState();
 }
 
 internal sealed class ScribeRowMenuTileState : State<ScribeRowMenuTile>
 {
     private bool hovered;
+
+    private const float CheckSize = 12f;
+
+    /// <summary>A small square drawn in the label's color: filled when on, outlined when off.</summary>
+    private static Widget Checkbox(bool on, Vector4 ink) => new Container(style: new BoxStyle
+    {
+        Width = CheckSize,
+        Height = CheckSize,
+        Color = on ? ink : default,
+        BorderColor = ink,
+        BorderThickness = 1.5f,
+        CornerRadius = new Vector4(2f),
+    });
 
     public override Widget Build(BuildContext context)
     {
@@ -537,6 +704,12 @@ internal sealed class ScribeRowMenuTileState : State<ScribeRowMenuTile>
                         Padding = EdgeInsets.Symmetric(Widget.PadY, Widget.PadX),
                         HitTestBehavior = HitTestBehavior.Opaque,
                     },
-                    child: Widget.BuildLabel(labelStyle))));
+                    child: Widget.IsChecked is { } on
+                        ? new Row(
+                            spacing: 8f,
+                            crossAxisAlignment: CrossAxisAlignment.Center,
+                            mainAxisSize: MainAxisSize.Min,
+                            children: new Widget[] { Checkbox(on, labelStyle.Color), Widget.BuildLabel(labelStyle) })
+                        : Widget.BuildLabel(labelStyle))));
     }
 }

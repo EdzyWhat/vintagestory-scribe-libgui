@@ -24,6 +24,8 @@ public sealed class GuiDialogScribeAssignmentDesk : ScribeDialogBase
     /// <summary>The owning block-entity, typed so the staging slot can reach its inventory.</summary>
     private readonly BlockEntityAssignmentDesk assignmentDesk;
 
+    private protected override bool SupportsRowDates => false;
+
     /// <summary>Bridges the staging slot widget to the block-entity inventory. Created lazily on first build,
     /// disposed in <see cref="OnGuiClosed"/>, and subscribed to <see cref="ScribeDialogBase.RebuildBody"/> so a
     /// staged item change re-renders the picker (same contract as the Scriptorium's).</summary>

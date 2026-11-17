@@ -56,8 +56,8 @@ See `proposal.md` for the motivation and `docs/calendar-roadmap.md` for the deci
 - **Entry gating stays one pure function.** `ScribeRowMenuEntries.For` gains `canDate` (the surface, the
   view and the block allow dating) and `hasDate`, and `ScribeRowMenuAction` gains `AddDate`, `ChangeDate`,
   `ClearDate` and `RepeatYearly`. Order: Edit, Pin or Unpin, then the date group, then Delete. The date group
-  is separated from the entries around it (the host already supports a separator before an entry). The
-  matrix test grows accordingly.
+  follows Edit and Pin or Unpin with no divider; only Delete is set apart by a separator (the host supports a
+  separator before any entry). The matrix test grows accordingly.
 
 - **A toggle entry kind in the menu host.** `ScribeRowMenuItem` gains `Checked` (null for an action entry,
   true or false for a toggle). A toggle tile shows a small leading checkbox square, filled when on, and never
@@ -123,7 +123,7 @@ See `proposal.md` for the motivation and `docs/calendar-roadmap.md` for the deci
   dialog holds at most one open menu or picker; choosing Add date or Change date closes the menu first, so
   a menu and a picker are never open together. It shows a month stepper (previous, the localized month
   name from `ScribeWorldCalendar.MonthName`, next), a day stepper and a year stepper (minus, value, plus
-  buttons), Set and Cancel. A month dropdown was considered and moved to Later: it opens a second overlay
+  buttons), Today (returns the fields to today's date), Set and Cancel. A month dropdown was considered and moved to Later: it opens a second overlay
   whose clicks and Escape would have to be coordinated with the picker's barrier. The stepping and clamping
   rules are a pure Core model, `ScribeDatePickerModel`, built from the calendar shape and the starting date:
   - the day stepper stops at 1 and at the month's length, with no carry into the month;

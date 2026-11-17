@@ -89,6 +89,14 @@ public sealed partial class ScribeModSystem
         DeleteTaskForPlayer(fromPlayer, docId, taskId, behavior, message.RespectEditorLock);
     }
 
+    internal void OnServerReceivedSetTaskDate(IServerPlayer fromPlayer, ScribeSetTaskDateMessage message)
+    {
+        if (!TryReadDocTask("set-task-date", fromPlayer, message.DocId, message.TaskId, out var docId, out var taskId)) return;
+        Trace("set-task-date received from {0}: doc={1} task={2} op={3}", fromPlayer.PlayerName, docId, taskId, message.Operation);
+        SetTaskDateForPlayer(fromPlayer, docId, taskId, (ScribeDateOperation)message.Operation,
+            message.Year, message.Month, message.Day, message.Repeat);
+    }
+
     internal void OnServerReceivedSetTrackerQuantity(IServerPlayer fromPlayer, ScribeSetTrackerQuantityMessage message)
     {
         if (!TryReadDocTask("set-tracker-qty", fromPlayer, message.DocId, message.TaskId, out var docId, out var taskId)) return;
@@ -149,7 +157,7 @@ public sealed partial class ScribeModSystem
     /// slot's document with a FRESH identity (so the two items never collide on pins/doc resolution) onto the
     /// Duplicate slot. Rejects bad slot indices, non-document slots, and an overwrite of a non-empty target
     /// without <see cref="ScribeTranscribeCopyMessage.AllowOverwrite"/> (the client's two-press confirm is only UX).</summary>
-    private void OnServerReceivedTranscribeCopy(IServerPlayer fromPlayer, ScribeTranscribeCopyMessage message)
+    internal void OnServerReceivedTranscribeCopy(IServerPlayer fromPlayer, ScribeTranscribeCopyMessage message)
     {
         if (sapi is null) return;
 
@@ -232,7 +240,7 @@ public sealed partial class ScribeModSystem
     /// <para><b>Never pins.</b> <see cref="Scribe.Core.ScribeDocumentJsonCodec.TryDeserialize"/> mints fresh
     /// TaskIds (and a fresh DocId; append keeps the target's own), so no pin can be created or resurrected, and
     /// this handler makes no pin-store write.</para></summary>
-    private void OnServerReceivedTranscribeImport(IServerPlayer fromPlayer, ScribeTranscribeImportMessage message)
+    internal void OnServerReceivedTranscribeImport(IServerPlayer fromPlayer, ScribeTranscribeImportMessage message)
     {
         if (sapi is null) return;
 

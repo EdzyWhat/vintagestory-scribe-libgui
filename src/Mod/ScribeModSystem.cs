@@ -282,7 +282,8 @@ public sealed partial class ScribeModSystem : ModSystem
             .RegisterMessageType<ScribeDismissQuestPromptMessage>()
             .RegisterMessageType<ScribeQuestDecisionSetMessage>()
             .RegisterMessageType<ScribeSetReadViewStateMessage>()
-            .RegisterMessageType<ScribeKnownPlayersSyncMessage>();
+            .RegisterMessageType<ScribeKnownPlayersSyncMessage>()
+            .RegisterMessageType<ScribeSetTaskDateMessage>();
     }
 
     /// <summary>Server-side pin store accessor. Null on the client.</summary>
@@ -427,6 +428,7 @@ public sealed partial class ScribeModSystem : ModSystem
         channel.SetMessageHandler<ScribeSetQuestObjectiveProgressMessage>(OnServerReceivedSetQuestObjectiveProgress);
         channel.SetMessageHandler<ScribeDismissQuestPromptMessage>(OnServerReceivedDismissQuestPrompt);
         channel.SetMessageHandler<ScribeSetReadViewStateMessage>(OnServerReceivedSetReadViewState);
+        channel.SetMessageHandler<ScribeSetTaskDateMessage>(OnServerReceivedSetTaskDate);
 
         // Persist/load the pin + settings stores with the save game (the WaypointMapLayer pattern).
         api.Event.SaveGameLoaded += OnSaveGameLoaded;

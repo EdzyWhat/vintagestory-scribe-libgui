@@ -90,6 +90,8 @@ public class GuiDialogScribeTablet : ScribeDialogBase
     /// <summary>The Tablet has no Row 2 subtitle or Row 3 header; its title bar is the whole header.</summary>
     private protected override bool SupportsTabHeader => false;
 
+    private protected override bool SupportsRowDates => false;
+
     /// <summary>Keeps checkbox and pin live on a read-only tablet so firing one with a pinned task never
     /// strands the pin on the HUD; only text editing is blocked.</summary>
     private protected override bool ReadViewCompletionAndPinLive => !IsEditable;

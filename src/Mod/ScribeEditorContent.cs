@@ -24,7 +24,7 @@ internal readonly record struct ScribeEditRowData(
     int TargetQuantity = 1, int CurrentQuantity = 0, string? LinkTarget = null, int Depth = 0,
     bool ReadOnly = false, bool CompletionAndPinLive = true, bool IsAcceptedAssignment = false,
     string? AssignerName = null, string? AssignedDate = null, string? AcceptedDate = null,
-    bool IsStaticVsQuestObjective = false, string? ExtraInfo = null)
+    bool IsStaticVsQuestObjective = false, string? ExtraInfo = null, ScribeRowChip? Chip = null)
 {
     public bool IsTask => Kind == ScribeBlockKind.Task;
     public bool IsTracker => Kind == ScribeBlockKind.Tracker;
@@ -102,12 +102,19 @@ internal sealed class ScribeFrozenEditorRow : StatelessWidget
 
         // Display-only field renderer (same as Read) so a collapsing Task/Note keeps Edit wrap + line-box.
         // Item kinds stay a padded label — they have no multiline field.
-        children.Add(new Expanded(child: data.IsItemKind
-            ? new Padding(
-                EdgeInsets.Symmetric(vertical: style.FieldPadY, horizontal: style.FieldPadX),
-                child: ScribeTaskFont.OffsetWrap(style.TaskFontFamily, style.FontSize,
-                    new Text(data.Label, textStyle)))
-            : ScribeTaskTextDisplay.Build(data.Label, style, colors.OnSurface)));
+        children.Add(new Expanded(child: new Column(
+            crossAxisAlignment: CrossAxisAlignment.Stretch,
+            mainAxisSize: MainAxisSize.Min,
+            children: new Widget[]
+            {
+                data.IsItemKind
+                    ? new Padding(
+                        EdgeInsets.Symmetric(vertical: style.FieldPadY, horizontal: style.FieldPadX),
+                        child: ScribeTaskFont.OffsetWrap(style.TaskFontFamily, style.FontSize,
+                            new Text(data.Label, textStyle)))
+                    : ScribeTaskTextDisplay.Build(data.Label, style, colors.OnSurface),
+                ScribeDateChipView.Build(data.Chip, style),
+            })));
 
         Widget rowBody = new Padding(
             EdgeInsets.Symmetric(vertical: style.RowVerticalPadding, horizontal: style.RowHorizontalPadding),

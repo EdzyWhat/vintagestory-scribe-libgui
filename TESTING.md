@@ -1017,3 +1017,29 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
       *(add-task-row-context-menu 1.2)*
 - [ ] `00000100` **Editor Features handbook entry mentions the row menu.** Open the Handbook's Editor Features entry (Scribe Mod) and confirm it ends with a Row menu section describing right-click.
       *(add-task-row-context-menu 3.6)*
+- [ ] `00000101` **Date entries in the row menu.** In a Notebook's read view and editor, right-click an undated task: confirm Add date, Repeat yearly is absent, and the date group sits between Pin and Delete. Right-click a note, a tracker-less assigned task, a Tablet row, an Assignment Desk row and a Pin Tab row: confirm none show date entries.
+      *(add-notebook-task-dating 4.5, 2.3)*
+- [ ] `00000102` **The picker opens at today or the existing date and sets it.** Choose Add date: the picker shows today. Step month, day and year, press Set, and confirm the chip appears under the text. Choose Change date and confirm it opens at that date; the menu entry reads Change date while a date exists.
+      *(add-notebook-task-dating 4.6)*
+- [ ] `0000010d` **Picker buttons and Today.** Open the date picker. Confirm the < > - + Cancel Set and Today buttons use the same colors as the dialog's normal buttons (like Task Editor), step the fields, and that Today puts month, day and year back on today's date without changing the task until Set.
+
+- [ ] `00000103` **The picker dismisses cleanly.** With the picker open: Cancel, Escape, a left-click outside (consumed, nothing under it acts), a right-click on another row, on the same row, and on empty space, scrolling the row out of view, switching view and closing the dialog. Confirm each closes only what the spec says and changes no date.
+      *(add-notebook-task-dating 4.6, 3.2)*
+- [ ] `00000104` **Locked read view refuses a date change.** With a second player holding the editor lock, choose Add date, Change date, Clear date and Repeat yearly in a read view. Confirm the locked message appears and the picker does not open. Confirm a change that reaches the server after a lock is taken reverts the chip.
+      *(add-notebook-task-dating 4.4, 4.3)*
+- [ ] `00000105` **Repeat yearly toggles in place.** Choose Repeat yearly twice quickly: the menu stays open, the checkbox flips each time and ends where it started. Clear the date and confirm Repeat yearly disappears and the pin stays.
+      *(add-notebook-task-dating 4.5)*
+- [ ] `00000106` **Editor date edits save with the document.** In the editor set and clear dates and the repeat flag; confirm the caret stays on its row, the dates survive Save and reopen, appear in the read view, and are lost if the editor closes without saving.
+      *(add-notebook-task-dating 4.2)*
+- [ ] `00000107` **Chip states and colors.** On a Notebook and a Lectern, give tasks a date today, in 1 day, in several days and in the past, and check one off. Confirm the wording ("Due today", "Due in 1 day", "N days overdue", date only when done), four visibly distinct colors, alignment with the text in the read view and the editor, and that wrapping text keeps the chip beneath. Check a depth-1 subtask, and that the "·" separator draws (not a box) in the task font and in cuneiform-adjacent chrome.
+      *(add-notebook-task-dating 5.1, 5.2)*
+- [ ] `00000108` **Chip follows settings and shows only where it should.** With a dialog open, change the Date order setting and confirm the chip reformats. Confirm no chip on notes, trackers, assigned tasks, Tablets, the Pin Tab and the Task Notice, and that it does not change across midnight until the dialog rebuilds.
+      *(add-notebook-task-dating 5.3)*
+- [ ] `00000109` **Repeating tasks under each completion policy.** Check off a repeating task under Delete (it sinks to the bottom, stays checked, keeps its pin), Keep, Sink, Unpin and UnpinSink (each as chosen), including one with subtasks under Discard (children kept, parent sinks with them), and a repeating subtask alone. Confirm a manual trash still deletes a repeating task.
+      *(add-notebook-task-dating 6.1)*
+- [ ] `0000010a` **Known limitation: HUD fade under Delete.** On the HUD with Delete as the completion policy, check off a pinned repeating task. It may fade out and then reappear when the server keeps it; this is accepted until the repeat rollover change.
+      *(add-notebook-task-dating 6.1)*
+- [ ] `0000010b` **Dates travel with copies but not assignments.** Copy a dated task through the clipboard and the Scriptorium and confirm the date and repeat flag arrive; assign a dated task and confirm the placed assignment has no date.
+      *(add-notebook-task-dating 6.2)*
+- [ ] `0000010c` **Editor Features handbook mentions dates.** Open the Handbook's Editor Features entry and confirm the row-menu section mentions Add date and Repeat yearly, and that a non-English locale shows its translation.
+      *(add-notebook-task-dating 7.2)*

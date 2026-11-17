@@ -233,6 +233,45 @@ public sealed partial class ScribeModSystem
     }
 
     /// <summary>
+    /// Applies one date operation to a task from a read view, by identity. Resolves the document and refuses (the
+    /// document unchanged) when another player holds the editor lock (the player is told), the document is
+    /// read-only, the task is unknown or not datable, or the date is invalid; a repeat change on an undated task
+    /// is ignored. An accepted change persists through the host. Every refusal re-sends the authoritative document
+    /// (<see cref="IScribeDocumentHost.PersistFromReader"/>) so the sender's optimistic copy reverts. Public for the
+    /// integration suite.
+    /// </summary>
+    public void SetTaskDateForPlayer(IServerPlayer player, Guid docId, Guid taskId, ScribeDateOperation operation,
+        int year = 0, int month = 0, int day = 0, bool repeat = false)
+    {
+        if (sapi is null) return;
+        if (!TryResolveDocHost(docId, out var docHost, player))
+        {
+            Trace("  set-date: source unresolvable for task {0} — ignored", taskId);
+            return;
+        }
+
+        if (docHost!.IsEditorLockHeldByOther(player.PlayerUID))
+        {
+            player.SendIngameError("scribe-lectern-locked", Lang.Get("scribe:scribe-gui-locked"));
+            docHost.PersistFromReader();
+            return;
+        }
+
+        bool changed = !docHost.Policy.ReadOnly && operation switch
+        {
+            ScribeDateOperation.SetDate => ScribeDate.TryCreate(year, month, day, out var date)
+                && docHost.Document.TrySetTaskDate(taskId, date),
+            ScribeDateOperation.ClearDate => docHost.Document.TryClearTaskDate(taskId),
+            ScribeDateOperation.SetRepeat => docHost.Document.TrySetTaskRepeat(taskId, repeat),
+            _ => false,
+        };
+
+        // An unchanged result is also a refusal or a no-op; either way the sender's copy is made authoritative.
+        docHost.PersistFromReader();
+        Trace("  set-date: {0} on task {1} -> {2}", operation, taskId, changed ? "applied" : "refused");
+    }
+
+    /// <summary>
     /// Reorders the acting player's own pin list into a client-supplied order (unknown/duplicate ids
     /// ignored, omitted pins preserved). Never touches document block order or another player's list.
     /// Re-pushes when the order changed. Public for the integration suite.

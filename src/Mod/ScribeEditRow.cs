@@ -384,8 +384,14 @@ internal sealed class ScribeEditRowState : State<ScribeEditRow>
         // dimmed like a text row during a drag.
         if (Widget.Data.IsItemKind)
         {
-            children.Add(new Expanded(child: new Opacity(contentOpacity,
-                child: BuildItemEditorContent(context, colors, style, index))));
+            children.Add(new Expanded(child: new Column(
+                crossAxisAlignment: CrossAxisAlignment.Stretch,
+                mainAxisSize: MainAxisSize.Min,
+                children: new Widget[]
+                {
+                    new Opacity(contentOpacity, child: BuildItemEditorContent(context, colors, style, index)),
+                    ScribeDateChipView.Build(Widget.Data.Chip, style),
+                })));
         }
         else
         {
@@ -393,7 +399,12 @@ internal sealed class ScribeEditRowState : State<ScribeEditRow>
         // Ghost hint only on TASK rows; a text section is legitimately empty.
         string placeholder = Widget.Data.IsTask ? Lang.Get("scribe:scribe-gui-newtask-placeholder") : "";
 
-        children.Add(new Expanded(child: new Opacity(contentOpacity, child: new ScribeMultilineField(
+        children.Add(new Expanded(child: new Column(
+            crossAxisAlignment: CrossAxisAlignment.Stretch,
+            mainAxisSize: MainAxisSize.Min,
+            children: new Widget[]
+            {
+            new Opacity(contentOpacity, child: new ScribeMultilineField(
             initialText: Widget.Data.Text,
             placeholder: placeholder,
             focusNode: Widget.FocusNode,
@@ -429,7 +440,9 @@ internal sealed class ScribeEditRowState : State<ScribeEditRow>
             onPointerFocus: () => Widget.OnPointerFocus(index),
             onJumpToFirstRow: () => Widget.OnJumpToFirstRow(index),
             onJumpToLastRow: () => Widget.OnJumpToLastRow(index),
-            onSecondaryPress: e => menu.Secondary(e, context)))));
+            onSecondaryPress: e => menu.Secondary(e, context))),
+            ScribeDateChipView.Build(Widget.Data.Chip, style),
+            })));
         }
 
         // Row body [grip][checkbox][text]. Delete/pin float over the row rather than reserving columns; a Depth-1
