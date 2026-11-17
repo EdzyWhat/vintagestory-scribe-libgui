@@ -323,6 +323,7 @@ public abstract partial class ScribeDialogBase
         var block = host.Document.FindByTaskId(taskId);
         var insertEdge = ScribePlayerSettings.NormalizePinInsert(modSystem.MySettings.PinInsert);
 
+        var snapshotDate = block is null ? null : ScribePinStore.DatedSnapshot(block);
         ScribePinnedRef? snapshot = !pinned ? null : new ScribePinnedRef
         {
             OwnerDocId = host.Document.DocId,
@@ -337,6 +338,7 @@ public abstract partial class ScribeDialogBase
             CurrentQuantity = block?.CurrentQuantity ?? 0,
             LinkLabel = block?.LinkLabel,
             Depth = block?.Depth ?? 0,
+            Date = snapshotDate,
         };
         modSystem.SetOptimisticPin(host.Document.DocId, taskId, snapshot, host.Document, insertEdge);
 
@@ -359,6 +361,10 @@ public abstract partial class ScribeDialogBase
             SnapshotLinkLabel = block?.LinkLabel,
             // Subtask depth.
             SnapshotDepth = block?.Depth ?? 0,
+            // The task's date, for a document the server cannot resolve.
+            SnapshotDateYear = snapshotDate?.Year ?? 0,
+            SnapshotDateMonth = snapshotDate?.Month ?? 0,
+            SnapshotDateDay = snapshotDate?.Day ?? 0,
             // Where an unrelated new pin lands (Top or Bottom); ignored on unpin.
             PinInsert = (byte)insertEdge,
         });

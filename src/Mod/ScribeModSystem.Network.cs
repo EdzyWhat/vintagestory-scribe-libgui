@@ -61,7 +61,9 @@ public sealed partial class ScribeModSystem
         SetPinForPlayer(fromPlayer, docId, taskId, message.Pinned, message.SnapshotText, message.SnapshotDone,
             (Scribe.Core.ScribeBlockKind)message.SnapshotKind, message.SnapshotLinkTarget,
             message.SnapshotTargetItemCode, message.SnapshotTargetQuantity, message.SnapshotCurrentQuantity,
-            message.SnapshotLinkLabel, message.SnapshotDepth, insertEdge);
+            message.SnapshotLinkLabel, message.SnapshotDepth, insertEdge,
+            fallbackDateYear: message.SnapshotDateYear, fallbackDateMonth: message.SnapshotDateMonth,
+            fallbackDateDay: message.SnapshotDateDay);
     }
 
     internal void OnServerReceivedCompleteTask(IServerPlayer fromPlayer, ScribeCompleteTaskMessage message)
@@ -390,8 +392,7 @@ public sealed partial class ScribeModSystem
             ScribeDocumentAttributes.WriteTo(slot.Itemstack, doc);
             slot.MarkDirty();
             // Reconcile actor pins so pin snapshots stay fresh after a notebook edit.
-            if (pinStore is { } store)
-                PushPinsTo(store.ReconcileSnapshotsForActor(fromPlayer.PlayerUID, doc.DocId, doc));
+            ReconcilePinsAfterEdit(fromPlayer.PlayerUID, doc.DocId, doc);
             // The Editor's checkbox has no completion message; this whole-document flush persists Done, so derive assignment Completed here.
             NotifyDoneAssignmentsInDocument(doc);
         }

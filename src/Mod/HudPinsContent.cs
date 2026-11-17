@@ -24,7 +24,7 @@ internal readonly record struct HudPinRow(
     // A pinned Tracker/Link carries its resolved item icon + name and have/need counts so the row renders item-shaped.
     ItemStack? DisplayStack = null, string? DisplayName = null,
     int TargetQuantity = 1, int CurrentQuantity = 0, int Depth = 0,
-    bool IsStaticVsQuestObjective = false)
+    bool IsStaticVsQuestObjective = false, ScribeRowChip? Chip = null)
 {
     public bool IsTracker => Kind == ScribeBlockKind.Tracker;
     public bool IsLink => Kind == ScribeBlockKind.Link;
@@ -54,6 +54,9 @@ internal sealed class HudPinsContent : StatelessWidget
 
     /// <summary>Opacity of a sunk (completed, past-undo) row — muted but still readable/undoable.</summary>
     private const float SunkOpacity = 0.5f;
+
+    /// <summary>The chip line's size relative to the row text.</summary>
+    private const float ChipSizeScale = 0.82f;
 
     private readonly IReadOnlyList<HudPinRow> rows;
     private readonly int moreCount;
@@ -493,6 +496,13 @@ internal sealed class HudPinsContent : StatelessWidget
                 text: rowText,
                 style: textStyle);
 
+            // The date chip sits under the text in the same column, always present (an empty box without a chip)
+            // so a row that gains or loses a date keeps its text mounted. It fades with the text and is never corrupted.
+            text = new Column(
+                crossAxisAlignment: CrossAxisAlignment.Stretch,
+                mainAxisSize: MainAxisSize.Min,
+                children: new Widget[] { text, BuildChip(row, textStyle, fading: row.FadingOut) });
+
             // Link hyperlinks are handled in the item-kind branch; a plain Task's text is never a hyperlink.
             rowBody = new Row(
                 spacing: 6,
@@ -523,6 +533,23 @@ internal sealed class HudPinsContent : StatelessWidget
             curve: Curves.EaseOut,
             child: rowBody,
             key: new ValueKey<Guid>(row.TaskId));
+    }
+
+    /// <summary>The date chip under a task's text: a smaller line in the HUD chip color, wrapping within the row, or
+    /// an empty zero-height box without a chip. It fades with the text when <paramref name="fading"/>; the collapsing
+    /// ghost renders the same line (at zero opacity, from its parent) so it has the live row's height.</summary>
+    private Widget BuildChip(HudPinRow row, TextStyle textStyle, bool fading, bool ghost = false)
+    {
+        if (row.Chip is not { } chip) return new SizedBox(height: 0f);
+
+        var chipStyle = textStyle with
+        {
+            FontSize = rowFontSize * ChipSizeScale,
+            Color = ScribeRowConstants.HudDateChipColor(chip.Kind),
+        };
+        return ghost
+            ? new Text(chip.Text, chipStyle)
+            : new ScribeFadeText(fading, FadeWindowMs, chip.Text, chipStyle);
     }
 
     /// <summary>A pinned Tracker/Link row's content: item icon + name, with a have/need counter on the left for a
@@ -600,7 +627,10 @@ internal sealed class HudPinsContent : StatelessWidget
 
         Widget body = row.IsItemKind
             ? new Expanded(child: new Opacity(0f, BuildHudItemContent(row, textStyle, interactive: false)))
-            : new Expanded(child: new Opacity(0f, new Text(rowText, textStyle)));
+            : new Expanded(child: new Opacity(0f, new Column(
+                crossAxisAlignment: CrossAxisAlignment.Stretch,
+                mainAxisSize: MainAxisSize.Min,
+                children: new Widget[] { new Text(rowText, textStyle), BuildChip(row, textStyle, fading: false, ghost: true) })));
 
         var ghostChildren = new List<Widget>();
         if (row.Kind is not ScribeBlockKind.Text and not ScribeBlockKind.QuestObjective)

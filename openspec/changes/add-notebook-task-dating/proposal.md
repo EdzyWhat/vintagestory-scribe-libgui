@@ -22,10 +22,9 @@ and a date picker. Reminders, HUD badges and rollover follow in later changes.
   save, and in the read view through a new identity-addressed message, one operation per message, that the
   server refuses while another player holds the document's editor lock. Every server refusal re-sends the
   authoritative document to the sender, so an optimistic read-view change reverts.
-- A task that repeats yearly is never **deleted** by a completion: under the Delete completion policy it is
-  completed and sunk like the Sink policy, and every other policy acts as the player chose, so the task can
-  roll over in a later change. A parent group containing one is protected as a whole, and the Discard
-  children behavior keeps the children of such a group.
+- The repeat flag does not change completion: a repeating task is completed, sunk, unpinned or deleted by the
+  player's Completion Policy like any other task. Deleting one only removes that task; other instances of it,
+  earlier or later, are separate tasks (rollover will create them in a later change).
 - Dates are not offered on Tablets, the Assignment Desk, the Pin Tab, the HUD, the Task Notice or Inbox
   previews. Other block kinds keep any date they carry (from an import) in the data, but show no chip and
   get no date entries.
@@ -39,14 +38,10 @@ and a date picker. Reminders, HUD badges and rollover follow in later changes.
 
 ### New Capabilities
 - `notebook-task-dating`: dating datable tasks from the row menu, the date picker, the date chip, who may
-  change a date, and how repeating tasks complete.
+  change a date, and that a repeating task completes like any other.
 
 ### Modified Capabilities
-- `player-pins`: "Complete a pinned task by stable identity" gains the repeating-task exception.
-- `pinned-task-tab`: "The Pin Tab exposes the completion-policy control" notes that a repeating task is
-  never deleted.
-- `scribe-dialog-base`: "Read-view completion applies the completion policy locally and immediately"
-  states that the shared Core completion function treats Delete as Sink for a repeating task.
+None in the main specs.
 
 The `task-row-context-menu` requirements from change 1 are not yet in `openspec/specs/`; that change's own
 spec is amended in place to allow the date entries.
@@ -54,8 +49,8 @@ spec is amended in place to allow the date entries.
 ## Impact
 
 - Core: the row-menu entry gating gains date actions; a date picker model (field stepping and day
-  clamping), the chip's status-to-text mapping and `ScribeDocument` date operations are pure and tested; the
-  completion rules honor a repeating task (`ScribeCompletion.EffectivePolicy`).
+  clamping), the chip's status-to-text mapping and `ScribeDocument` date operations are pure and tested;
+  completion rules are unchanged.
 - Mod: the row menu host gains a toggle entry, `RefreshItems` and ownership of the picker; a new date picker
   overlay; a chip on read and editor rows; a new `ScribeSetTaskDateMessage` (client to server) handled next
   to the delete handler; dialogs override a "dates supported" switch (off for Tablets and the Assignment

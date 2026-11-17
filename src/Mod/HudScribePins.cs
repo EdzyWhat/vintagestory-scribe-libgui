@@ -72,6 +72,10 @@ public sealed partial class HudScribePins : GuiBase
     /// (<see cref="ReconcileAwaitingRemoval"/>).</summary>
     private readonly HashSet<(Guid, Guid)> awaitingRemoval = new();
 
+    /// <summary>The in-game day the chips were last built for; <see cref="OnTick"/> rebuilds when it changes and a
+    /// displayed pin is dated. Null until the first tick with the HUD open.</summary>
+    private ScribeDate? lastChipDay;
+
     /// <summary>Quest Accept banner's 2+-candidate picker state (session state; the content widget is
     /// stateless). Reset when the pending prompt list changes.</summary>
     private bool questAcceptPickerOpen;
@@ -298,6 +302,21 @@ public sealed partial class HudScribePins : GuiBase
             trackersRebuilt = true;
         }
 
+        // A HUD left open across days rebuilds so "Due today" and "in 2 days" stay true.
+        bool dayRebuilt = false;
+        if (IsOpened())
+        {
+            var today = ScribeWorldCalendar.Today(capi.World);
+            bool anyDated = modSystem.MyPins.Any(ScribeDateRules.PinShowsDate);
+            bool rebuild = lastChipDay is { } last && ScribeDateRules.ShouldRebuildForDayChange(last, today, anyDated);
+            lastChipDay = today;
+            if (rebuild && !corruptionRebuilt && !trackersRebuilt)
+            {
+                RebuildHudBody();
+                dayRebuilt = true;
+            }
+        }
+
         if (pendingCompletions.Count == 0) return;
 
         bool anyExpired = false;
@@ -319,7 +338,7 @@ public sealed partial class HudScribePins : GuiBase
         }
 
         // TickCorruption / the tracker recompute may already have rebuilt this tick; don't rebuild twice.
-        if (anyExpired && !corruptionRebuilt && !trackersRebuilt && IsOpened()) RebuildHudBody();
+        if (anyExpired && !corruptionRebuilt && !trackersRebuilt && !dayRebuilt && IsOpened()) RebuildHudBody();
     }
 
     // ---------------- Row state helpers ----------------
@@ -451,7 +470,11 @@ public sealed partial class HudScribePins : GuiBase
                     // Live carried count if the HUD's own engine has one, else the snapshot.
                     TargetQuantity: p.TargetQuantity, CurrentQuantity: HudTrackerHave(p),
                     // Subtask depth, so a pinned subtask indents like the other surfaces.
-                    Depth: p.Depth, IsStaticVsQuestObjective: isStaticVsQuestObjective);
+                    Depth: p.Depth, IsStaticVsQuestObjective: isStaticVsQuestObjective,
+                    // The checked form (date only) shows from the displayed done state, so a just-checked row's chip follows it.
+                    Chip: ScribeDateRules.PinShowsDate(p)
+                        ? ScribeRowChips.For(capi.World, p.Date, DisplayedDone(p), completable: true, modSystem.MySettings.DateOrder)
+                        : null);
             })
             .ToList();
     }

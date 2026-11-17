@@ -320,6 +320,152 @@ A v8 blob loads with all eight timestamps null (baked identity strings unchanged
 empty. Covered by `TryDeserializeList_V8Blob_LoadsWithNullTimestamps` and
 `RoundTrip_SerializeList_PreservesMixedTimestampsIncludingZero`.
 
+### Worked example: v9 → v10 (`ScribePinCodec`)
+
+v10 appends an optional date snapshot after the v9 timestamps: `bool hasDate`, then (only when true) `int year`,
+`byte month` and `byte day`. The Pin Tab and HUD show the date chip from it without resolving the source document.
+The values are read through `ScribeDate.TryCreate`; an out-of-range date loads as **undated**, and because the
+fields are consumed either way the rest of the blob stays aligned. The Repeat yearly flag is not part of the
+snapshot.
+
+```text
+// v9  per-pin: ...v8... | AssignedTimestamp? | AcceptedTimestamp?
+// v10 per-pin: ...v9... | hasDate | [year | month | day]
+```
+
+A v9 pin list loads undated. Covered by `TryDeserialize_V9Bytes_LoadsUndated`,
+`List_RoundTrip_PreservesDate`, `TryDeserialize_InvalidDate_LoadsUndated_AndStaysAligned` and the golden-bytes
+tests.
+
+### Worked example: v8 → v9 (`ScribeDocumentCodec`)
+
+v9 appends an optional rich assignment record after `RecipeSignature`: assigner UID, state,
+assigned date, and the unseen/seen flag. The retired v5-v8 bare-UID slot remains unpopulated by
+new writers, preserving the append-only layout while allowing old saves to load.
+
+```text
+// v8 per-block: ...v7... | recipeSignature
+// v9 per-block: ...v8... | hasAssignment | [assignerUid | state | assignedDate | seen]
+```
+
+Pre-v9 documents default to no assignment. Assignment data is intentionally omitted from JSON/TSV
+clipboard exports because it is place-bound and must not be shared by import.
+
+### Worked example: v9 → v10 (`ScribeDocumentCodec`)
+
+v10 appends one more field to the assignment record added in v9: `TargetPlayerUid` (the recipient),
+written right after `Seen`. Needed once a separate `ScribeAssignmentStore` had to filter "what did I
+send" vs. "what did I receive" without relying on which dictionary a record happened to be filed
+under — the block itself now names both parties.
+
+```text
+// v9  per-block assignment: hasAssignment | [assignerUid | state | assignedDate | seen]
+// v10 per-block assignment: hasAssignment | [assignerUid | state | assignedDate | seen | targetPlayerUid]
+```
+
+v9 never shipped (this is a same-cycle addition within the same in-progress change), so there is no
+real migration gap to bridge — a `version >= 10` read gate exists anyway, defaulting a hypothetical
+v9-only blob's `TargetPlayerUid` to `""`, for consistency with every other version-gated field.
+
+### Worked example: v10 → v11 (`ScribeDocumentCodec`)
+
+v11 appends one per-block field after the (optional) assignment block: `LinkDescription`
+(string?), a quest Link's captured description (add-assignment-and-quest-support 10.1). A quest
+Link is otherwise identical to a guide-page Link (a `LinkTarget` prefix marker + a `LinkLabel`
+title) — this field is the one place a quest Link carries MORE than a guide-page Link, because a
+guide page's description is always one click away (open the Handbook page), while a quest has no
+navigable target for Layer 1 to reopen.
+
+```text
+// v10 per-block: ...v9... | targetPlayerUid (only if hasAssignment)
+// v11 per-block: ...v10... | hasLinkDescription | [linkDescription]
+```
+
+Written unconditionally per block (a has/value pair, like `LinkTarget`/`LinkLabel` — not the always-written
+plain-string shape `RecipeSignature` uses), so pre-v11 documents simply stop reading before it and default
+to `null`. Also carried by the lossless JSON codec (`LinkDescription` on `BlockDto`, without a JSON-codec
+version bump — an additive DTO field follows the same practice `RecipeSignature` already established
+there); intentionally NOT carried by the fixed-column TSV codec (no spare column, and the format is
+lossy by design) nor by `ScribePinCodec` (no pin-row surface renders a description today).
+
+Covered by `RoundTrip_PreservesQuestLinkLabelAndDescription` (v11 round-trip of a quest Link asserting
+`LinkDescription` survives, and a guide-page Link asserting it stays null).
+
+### Worked example: v12 → v13 (`ScribeDocumentCodec`)
+
+v13 appends one per-block field **after ExtraInfo**, not inside the v9 assignment sub-blob: `hasAssignedTimestamp`
+plus an optional `double`. The assigned timestamp cannot follow `TargetPlayerUid` inside the assignment
+record because v11 `LinkDescription` and v12 `ExtraInfo` already occupy those trailing slots (append-only).
+Unassigned blocks write `false`. A missing timestamp (`null`, a pre-v13 assigned block) is distinct from
+real `Calendar.TotalDays == 0` (world day one).
+
+```text
+// v12 per-block: ...v11... | hasExtraInfo | [extraInfo]
+// v13 per-block: ...v12... | hasAssignedTimestamp | [assignedTimestamp]
+```
+
+Pre-v13 documents stop before the field and leave `AssignedTimestamp` null — those rows keep showing the
+baked `AssignedDate` identity string. Covered by `TryDeserialize_V12Bytes_Succeeds_AndDefaultsAssignedTimestampNull`
+and `BinaryCodecRoundTripsAssignedTimestampIncludingZero`.
+
+### Worked example: v13 → v14 (`ScribeDocumentCodec`)
+
+v14 appends an optional per-block date after the v13 assigned timestamp: `hasDate`, then (only when true)
+`int year`, `byte month`, `byte day` and `bool repeatYearly`. The values are read through
+`ScribeDate.TryCreate` (year 1–9999, month 1–12, day 1–255; a day past its month's end is valid and clamped
+at use). An out-of-range stored date loads as **undated with the repeat flag cleared**, and because the field
+has a fixed size the rest of the document still reads normally. The repeat flag is written only with a date
+(`ScribeBlock` clears it whenever the date is cleared), so nothing is lost.
+
+```text
+// v13 per-block: ...v12... | hasAssignedTimestamp | [assignedTimestamp]
+// v14 per-block: ...v13... | hasDate | [year | month | day | repeatYearly]
+```
+
+Pre-v14 documents stop before the field and load undated. Covered by
+`TryDeserialize_V13Bytes_Succeeds_AndDefaultsDateNull`, the null-date assertions in the v5, v6, v7, v11 and v12
+older-blob tests, `RoundTrip_PreservesDateAndRepeatYearly` and
+`TryDeserialize_InvalidStoredDate_LoadsUndated_AndKeepsTheRestOfTheDocument`.
+
+Rebuild paths: `ScribeDocument.CloneBlockWithNewTaskId` (Scriptorium replace and append) and the import
+validator's Degrade keep the date. The Assignment Desk capture and assignment placement deliberately build
+blocks without one (assignments carry no dates).
+
+### Worked example: v8 → v9 (`ScribeAssignmentStore`)
+
+v9 appends eight optional numeric timestamps after the v8 redirect strings, one per existing date
+identity field (Assigned / Accepted / Declined / Cancelled / Discarded / Completed / Received / Redirected).
+Each is `bool has` + `double` when present — the Guestbook sentinel rule, so a missing timestamp is
+distinct from real `TotalDays == 0`.
+
+```text
+// v8 per-record: ...v7... | RedirectedFromUid? | RedirectedDate?
+// v9 per-record: ...v8... | AssignedTimestamp? | AcceptedTimestamp? | DeclinedTimestamp? |
+//                  CancelledTimestamp? | DiscardedTimestamp? | CompletedTimestamp? |
+//                  ReceivedTimestamp? | RedirectedTimestamp?
+```
+
+A v8 blob loads with all eight timestamps null (baked identity strings unchanged). A v10 blob fail-safes
+empty. Covered by `TryDeserializeList_V8Blob_LoadsWithNullTimestamps` and
+`RoundTrip_SerializeList_PreservesMixedTimestampsIncludingZero`.
+
+### Worked example: v9 → v10 (`ScribePinCodec`)
+
+v10 appends an optional date snapshot after the v9 timestamps, in the document codec's layout: `bool hasDate`,
+then (only when true) `int year`, `byte month`, `byte day` and `bool repeatYearly`. The Pin Tab and HUD show the
+date chip from it without resolving the source document. The values are read through `ScribeDate.TryCreate`; an
+out-of-range date loads as **undated with the repeat flag cleared**, and because the fields are consumed either
+way the rest of the blob stays aligned. The writer never writes a repeat flag without a date.
+
+```text
+// v9  per-pin: ...v8... | AssignedTimestamp? | AcceptedTimestamp?
+// v10 per-pin: ...v9... | hasDate | [year | month | day | repeatYearly]
+```
+
+A v9 pin list loads undated and not repeating. Covered by `TryDeserialize_V9Bytes_LoadsUndated`,
+`List_RoundTrip_PreservesDateAndRepeat`, `TryDeserialize_InvalidDate_LoadsUndatedAndAligned` and the golden-bytes
+tests.
+
 ### Worked example: v8 → v9 (`ScribePinCodec`)
 
 v9 appends two optional timestamps after ExtraInfo: `AssignedTimestamp` and `AcceptedTimestamp`
@@ -625,6 +771,6 @@ Type · Done · Text · Special · Count · Depth
 | `HistoryStore` | binary (item attribute) | v4 | v1–v4 (progressive reads) | `ApplyV2ToV3Migrations` — assigns a synthetic negative-sequence `InGameTimestamp` (preserving existing order) to any v1/v2 payload; `ApplyV3ToV4Migrations` — marks v1–v3 entries `Baked` with empty fact fields; v2's `EntryId` reads behind `version >= 2`, v3's timestamp behind `version >= 3`, v4's schema/facts behind `version >= 4` |
 | `PendingHistoryStore` | binary (savegame) | v2 | v1–v2 (progressive reads) | SPHS v1 stores the SHST-v3 per-entry layout (baked sentences); v2 matches SHST v4 (schema + live facts). A v3+ pending blob is rejected (fail-safe empty load) |
 | `GuestbookStore` | binary (block entity) | v2 | v1–v2 (progressive reads) | v1 is name + identity date string + note (no timestamp); v2 appends `bool hasTimestamp` + optional `double` so a missing timestamp (`null`) is distinct from real `TotalDays == 0`. A v0 or v3+ blob is rejected (fail-safe empty load) |
-| `ScribePinCodec` | binary (save/sync) | v9 | v1–v9 (progressive reads) | `ApplyPreV2Defaults` — seeds Kind (→Task), LinkTarget (→null), TargetItemCode (→null), quantities, LinkLabel (→null), Depth (→0); v2–v9 fields then read behind `version >=` thresholds (v9's assigned/accepted timestamps default null on a pre-v9 pin) |
+| `ScribePinCodec` | binary (save/sync) | v10 | v1–v10 (progressive reads) | `ApplyPreV2Defaults` — seeds Kind (→Task), LinkTarget (→null), TargetItemCode (→null), quantities, LinkLabel (→null), Depth (→0); v2–v10 fields then read behind `version >=` thresholds (v9's assigned/accepted timestamps default null on a pre-v9 pin; v10's date defaults to undated on a pre-v10 pin) |
 | `ScribeDocumentJsonCodec` | text (clipboard) | v3 | v1+ (`v >= MinVersion`; missing `v` → rejected) | Version window; unknown keys ignored on read. v2 `extraInfo`, v3 `date` + `repeatYearly` (malformed dates import undated). Add a field → append to DTO + bump `Version`; raise `MinVersion` only if an old payload becomes unreadable |
 | `ScribeDocumentTsvCodec` | text (clipboard) | — (no version) | any header with the known columns (by name) | Fixed 6 columns forever (`Type · Done · Text · Special · Count · Depth`); a plain task's date rides in `Special` as `date:Y-M-D[,yearly]` (other kinds' dates are omitted); new richness goes in the comma-packed `Special` cell, never a new column; unknown columns ignored, missing columns defaulted |

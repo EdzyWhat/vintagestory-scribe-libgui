@@ -26,7 +26,8 @@ public sealed partial class ScribeModSystem
         ScribeBlockKind fallbackKind = ScribeBlockKind.Task, string? fallbackLinkTarget = null,
         string? fallbackTargetItemCode = null, int fallbackTargetQuantity = 1, int fallbackCurrentQuantity = 0,
         string? fallbackLinkLabel = null, int fallbackDepth = 0,
-        ScribePinInsert insertEdge = ScribePinInsert.Bottom)
+        ScribePinInsert insertEdge = ScribePinInsert.Bottom,
+        int fallbackDateYear = 0, int fallbackDateMonth = 0, int fallbackDateDay = 0)
     {
         if (sapi is null || pinStore is null) return;
 
@@ -48,6 +49,12 @@ public sealed partial class ScribeModSystem
             string? acceptedDate = null;
             double? assignedTimestamp = null;
             double? acceptedTimestamp = null;
+            // The client's date is a fallback for an unresolvable document: only a Task keeps it, and an
+            // invalid or partial triple is undated.
+            ScribeDate? date = kind == ScribeBlockKind.Task
+                && ScribeDate.TryCreate(fallbackDateYear, fallbackDateMonth, fallbackDateDay, out var fallbackDate)
+                    ? fallbackDate
+                    : null;
             ScribeDocument? source = null;
             // Prefer the server's document; fall back to the client snapshot for hosts not registered
             // server-side (e.g. Notebooks). The same document drives pin placement.
@@ -65,6 +72,7 @@ public sealed partial class ScribeModSystem
                     currentQuantity = block.CurrentQuantity;
                     linkLabel = block.LinkLabel;
                     depth = block.Depth;
+                    date = ScribePinStore.DatedSnapshot(block);
                     // No client fallback: this field is always resolvable from the document.
                     isAcceptedAssignment = block.Assignment?.State == ScribeAssignmentState.Accepted;
                     if (isAcceptedAssignment)
@@ -79,7 +87,7 @@ public sealed partial class ScribeModSystem
             }
             changed = pinStore.SetPin(player.PlayerUID, docId, taskId, sapi.World.Calendar.TotalHours, text, done, kind, linkTarget,
                 targetItemCode, targetQuantity, currentQuantity, linkLabel, depth, source, insertEdge, isAcceptedAssignment,
-                assignerUid, assignedDate, acceptedDate, assignedTimestamp, acceptedTimestamp);
+                assignerUid, assignedDate, acceptedDate, assignedTimestamp, acceptedTimestamp, date);
         }
         else
         {
@@ -268,6 +276,7 @@ public sealed partial class ScribeModSystem
 
         // An unchanged result is also a refusal or a no-op; either way the sender's copy is made authoritative.
         docHost.PersistFromReader();
+        if (changed) RefreshPinDates(docId, docHost.Document, Array.Empty<string>());
         Trace("  set-date: {0} on task {1} -> {2}", operation, taskId, changed ? "applied" : "refused");
     }
 
@@ -400,6 +409,26 @@ public sealed partial class ScribeModSystem
         if (sapi is null || pinStore is null) return;
         var bytes = ScribePinCodec.SerializeList(pinStore.Get(player.PlayerUID));
         sapi.Network.GetChannel(NetworkChannelName).SendPacket(new ScribePinnedSetMessage { PinnedRefBytes = bytes }, player);
+    }
+
+    /// <summary>Copies the document's dates onto every holder's pins of it
+    /// (<see cref="ScribePinStore.RefreshDatesForDocument"/>) and pushes each online holder whose pins changed and
+    /// who is not in <paramref name="alreadyPushed"/>.</summary>
+    public void RefreshPinDates(Guid docId, ScribeDocument document, IReadOnlyList<string> alreadyPushed)
+    {
+        if (pinStore is null) return;
+        var changed = pinStore.RefreshDatesForDocument(docId, document);
+        PushPinsTo(changed.Where(uid => !alreadyPushed.Contains(uid)).ToList());
+    }
+
+    /// <summary>Reconciles the acting player's pins into an edited document and refreshes every holder's pin
+    /// dates, pushing each affected online player once.</summary>
+    public void ReconcilePinsAfterEdit(string actingPlayerUid, Guid docId, ScribeDocument document)
+    {
+        if (pinStore is null) return;
+        var reconciled = pinStore.ReconcileSnapshotsForActor(actingPlayerUid, docId, document);
+        PushPinsTo(reconciled);
+        RefreshPinDates(docId, document, reconciled);
     }
 
     /// <summary>Re-pushes each listed online player their own pin set; offline uids are skipped (synced on next join).</summary>

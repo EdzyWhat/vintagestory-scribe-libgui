@@ -563,13 +563,11 @@ public abstract class BlockEntityScribeWritingStation : BlockEntity, IRotatable,
     }
 
     /// <summary>Server-side: reconciles only the acting player's pins into the edited document
-    /// (grief-proof: only the owner's own edit changes a pin), then re-pushes that player.</summary>
+    /// (grief-proof: only the owner's own edit changes their text and done snapshot), refreshes every holder's pin
+    /// dates, and re-pushes the affected players.</summary>
     private void ReconcileActorPins(string actingPlayerUid)
     {
-        if (PinStore is { } store && ModSystem is { } mod)
-        {
-            mod.PushPinsTo(store.ReconcileSnapshotsForActor(actingPlayerUid, Document.DocId, Document));
-        }
+        ModSystem?.ReconcilePinsAfterEdit(actingPlayerUid, Document.DocId, Document);
     }
 
     /// <summary>Server-side: releases the lock. UID-guarded and idempotent: only the holder's release clears it.</summary>

@@ -79,4 +79,17 @@ public sealed class ScribeSetPinMessage
     /// (<see cref="Scribe.Core.ScribePinInsert.Bottom"/>), the legacy always-append behavior.</summary>
     [ProtoMember(13)]
     public byte PinInsert { get; set; }
+
+    /// <summary>Date-year snapshot for a Task the server cannot resolve; 0 means no date. The server validates
+    /// the year, month and day together and treats any invalid or partial triple as undated.</summary>
+    [ProtoMember(14)]
+    public int SnapshotDateYear { get; set; }
+
+    /// <summary>Date-month snapshot (1..12); 0 with no date.</summary>
+    [ProtoMember(15)]
+    public int SnapshotDateMonth { get; set; }
+
+    /// <summary>Date-day snapshot (1..255); 0 with no date.</summary>
+    [ProtoMember(16)]
+    public int SnapshotDateDay { get; set; }
 }

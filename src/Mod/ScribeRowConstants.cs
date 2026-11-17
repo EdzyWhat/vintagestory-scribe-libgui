@@ -216,6 +216,22 @@ internal static class ScribeRowConstants
         _ => DateChipUpcoming,
     };
 
+    /// <summary>HUD date chip colors: lighter than the Notebook's so they read over the world, and distinct from
+    /// <see cref="HudStandardTextColor"/> and from each other.</summary>
+    public static readonly Vector4 HudDateChipDue = new(1.00f, 0.72f, 0.28f, 1f);
+    public static readonly Vector4 HudDateChipOverdue = new(1.00f, 0.45f, 0.38f, 1f);
+    public static readonly Vector4 HudDateChipUpcoming = new(0.74f, 0.80f, 0.90f, 1f);
+    public static readonly Vector4 HudDateChipDone = new(0.70f, 0.70f, 0.70f, 0.60f);
+
+    /// <summary>The HUD chip color for a task in <paramref name="kind"/>.</summary>
+    public static Vector4 HudDateChipColor(ScribeDateStatusKind kind) => kind switch
+    {
+        ScribeDateStatusKind.DueToday => HudDateChipDue,
+        ScribeDateStatusKind.Overdue => HudDateChipOverdue,
+        ScribeDateStatusKind.Done => HudDateChipDone,
+        _ => HudDateChipUpcoming,
+    };
+
     /// <summary>The HUD's near-white row-text color. Deliberately not <c>Vector4.One</c>: that is the
     /// LibGUI 3.1.0 <c>TextStyle.Merge</c> "unset" sentinel (see the note on
     /// <see cref="ScribeQuestPromptActions.AccentButton"/>), so pure white would silently fail to

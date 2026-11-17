@@ -1033,13 +1033,25 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
       *(add-notebook-task-dating 4.2)*
 - [ ] `00000107` **Chip states and colors.** On a Notebook and a Lectern, give tasks a date today, in 1 day, in several days and in the past, and check one off. Confirm the wording ("Due today", "Due in 1 day", "N days overdue", date only when done), four visibly distinct colors, alignment with the text in the read view and the editor, and that wrapping text keeps the chip beneath. Check a depth-1 subtask, and that the "·" separator draws (not a box) in the task font and in cuneiform-adjacent chrome.
       *(add-notebook-task-dating 5.1, 5.2)*
-- [ ] `00000108` **Chip follows settings and shows only where it should.** With a dialog open, change the Date order setting and confirm the chip reformats. Confirm no chip on notes, trackers, assigned tasks, Tablets, the Pin Tab and the Task Notice, and that it does not change across midnight until the dialog rebuilds.
+- [ ] `00000108` **Chip follows settings and shows only where it should.** With a dialog open, change the Date order setting and confirm the chip reformats. Confirm no chip on notes, trackers, assigned tasks, Tablets and the Task Notice, and that it does not change across midnight until the dialog rebuilds.
       *(add-notebook-task-dating 5.3)*
-- [ ] `00000109` **Repeating tasks under each completion policy.** Check off a repeating task under Delete (it sinks to the bottom, stays checked, keeps its pin), Keep, Sink, Unpin and UnpinSink (each as chosen), including one with subtasks under Discard (children kept, parent sinks with them), and a repeating subtask alone. Confirm a manual trash still deletes a repeating task.
-      *(add-notebook-task-dating 6.1)*
-- [ ] `0000010a` **Known limitation: HUD fade under Delete.** On the HUD with Delete as the completion policy, check off a pinned repeating task. It may fade out and then reappear when the server keeps it; this is accepted until the repeat rollover change.
-      *(add-notebook-task-dating 6.1)*
+- [ ] `00000109` **A repeating task is deleted like any other under Delete.** Check off a dated task with Repeat yearly on, under Delete: it is deleted (and unpinned) and other tasks stay. Under Keep, Sink, Unpin and UnpinSink it behaves as chosen, including one with subtasks under Discard and a repeating subtask alone. A manual trash still deletes it.
+
 - [ ] `0000010b` **Dates travel with copies but not assignments.** Copy a dated task through the clipboard and the Scriptorium and confirm the date and repeat flag arrive; assign a dated task and confirm the placed assignment has no date.
       *(add-notebook-task-dating 6.2)*
 - [ ] `0000010c` **Editor Features handbook mentions dates.** Open the Handbook's Editor Features entry and confirm the row-menu section mentions Add date and Repeat yearly, and that a non-English locale shows its translation.
       *(add-notebook-task-dating 7.2)*
+
+- [ ] `0000010e` **A pinned dated task shows its chip on the Pin Tab and the HUD.** Date a task in a Notebook or Lectern, pin it, and confirm the same chip text (status plus date, in the Date order) appears under the task text on the Pin Tab and the HUD at once, before any other action. Pin an undated task and confirm its rows keep their usual height.
+
+- [ ] `0000010f` **Pin chips follow the date.** With the task pinned, change, then clear its date from the Notebook: the Pin Tab and HUD chips follow without re-pinning. Have a second player change the date of a task you have pinned and confirm your Pin Tab and HUD follow. Edit the document in the editor and save a changed date: the chip follows.
+
+- [ ] `00000110` **Checked pinned dated task.** Check a pinned dated task: its chip becomes the date alone, dimmed, on the Pin Tab and on the HUD (including during the HUD undo window, and it reverts if undone). Under Delete the row fades and is removed, with the chip fading with it and no height jump as the row collapses.
+
+- [ ] `00000111` **HUD across a day change.** Leave the HUD open with a pinned task due tomorrow and advance the in-game day (and then move time backward): the chip text changes ("Due today", "N days overdue") without reopening the HUD.
+
+- [ ] `00000112` **Date order and wrapping on pin surfaces.** Change the Date order setting and confirm the chip reformats on the Pin Tab and on the HUD. Use a long date and a narrow HUD: the chip wraps within the row, the HUD still anchors and sizes correctly in each corner, and the row-count limit holds with taller rows.
+
+- [ ] `00000113` **Chips only where they belong.** Confirm no chip on pinned notes, trackers, links or an orphaned pin, and none on the Pin Tab of a Tablet or the Assignment Desk. In a temporal-instability storm confirm the chip text is not corrupted.
+
+- [ ] `00000114` **Old pins catch up.** A pin made before this change shows no date until its document is next saved or the task is re-pinned (also for a Notebook you only read). Re-pin or save and confirm the chip appears.

@@ -499,17 +499,7 @@ public abstract partial class ScribeDialogBase
     private ScribeRowChip? BuildRowChip(ScribeBlock b)
     {
         if (!SupportsRowDates || !ScribeDateRules.IsDatable(b)) return null;
-        var world = capi.World;
-        var shape = ScribeWorldCalendar.Shape(world);
-        if (ScribeDateRules.Classify(b, ScribeWorldCalendar.Today(world), shape) is not { } status) return null;
-
-        var text = ScribeDateChipText.For(status);
-        string date = ScribeWorldCalendar.Format(world, b.Date!.Value, DateOrder);
-        string line = text.StatusLangKey is null
-            ? Lang.Get("scribe:" + text.TemplateLangKey, date)
-            : Lang.Get("scribe:" + text.TemplateLangKey,
-                Lang.Get("scribe:" + text.StatusLangKey, text.Count), date);
-        return new ScribeRowChip(line, status.Kind);
+        return ScribeRowChips.For(capi.World, b.Date, b.Done, b.IsCompletable, DateOrder);
     }
 
     private protected ScribeDateOrder DateOrder => modSystem.MySettings.DateOrder;

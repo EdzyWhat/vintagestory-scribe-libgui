@@ -1,7 +1,7 @@
 ## Purpose
 
 Lets players date plain tasks in notebook-style documents from the row menu, shows each dated task's date
-and status on its row, and keeps repeating tasks from being deleted by completion. The English strings
+and status on its row, and states that a repeating task completes like any other. The English strings
 quoted below are examples; every menu, picker and chip string is localized.
 
 ## ADDED Requirements
@@ -309,102 +309,25 @@ pin on it stays attached.
 - **WHEN** a player clears the date of a pinned, dated task
 - **THEN** the task has no date, no repeat, no chip, and is still pinned
 
-### Requirement: A repeating task is not deleted by completion
+### Requirement: Repeating does not change completion
 
-A task that repeats yearly (a plain Task with a date and Repeat yearly on) SHALL NOT be deleted by a
-completion, and SHALL stay in its document when checked off. Under the **Delete** policy the completion SHALL
-act as the **Sink** policy: the task is marked done, moved to the bottom of the document, and keeps its pin.
-Under every other completion policy (Keep, Sink, UnpinSink, Unpin) the completion SHALL act as that policy,
-since none of them deletes a task: Keep leaves the task in place with its pin, Sink moves it to the bottom
-with its pin, Unpin leaves it in place and removes the player's pin, and UnpinSink moves it to the bottom and
-removes the player's pin. When a parent task and its subtasks are completed together under the Bound
-subtask behavior, the Delete policy SHALL be overridden to Sink for the whole group if any plain Task in the
-group repeats yearly, so no member of the group is deleted. Under the Discard children behavior, whenever the
-parent's group contains a task that repeats yearly the children SHALL NOT be discarded under any policy: the
-parent is marked done and its children are kept as they are, and a policy that moves the parent to the
-bottom moves it together with its children. A completion SHALL treat only the completed task itself under
-the Independent behavior. Deleting a task by hand SHALL still delete a repeating task. The server's resolved
-document decides the result. Until the pin snapshot carries the repeat flag, a pin whose source document
-the server cannot resolve follows the player's policy, and the HUD can show a repeating task fading out
-under Delete and then reappear when the server's result arrives; both are accepted limitations.
+Completing a task SHALL NOT depend on whether it repeats yearly: a repeating task SHALL complete under the
+player's Completion Policy and Subtask Behavior exactly as a task that does not repeat. Under the Delete
+policy a checked repeating task SHALL be deleted. Deleting it removes only that task: the repeat flag marks
+the task as one that will recur, and any other instance of it, earlier or later, is a different task that the
+deletion does not touch.
 
-#### Scenario: Delete policy
+#### Scenario: Delete policy deletes a repeating task
 - **WHEN** a player whose Completion Policy is Delete checks off a task that repeats yearly
-- **THEN** the task stays in the document, checked and at the bottom, and keeps its pin
+- **THEN** the task is deleted like any other task
 
-#### Scenario: Keep policy
-- **WHEN** a player whose Completion Policy is Keep checks off a task that repeats yearly
-- **THEN** the task stays where it is, checked, and keeps its pin
-
-#### Scenario: Sink policy
-- **WHEN** a player whose Completion Policy is Sink checks off a task that repeats yearly
-- **THEN** the task moves to the bottom, checked, and keeps its pin
-
-#### Scenario: Unpin policy
-- **WHEN** a player whose Completion Policy is Unpin checks off a pinned task that repeats yearly
-- **THEN** the task stays where it is, checked, and the player's pin is removed
-
-#### Scenario: Unpin and sink policy
-- **WHEN** a player whose Completion Policy is UnpinSink checks off a pinned task that repeats yearly
-- **THEN** the task moves to the bottom, checked, and the player's pin is removed
-
-#### Scenario: Plain task unchanged
-- **WHEN** the same player with the Delete policy checks off a task that does not repeat
-- **THEN** the task is deleted as before
-
-#### Scenario: A repeating subtask under Bound and Delete
-- **WHEN** a player with the Delete policy and the Bound subtask behavior checks off a plain parent whose
-  subtask repeats yearly
-- **THEN** neither the parent nor the subtask is deleted and the group moves to the bottom, checked
-
-#### Scenario: A non-repeating subtask under a repeating parent with a non-Delete policy
-- **WHEN** a player with the Keep policy and the Bound behavior checks off a parent that repeats yearly
-- **THEN** the parent and its subtasks are all checked, stay in place, and nothing is deleted
-
-#### Scenario: A repeating subtask completed alone
-- **WHEN** a player with the Delete policy checks off a depth-1 subtask that repeats yearly
-- **THEN** the subtask is checked and moved as the Sink policy would move it, and is not deleted
-
-#### Scenario: Independent behavior
-- **WHEN** a player with the Delete policy and the Independent behavior checks off a plain parent whose
-  subtask repeats yearly
-- **THEN** only the parent is deleted and the subtask stays
-
-#### Scenario: Discard children and Delete
-- **WHEN** a player with the Delete policy and the Discard children behavior checks off a parent that
+#### Scenario: Other policies act as chosen
+- **WHEN** a player whose Completion Policy is Keep, Sink, Unpin or UnpinSink checks off a task that
   repeats yearly
-- **THEN** the parent is checked and moved to the bottom with its children, and no child is deleted
+- **THEN** the task is kept in place, moved to the bottom, kept in place and unpinned, or moved to the
+  bottom and unpinned, exactly as for a task that does not repeat
 
-#### Scenario: Discard children and Keep
-- **WHEN** a player with the Keep policy and the Discard children behavior checks off a parent that repeats
-  yearly
-- **THEN** the parent is checked in place, and its children are kept as they were
-
-#### Scenario: Discard children and Sink
-- **WHEN** a player with the Sink policy and the Discard children behavior checks off a parent that repeats
-  yearly
-- **THEN** the parent is checked and moved to the bottom with its children, and its children are kept
-
-#### Scenario: Discard children and Unpin
-- **WHEN** a player with the Unpin policy and the Discard children behavior checks off a pinned parent that
-  repeats yearly
-- **THEN** the parent is checked in place, the player's pin is removed, and its children are kept
-
-#### Scenario: Discard children and UnpinSink
-- **WHEN** a player with the UnpinSink policy and the Discard children behavior checks off a pinned parent
-  that repeats yearly
-- **THEN** the parent is checked and moved to the bottom with its children, the player's pin is removed, and
-  its children are kept
-
-#### Scenario: A repeating subtask under Discard children
-- **WHEN** a player with the Sink policy and the Discard children behavior checks off a plain parent whose
-  subtask repeats yearly
-- **THEN** the parent is checked and moved to the bottom with its children, and no child is discarded
-
-#### Scenario: Manual delete still works
-- **WHEN** a player deletes a task that repeats yearly with Delete from the row menu
-- **THEN** the task is removed
-
-#### Scenario: Editor view reflects the effective policy
-- **WHEN** a player with the Delete policy checks off a repeating task in the editor view
-- **THEN** the editor shows the task checked at the bottom of the list
+#### Scenario: Subtask behavior ignores the repeat flag
+- **WHEN** a player completes a parent task or a subtask where a task in the group repeats yearly
+- **THEN** the Subtask Behavior (Bound, Independent or Discard children) applies as for a group with no
+  repeating task

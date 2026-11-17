@@ -4,7 +4,7 @@ using static Scribe.Core.ScribeRowMenuAction;
 namespace Scribe.Core.Tests;
 
 // Tests for dating plain tasks: menu entry gating, the document date operations, the date picker's stepping
-// rules, the chip text mapping and repeat-aware completion (notebook-task-dating spec).
+// rules, the chip text mapping and completion of dated tasks (notebook-task-dating spec).
 public class ScribeDatingTests
 {
     private static ScribeDate D(int year, int month, int day) => ScribeDate.Create(year, month, day);
@@ -250,7 +250,7 @@ public class ScribeDatingTests
         Assert.Equal("scribe-datestatus-today", ScribeDateChipText.For(status!.Value).StatusLangKey);
     }
 
-    // ---- Repeat-aware completion ----
+    // ---- Completion ignores the date and repeat flag ----
 
     private static readonly ScribeDate Day = D(3, 5, 5);
 
@@ -260,158 +260,23 @@ public class ScribeDatingTests
         ScribeCompletion.ApplyLocal(doc, doc.Blocks[index].TaskId, policy, behavior);
 
     [Fact]
-    public void EffectivePolicy_OnlyDeleteIsOverridden()
+    public void Delete_DeletesADatedRepeatingTask_AndLeavesOtherTasks()
     {
-        var repeating = new[] { Task("r", date: Day, repeat: true) };
-        Assert.Equal(ScribeCompletionPolicy.Sink, ScribeCompletion.EffectivePolicy(ScribeCompletionPolicy.Delete, repeating));
-        foreach (var policy in new[] { ScribeCompletionPolicy.Keep, ScribeCompletionPolicy.Sink,
-                     ScribeCompletionPolicy.Unpin, ScribeCompletionPolicy.UnpinSink })
-            Assert.Equal(policy, ScribeCompletion.EffectivePolicy(policy, repeating));
-        Assert.Equal(ScribeCompletionPolicy.Delete,
-            ScribeCompletion.EffectivePolicy(ScribeCompletionPolicy.Delete, new[] { Task("p", date: Day) }));
-    }
-
-    [Fact]
-    public void Delete_ActsAsSinkForARepeatingTask_AndKeepsItsPin()
-    {
-        var doc = DocOf(Task("Festival", date: Day, repeat: true), Task("Other"));
+        var doc = DocOf(Task("Festival", date: Day, repeat: true), Task("Festival", date: D(3, 6, 5), repeat: true), Task("Other"));
 
         var outcome = Complete(doc, 0, ScribeCompletionPolicy.Delete);
 
-        Assert.Equal(new[] { "Other", "Festival" }, Texts(doc));
-        Assert.True(doc.Blocks[1].Done);
-        Assert.False(outcome.ShouldRemovePin);
-        Assert.Empty(outcome.DeletedTaskIds);
-    }
-
-    [Theory]
-    [InlineData(ScribeCompletionPolicy.Keep, false, false)]
-    [InlineData(ScribeCompletionPolicy.Sink, true, false)]
-    [InlineData(ScribeCompletionPolicy.Unpin, false, true)]
-    [InlineData(ScribeCompletionPolicy.UnpinSink, true, true)]
-    public void OtherPolicies_ActAsChosenForARepeatingTask(ScribeCompletionPolicy policy, bool sinks, bool removesPin)
-    {
-        var doc = DocOf(Task("Festival", date: Day, repeat: true), Task("Other"));
-
-        var outcome = Complete(doc, 0, policy);
-
-        Assert.Equal(sinks ? new[] { "Other", "Festival" } : new[] { "Festival", "Other" }, Texts(doc));
-        Assert.Equal(removesPin, outcome.ShouldRemovePin);
+        Assert.Equal(new[] { "Festival", "Other" }, Texts(doc));
+        Assert.True(outcome.ShouldRemovePin);
+        Assert.Single(outcome.DeletedTaskIds);
     }
 
     [Fact]
-    public void PlainAndNonTaskBlocks_AreStillDeletedUnderDelete()
+    public void Delete_DeletesADatedTask_WithoutRepeat()
     {
         var doc = DocOf(Task("Plain", date: Day), Task("Other"));
         Complete(doc, 0, ScribeCompletionPolicy.Delete);
         Assert.Equal(new[] { "Other" }, Texts(doc));
-
-        var tracker = new ScribeBlock(ScribeBlockKind.Tracker, "", targetItemCode: "game:log", date: Day, repeatYearly: true);
-        var trackerDoc = DocOf(tracker, Task("Other"));
-        Complete(trackerDoc, 0, ScribeCompletionPolicy.Delete);
-        Assert.Equal(new[] { "Other" }, Texts(trackerDoc));
-    }
-
-    [Fact]
-    public void ManualDelete_StillDeletesARepeatingTask()
-    {
-        var doc = DocOf(Task("Festival", date: Day, repeat: true));
-        var deleted = ScribeCompletion.ApplyDelete(doc, doc.Blocks[0].TaskId);
-        Assert.Single(deleted);
-        Assert.Empty(doc.Blocks);
-    }
-
-    [Fact]
-    public void Bound_RepeatingSubtaskProtectsTheWholeGroupUnderDelete()
-    {
-        var doc = DocOf(Task("Parent"), Task("Child", depth: 1, date: Day, repeat: true), Task("Other"));
-
-        var outcome = Complete(doc, 0, ScribeCompletionPolicy.Delete);
-
-        Assert.Equal(new[] { "Other", "Parent", "Child" }, Texts(doc));
-        Assert.True(doc.Blocks[1].Done && doc.Blocks[2].Done);
-        Assert.Empty(outcome.DeletedTaskIds);
-    }
-
-    [Fact]
-    public void Bound_NonRepeatingSubtaskUnderARepeatingParent_KeepPolicy()
-    {
-        var doc = DocOf(Task("Parent", date: Day, repeat: true), Task("Child", depth: 1), Task("Other"));
-
-        Complete(doc, 0, ScribeCompletionPolicy.Keep);
-
-        Assert.Equal(new[] { "Parent", "Child", "Other" }, Texts(doc));
-        Assert.True(doc.Blocks[0].Done && doc.Blocks[1].Done);
-    }
-
-    [Fact]
-    public void RepeatingSubtaskCompletedAlone_SinksInsteadOfDeleting()
-    {
-        var doc = DocOf(Task("Parent"), Task("Child", depth: 1, date: Day, repeat: true), Task("Other"));
-
-        Complete(doc, 1, ScribeCompletionPolicy.Delete);
-
-        Assert.Equal(3, doc.Blocks.Count);
-        Assert.True(doc.Blocks.Single(b => b.Text == "Child").Done);
-        Assert.Equal("Child", doc.Blocks[^1].Text);
-    }
-
-    [Fact]
-    public void Independent_DeletesOnlyThePlainParentAndLeavesTheRepeatingChild()
-    {
-        var doc = DocOf(Task("Parent"), Task("Child", depth: 1, date: Day, repeat: true));
-
-        Complete(doc, 0, ScribeCompletionPolicy.Delete, ScribeSubtaskBehavior.Independent);
-
-        Assert.Equal(new[] { "Child" }, Texts(doc));
-        Assert.False(doc.Blocks[0].Done);
-    }
-
-    [Theory]
-    [InlineData(ScribeCompletionPolicy.Delete, true, false)]
-    [InlineData(ScribeCompletionPolicy.Sink, true, false)]
-    [InlineData(ScribeCompletionPolicy.Keep, false, false)]
-    [InlineData(ScribeCompletionPolicy.Unpin, false, true)]
-    [InlineData(ScribeCompletionPolicy.UnpinSink, true, true)]
-    public void Discard_RepeatingParentKeepsItsChildrenUnderEveryPolicy(
-        ScribeCompletionPolicy policy, bool moves, bool removesPin)
-    {
-        var doc = DocOf(Task("Parent", date: Day, repeat: true), Task("Child", depth: 1), Task("Other"));
-
-        var outcome = Complete(doc, 0, policy, ScribeSubtaskBehavior.DiscardChildren);
-
-        Assert.Equal(moves ? new[] { "Other", "Parent", "Child" } : new[] { "Parent", "Child", "Other" }, Texts(doc));
-        Assert.Equal(removesPin, outcome.ShouldRemovePin);
-        Assert.Empty(outcome.DeletedTaskIds);
-        Assert.True(doc.Blocks.Single(b => b.Text == "Parent").Done);
-        Assert.False(doc.Blocks.Single(b => b.Text == "Child").Done);
-    }
-
-    [Theory]
-    [InlineData(ScribeCompletionPolicy.Delete)]
-    [InlineData(ScribeCompletionPolicy.Sink)]
-    [InlineData(ScribeCompletionPolicy.Keep)]
-    [InlineData(ScribeCompletionPolicy.Unpin)]
-    [InlineData(ScribeCompletionPolicy.UnpinSink)]
-    public void Discard_RepeatingChildUnderAPlainParentIsNotDiscarded(ScribeCompletionPolicy policy)
-    {
-        var doc = DocOf(Task("Parent"), Task("Child", depth: 1, date: Day, repeat: true), Task("Other"));
-
-        var outcome = Complete(doc, 0, policy, ScribeSubtaskBehavior.DiscardChildren);
-
-        Assert.Contains("Child", Texts(doc));
-        Assert.Contains("Parent", Texts(doc));
-        Assert.Empty(outcome.DeletedTaskIds);
-    }
-
-    [Fact]
-    public void Discard_PlainGroupStillDiscardsItsChildren()
-    {
-        var doc = DocOf(Task("Parent"), Task("Child", depth: 1), Task("Other"));
-
-        Complete(doc, 0, ScribeCompletionPolicy.Keep, ScribeSubtaskBehavior.DiscardChildren);
-
-        Assert.Equal(new[] { "Parent", "Other" }, Texts(doc));
     }
 
     [Fact]

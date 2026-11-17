@@ -45,7 +45,8 @@ public sealed class ScribePinStore
         string? targetItemCode = null, int targetQuantity = 1, int currentQuantity = 0, string? linkLabel = null,
         int depth = 0, ScribeDocument? source = null, ScribePinInsert insertEdge = ScribePinInsert.Bottom,
         bool isAcceptedAssignment = false, string assignerUid = "", string assignedDate = "",
-        string? acceptedDate = null, double? assignedTimestamp = null, double? acceptedTimestamp = null)
+        string? acceptedDate = null, double? assignedTimestamp = null, double? acceptedTimestamp = null,
+        ScribeDate? date = null)
     {
         var list = _pins.TryGetValue(playerUid, out var existing) ? existing : _pins[playerUid] = new List<ScribePinnedRef>();
         if (list.Any(p => p.OwnerDocId == docId && p.TaskId == taskId)) return false; // idempotent
@@ -72,6 +73,7 @@ public sealed class ScribePinStore
             AcceptedDate = acceptedDate,
             AssignedTimestamp = assignedTimestamp,
             AcceptedTimestamp = acceptedTimestamp,
+            Date = date,
         };
         ScribePinOrdering.PlaceNewPin(list, pin, source, insertEdge);
         return true;
@@ -185,7 +187,8 @@ public sealed class ScribePinStore
                 || pin.CurrentQuantity != block.CurrentQuantity || pin.LinkLabel != block.LinkLabel
                 || pin.Depth != block.Depth || pin.IsAcceptedAssignment != blockIsAcceptedAssignment
                 || pin.AssignerUid != blockAssignerUid || pin.AssignedDate != blockAssignedDate
-                || pin.AcceptedDate != blockAcceptedDate;
+                || pin.AcceptedDate != blockAcceptedDate
+                || pin.Date != DatedSnapshot(block);
             // The dirty-check uses identity strings so a viewing-locale date cannot desync pins. Timestamps are
             // copied when they differ; AcceptedTimestamp is not persisted on the document, so the pin's value is kept.
             bool timestampsDirty = pin.AssignedTimestamp != (blockAssignedTimestamp ?? pin.AssignedTimestamp)
@@ -205,6 +208,7 @@ public sealed class ScribePinStore
                 pin.AssignerUid = blockAssignerUid;
                 pin.AssignedDate = blockAssignedDate;
                 pin.AcceptedDate = blockAcceptedDate;
+                pin.Date = DatedSnapshot(block);
                 pin.AssignedTimestamp = blockIsAcceptedAssignment
                     ? (blockAssignedTimestamp ?? pin.AssignedTimestamp)
                     : null;
@@ -216,6 +220,37 @@ public sealed class ScribePinStore
         }
 
         return changed ? new[] { actingPlayerUid } : Array.Empty<string>();
+    }
+
+    // ---------------- Date refresh (every holder) ----------------
+
+    /// <summary>The date a pin snapshots from <paramref name="block"/>: only a Task's (another kind keeps an imported
+    /// date in the document but never shows it).</summary>
+    internal static ScribeDate? DatedSnapshot(ScribeBlock block) =>
+        block.Kind == ScribeBlockKind.Task ? block.Date : null;
+
+    /// <summary>
+    /// Copies the date of each task in <paramref name="document"/> onto every
+    /// player's pin of it. Only the date changes: text and done state keep the owner-only rule of
+    /// <see cref="ReconcileSnapshotsForActor"/>, and a pin is never added, removed, orphaned or reordered. A
+    /// pin whose task is not in the document is left as it is. Returns the uids whose pins changed.
+    /// </summary>
+    public IReadOnlyList<string> RefreshDatesForDocument(Guid docId, ScribeDocument document)
+    {
+        List<string>? changedUids = null;
+        foreach (var (uid, list) in _pins)
+        {
+            bool changed = false;
+            foreach (var pin in list)
+            {
+                if (pin.OwnerDocId != docId || document.FindByTaskId(pin.TaskId) is not { } block) continue;
+                if (pin.Date == DatedSnapshot(block)) continue;
+                pin.Date = DatedSnapshot(block);
+                changed = true;
+            }
+            if (changed) (changedUids ??= new List<string>()).Add(uid);
+        }
+        return changedUids ?? (IReadOnlyList<string>)Array.Empty<string>();
     }
 
     // ---------------- Persistence bridge ----------------

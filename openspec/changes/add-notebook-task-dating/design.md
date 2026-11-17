@@ -17,9 +17,6 @@ Three facts shape the design:
   lock. Dates in the read view need an equivalent message.
 - The menu host builds its entries once, when it opens. A toggle entry and the switch from Add date to
   Change date both need entries that follow the document after a change.
-- The completion code (`ScribeCompletion`) decides from the player's policy alone. A task meant to repeat
-  every year would be deleted by the Delete policy the moment it is checked.
-
 See `proposal.md` for the motivation and `docs/calendar-roadmap.md` for the decisions this builds on.
 
 ## Goals / Non-Goals
@@ -27,7 +24,7 @@ See `proposal.md` for the motivation and `docs/calendar-roadmap.md` for the deci
 **Goals:**
 - Dating a plain task takes a right-click and a picker in both the read and editor views.
 - Every viewer sees the same date and status, in their own Date order.
-- Pure logic (entry gating, picker stepping, chip text, repeat-aware completion) lives in Core with tests.
+- Pure logic (entry gating, picker stepping, chip text) lives in Core with tests.
 
 **Non-Goals:**
 - Reminders, HUD and Pin Tab badges (they need the date in the pin snapshot), rollover, and the calendar
@@ -182,56 +179,18 @@ See `proposal.md` for the motivation and `docs/calendar-roadmap.md` for the deci
   dates to day ordinals by looping years, which is cheap at normal years; caching the ordinal per build is a
   later option if a far-future date over many rows ever shows up in a profile.
 
-- **Repeating tasks and completion.** `ScribeCompletion.EffectivePolicy(policy, blocks)` returns `Sink` when
-  the policy is `Delete` and any block in `blocks` is a **repeating task** (`Kind == Task`, `Date != null`,
-  `RepeatYearly`), and otherwise the policy unchanged. Only `Delete` is overridden: Keep, Sink, UnpinSink
-  and Unpin act as the player chose, because none of them removes the task. The policy enum is exactly
-  `Sink`, `Unpin`, `Delete`, `Keep` and `UnpinSink` (`ScribeCompletionPolicy`), and no separate "unpin on
-  complete" setting exists: `player-pins`' "removes the pin unless the player opted out" is the policy
-  itself (Keep and Sink keep the pin, Unpin and UnpinSink remove it). Pin results follow `Decide` for the
-  effective policy: Delete as Sink sinks the task and keeps its pin; Keep leaves it in place with its pin;
-  Unpin keeps it in place and removes the pin; UnpinSink sinks it and removes the pin; Sink sinks it and
-  keeps the pin.
-  It is applied inside `ApplyGivenDone`'s branches, where the blocks are in hand, after the server's
-  `CollapsePolicyForReadOnlySource` (a read-only Tablet has already collapsed to Unpin or Keep, which are not
-  overridden, so the order cannot disagree):
-  - `ApplyLeaf` (a lone task, a depth-1 child completed alone, or any task under Independent): the acting
-    block decides, so a repeating child completed alone under Delete sinks, and an Independent parent that
-    does not repeat is deleted without touching its repeating child;
-  - `ApplyBoundParent`: if any Task block in the owned run repeats, Delete is overridden to Sink for the
-    whole run, so no child is deleted along with a non-repeating parent; under any other policy the run
-    behaves as the policy says (the whole run is marked done, and a non-repeating task under a repeating
-    parent follows its parent);
-  - `ApplyDiscardParent` deletes the owned run's children under every policy today. Whenever the owned run
-    contains a repeating task, the discard is **suppressed for every policy**: the parent is marked done,
-    the children are kept as they are (not deleted, not marked done), and the effective policy applies to
-    the parent. When that policy sinks, the parent moves to the bottom with its children
-    (`MoveRangeToBottom` of the owned run), because a subtask must stay under its parent.
-  `ScribeCompletion.ApplyDelete` is standalone trash, not a completion, and is unaffected: manually deleting
-  a repeating task still deletes it. Other block kinds and the tracker-completion Delete path (which sends
-  `ScribeDeleteTaskMessage` for a tracker) are unaffected, because the override is limited to plain tasks.
-  Call sites: `ApplyLocal` (editor `ToggleEditorTask`, read view `OnReadViewCompleteTask`) and
-  `ApplyGivenDone` (server `CompleteTaskForPlayer`, the Pin Tab by way of the server) reach it through
-  `ApplyGivenDone`. The Pin Tab and the HUD send `ScribeCompleteTaskMessage` and have no local completion.
-  The editor's `rangeOrMove` check (`ScribeDialogBase.Editor.cs`) is not changed: it already rebuilds for
-  `Delete`, `Sink` and `UnpinSink`, so a Delete overridden to Sink rebuilds and shows the new order; an
-  in-game check confirms it.
-  Limits, accepted until change 4 puts a repeat flag into the pin snapshot (and stated in the
-  `player-pins` and `pinned-task-tab` deltas): when the server cannot resolve the source document (a Notebook
-  not in the player's inventory) it follows the player's policy, so the pin of a repeating task is removed
-  under Delete or Unpin; and the HUD predicts the outcome from the policy alone, so under Delete a
-  repeating task's HUD row can fade out and reappear when the authoritative result arrives. Without a
-  rollover yet, a checked repeating task simply stays checked until change 4 rolls it over.
+- **Repeating tasks and completion.** The repeat flag does not touch completion. `ScribeCompletion` decides
+  from the player's policy and Subtask Behavior alone, so a checked repeating task is completed, sunk,
+  unpinned or deleted like any other task, and Delete removes just that task. Other instances of a repeating
+  task, earlier or later, are separate tasks that rollover creates in a later change; deleting one does not
+  affect them. The flag only records that the task is meant to recur.
 
 - **Copies.** The clone and clipboard paths already keep the date, as `dated-task` (change 2) requires, so
   this change adds no requirement for them; it adds tests for the clipboard and Scriptorium transfer paths.
   Assignment placement and the Assignment Desk capture keep dropping the date, as change 2 decided; a test
   here pins that behavior.
 
-- **Spec deltas.** The repeating-task rule changes three completion requirements in the main specs, so this
-  change carries MODIFIED deltas for them (`player-pins`: "Complete a pinned task by stable identity";
-  `pinned-task-tab`: "The Pin Tab exposes the completion-policy control"; `scribe-dialog-base`: "Read-view
-  completion applies the completion policy locally and immediately"). The row-menu specs of
+- **Spec deltas.** This change carries no deltas against main specs for completion. The row-menu specs of
   `add-task-row-context-menu` are not yet in `openspec/specs/`, so that change's "menu offers Pin or Unpin
   and Delete" wording is amended in place to allow the date entries; it must archive first.
 
@@ -239,28 +198,21 @@ See `proposal.md` for the motivation and `docs/calendar-roadmap.md` for the deci
 
 The user was away when this change was planned. These were decided and recorded rather than asked:
 
-1. Repeating tasks override only the Delete policy (to Sink); Keep, Sink, UnpinSink and Unpin are not
-   changed. A Bound run is protected as a whole when any Task in it repeats.
-2. Discard children is suppressed under every policy when the owned run contains a repeating task: the
-   parent is marked done, children are kept as they are, and a sinking policy moves the parent with its
-   children (so a subtask is never stranded).
-3. The repeating-task exemption covers plain Tasks only. Other kinds and the tracker-completion Delete are
-   unaffected.
-4. The read view applies date changes optimistically, the message carries an operation, and every server
+1. The read view applies date changes optimistically, the message carries an operation, and every server
    refusal re-sends the authoritative document to the sender.
-5. The first picker uses a month stepper that carries into the year; the month dropdown moves to Later.
+2. The first picker uses a month stepper that carries into the year; the month dropdown moves to Later.
    A menu and a picker are never open together, and Escape closes whichever is open.
-6. The chip is display-only (no left-click to edit) and uses placeholder warm colors tuned in playtest.
-7. A dialog left open across midnight does not change its chip until it rebuilds.
-8. Slavic plural agreement ("in 2 days") is an accepted gap.
-9. Assigned tasks (`Assignment != null`) get no date entries; there is no ownership check for dating.
-10. A left-click outside the picker closes it and is consumed; the barrier does not handle wheel scrolling.
-11. The unresolvable-source server branch and the HUD fade-then-reappear under Delete are accepted known
-    limitations until change 4.
-12. `RefreshItems` compares the resolved Edit entry and date group each frame (not a document version) and
-    leaves Pin and Unpin as the menu opened.
-13. Changes 1 and 2 archive before this one.
-14. `SetRepeat` on an undated task is ignored by the server, and the client never offers it.
+3. The chip is display-only (no left-click to edit) and uses placeholder warm colors tuned in playtest.
+4. A dialog left open across midnight does not change its chip until it rebuilds.
+5. Slavic plural agreement ("in 2 days") is an accepted gap.
+6. Assigned tasks (`Assignment != null`) get no date entries; there is no ownership check for dating.
+7. A left-click outside the picker closes it and is consumed; the barrier does not handle wheel scrolling.
+8. `RefreshItems` compares the resolved Edit entry and date group each frame (not a document version) and
+   leaves Pin and Unpin as the menu opened.
+9. Changes 1 and 2 archive before this one.
+10. `SetRepeat` on an undated task is ignored by the server, and the client never offers it.
+11. Completion ignores the repeat flag: Delete deletes a checked dated task, repeating or not, and deleting one
+    task leaves any other instance alone (the user's decision; trusting the player).
 
 ## Risks / Trade-offs
 
@@ -272,9 +224,8 @@ The user was away when this change was planned. These were decided and recorded 
   readable, and proper plural rules would be a cross-cutting change.
 - [Chip color contrast on every backdrop] → The colors are constants chosen against the Notebook, Lectern
   and Chalkboard backdrops and tuned in playtest.
-- [Overriding the Delete policy for repeating tasks] → A player who set Delete expects the checked task to
-  go. Repeating tasks are the one exception, and the Repeat yearly entry is the only way to opt in.
-- [HUD fade then reappear] → See the completion decision above; resolved by change 4.
+- [Delete removes a dated task] → A player who set Delete and checks a dated task loses it, repeating or
+  not. Accepted: the player chose Delete, and rollover (a later change) is what creates the next instance.
 
 ## Open Questions
 

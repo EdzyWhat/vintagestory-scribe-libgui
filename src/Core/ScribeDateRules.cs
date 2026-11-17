@@ -34,19 +34,30 @@ public static class ScribeDateRules
     public static bool IsDatable(ScribeBlock block) =>
         block.Kind == ScribeBlockKind.Task && block.Assignment is null;
 
-    /// <summary>Whether <paramref name="block"/> repeats yearly: a plain task with a date and Repeat yearly on.
-    /// Completion never deletes such a task.</summary>
-    public static bool IsRepeatingTask(ScribeBlock block) =>
-        block.Kind == ScribeBlockKind.Task && block.Date is not null && block.RepeatYearly;
+    /// <summary>Whether a pin shows a date chip: a live (not orphaned) Task pin with a date. The pin has no
+    /// assignment clause: a date cannot be set on an assignment block and placing an assignment drops it.</summary>
+    public static bool PinShowsDate(ScribePinnedRef pin) =>
+        pin.Kind == ScribeBlockKind.Task && pin.Date is not null && !pin.Orphaned;
+
+    /// <summary>Whether a surface that stays open across days rebuilds its date chips: the in-game day changed
+    /// (forward or backward) since <paramref name="lastDay"/> and a displayed pin is dated.</summary>
+    public static bool ShouldRebuildForDayChange(ScribeDate lastDay, ScribeDate currentDay, bool anyDatedDisplayed) =>
+        anyDatedDisplayed && lastDay != currentDay;
 
     /// <summary>The block's status relative to <paramref name="today"/>, or null for an undated or
     /// non-completable block.</summary>
-    public static ScribeDateStatus? Classify(ScribeBlock block, ScribeDate today, IScribeCalendarShape shape)
-    {
-        if (block.Date is not { } date || !block.IsCompletable) return null;
-        if (block.Done) return new ScribeDateStatus(ScribeDateStatusKind.Done, 0);
+    public static ScribeDateStatus? Classify(ScribeBlock block, ScribeDate today, IScribeCalendarShape shape) =>
+        Classify(block.Date, block.Done, block.IsCompletable, today, shape);
 
-        int difference = shape.ToOrdinal(date) - shape.ToOrdinal(today);
+    /// <summary>The status of a task described by plain values (a block, or a pin's snapshot), or null when
+    /// <paramref name="date"/> is null or the task is not <paramref name="completable"/>.</summary>
+    public static ScribeDateStatus? Classify(ScribeDate? date, bool done, bool completable, ScribeDate today,
+        IScribeCalendarShape shape)
+    {
+        if (date is not { } d || !completable) return null;
+        if (done) return new ScribeDateStatus(ScribeDateStatusKind.Done, 0);
+
+        int difference = shape.ToOrdinal(d) - shape.ToOrdinal(today);
         if (difference == 0) return new ScribeDateStatus(ScribeDateStatusKind.DueToday, 0);
         return difference > 0
             ? new ScribeDateStatus(ScribeDateStatusKind.Upcoming, difference)

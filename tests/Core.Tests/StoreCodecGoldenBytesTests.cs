@@ -42,6 +42,14 @@ public class StoreCodecGoldenBytesTests
             new Dictionary<string, List<ScribePinnedRef>> { ["player-1"] = new() { SamplePin() } })));
 
     [Fact]
+    public void PinList_dated_bytes_are_stable()
+    {
+        var pin = SamplePin();
+        pin.Date = ScribeDate.Create(3, 5, 25);
+        Assert.Equal(DatedPinListHex, Convert.ToHexString(ScribePinCodec.SerializeList(new[] { pin })));
+    }
+
+    [Fact]
     public void QuestDecisionList_bytes_are_stable()
         => Assert.Equal(DecisionListHex, Convert.ToHexString(
             ScribeQuestDecisionCodec.SerializeList(new[] { SampleDecision() })));
@@ -52,9 +60,11 @@ public class StoreCodecGoldenBytesTests
             new Dictionary<string, List<ScribeQuestDecisionEntry>> { ["player-1"] = new() { SampleDecision() } })));
 
     private const string PinListHex =
-        "5350494E090100000033221100554477668899AABBCCDDEEFFCCDDEEFFAABB88997766554433221100000000000000294000010B46696E6420636F7070657200000003000000000000000000000000000000000001000000000000024000";
+        "5350494E0A0100000033221100554477668899AABBCCDDEEFFCCDDEEFFAABB88997766554433221100000000000000294000010B46696E6420636F707065720000000300000000000000000000000000000000000100000000000002400000";
+    // The undated list with its trailing hasDate byte (00) replaced by hasDate, year 3, month 5, day 25.
+    private static readonly string DatedPinListHex = PinListHex[..^2] + "01030000000519";
     private const string PinStoreHex =
-        "53505354090100000008706C617965722D310100000033221100554477668899AABBCCDDEEFFCCDDEEFFAABB88997766554433221100000000000000294000010B46696E6420636F7070657200000003000000000000000000000000000000000001000000000000024000";
+        "535053540A0100000008706C617965722D310100000033221100554477668899AABBCCDDEEFFCCDDEEFFAABB88997766554433221100000000000000294000010B46696E6420636F707065720000000300000000000000000000000000000000000100000000000002400000";
     private const string DecisionListHex =
         "5351444C01010000000270660A73656166617265722D310101";
     private const string DecisionStoreHex =

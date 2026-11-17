@@ -4,7 +4,7 @@
 - [x] 1.2 Add `ScribeDocument.TrySetTaskDate(taskId, date)` (keeps the repeat flag), `TryClearTaskDate(taskId)` and `TrySetTaskRepeat(taskId, repeat)` (datable blocks only; repeat ignored on an undated block; each returns whether it changed) and verify tests for identity kept, a pin-store-keyed `TaskId` unchanged, a non-task block, an assigned task, an unknown id, a clear that drops the repeat flag, and a repeat on an undated task
 - [x] 1.3 Add `ScribeDatePickerModel` (month, day and year stepping, clamps, start from a date or today, `ToDate`) and verify tests for: the day stepper stopping at 1 and at the month length with no carry, an explicit uneven `IScribeCalendarShape` (a day clamps down on a month change and does not return), the month stepper carrying into the year and blocked at Year 1 month 1 and Year 9999 month 12, the year bounds with no wrap, a starting year above 9999, and a starting day past the month's end
 - [x] 1.4 Add `ScribeDateChipText.For(status)` returning `(StatusLangKey, Count, TemplateLangKey)` (null status key and the date-only template for Done) and verify tests for Due today, in 1 day, in N days, Overdue (1 day), Overdue (N days), a clamped stored day and Done
-- [x] 1.5 Add `ScribeCompletion.EffectivePolicy(policy, blocks)` and use it in `ApplyLeaf`, `ApplyBoundParent` and `ApplyDiscardParent` (after the server's `CollapsePolicyForReadOnlySource`); change `ApplyDiscardParent` so that whenever the owned run contains a repeating Task the child discard is suppressed under every policy (parent done, children kept, a sinking policy moves the parent with its children via `MoveRangeToBottom`); verify tests for: Discard with each of Keep, Sink, Unpin, UnpinSink and Delete on a repeating parent; Discard with a repeating child under a non-repeating parent; Bound and Independent with a repeating child under a non-repeating parent under Delete; a depth-1 repeating subtask completed alone; a non-repeating subtask under a repeating parent under Bound with Keep; Delete acting as Sink with the pin kept and Keep, Unpin and UnpinSink acting as chosen; a plain task unchanged; a non-Task kind unchanged; and `ApplyDelete` still deleting a repeating task
+- [x] 1.5 Superseded by 8.1: the repeat-aware completion rules (`ScribeCompletion.EffectivePolicy`, discard suppression) were built here and are removed by the revision group
 
 ## 2. Menu host: toggle entries, refresh and the row wiring
 
@@ -34,11 +34,21 @@
 
 ## 6. Completion, copies and tests across surfaces
 
-- [ ] 6.1 Add Atlas scenarios for repeat-aware completion through the server (`CompleteTaskForPlayer` with a resolved document under Delete, Keep, Sink, Unpin and UnpinSink, a Bound parent and a Discard parent) and for the Pin Tab path by identity; verify in-game that a repeating task checked under Delete sinks in the open editor
+- [ ] 6.1 Verify that completion ignores the repeat flag: Atlas scenarios through the server (`CompleteTaskForPlayer`) for a dated repeating task under Delete (deleted, other tasks untouched), Keep, Sink, Unpin and UnpinSink, and Bound and Discard parents; verify in-game that a repeating task checked under Delete is deleted
 - [x] 6.2 Add tests that dates and repeat flags survive the clipboard export and import and the Scriptorium transfer, that assignment placement and the Assignment Desk capture still drop the date, that clearing a date keeps a pin attached, and that the Pin Tab menu has no date entries
 
 ## 7. Text and release notes
 
 - [ ] 7.1 Add the 16 new lang keys named in `design.md` to `en.json` and the 12 other locales, check that the middle dot of `scribe-datechip` exists in the task fonts, and run `build/check-locales.py`
 - [x] 7.2 Update the Editor Features handbook text in all 13 locales to mention dates and the row menu's date entries, using the same wording as the menu labels
-- [ ] 7.3 Add playtest items to `TESTING.md` for each scenario in the spec, including the locked read-view change, a refused change reverting, a repeating task under each completion policy and subtask behavior, and the HUD fade-and-reappear under Delete as a known limitation; run `build/verify.sh` with the client closed and verify Core and Atlas are green
+- [ ] 7.3 Add playtest items to `TESTING.md` for each scenario in the spec, including the locked read-view change, a refused change reverting, a repeating task completed under each completion policy and subtask behavior (all act as for a non-repeating task); run `build/verify.sh` with the client closed and verify Core and Atlas are green
+
+## 8. Revision: completion ignores the repeat flag
+
+Decided after the first implementation: Delete deletes a checked dated task, repeating or not. The code built for
+tasks 1.5 and 6.1 must be removed.
+
+- [x] 8.1 Remove `ScribeCompletion.EffectivePolicy` and its calls in `ApplyLeaf`, `ApplyBoundParent` and `ApplyDiscardParent`, and the discard-children suppression, so completion decides from the player's policy and Subtask Behavior alone as it did before this change; verify the existing completion tests pass unchanged
+- [x] 8.2 Delete the repeat-aware completion tests in `tests/Core.Tests` (the `EffectivePolicy` matrix and the discard-suppression cases) and the `CompletingARepeatingTask_UnderDelete_SinksItAndKeepsThePin` and `CompletingARepeatingTask_UnderUnpin_StillUnpins` scenarios in `tests/Integration.Tests/DatedTaskScenarios.cs`; add one Core test and one Atlas scenario that a repeating dated task checked under Delete is deleted and a different task stays
+- [x] 8.3 Remove the server and HUD exemptions: the unresolvable-source branch of `CompleteTaskForPlayer` and the HUD's pending completion follow the player's policy again with no repeat check; verify a repeating pinned task under Delete fades out of the HUD and is removed
+- [x] 8.4 Remove the `TESTING.md` items that test the repeating-task exemption and add one that a repeating task checked under Delete is deleted

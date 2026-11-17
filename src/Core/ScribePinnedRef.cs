@@ -77,4 +77,8 @@ public sealed class ScribePinnedRef
     /// <summary>Last-known <see cref="ScribeBlock.ExtraInfo"/> (an external mod's opaque hover-detail
     /// string), snapshotted for the Pin Tab's hover-info icon. Null for most pins.</summary>
     public string? ExtraInfo { get; set; }
+
+    /// <summary>Last-known <see cref="ScribeBlock.Date"/> of the task, snapshotted so the Pin Tab and HUD can show
+    /// the date chip without the source document. Null when the task is undated.</summary>
+    public ScribeDate? Date { get; set; }
 }

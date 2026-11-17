@@ -10,7 +10,8 @@ public class ScribePinCodecTests
         string? targetItemCode = null, int targetQuantity = 1, int currentQuantity = 0,
         string? linkLabel = null, int depth = 0, bool isAcceptedAssignment = false,
         string assignerUid = "", string assignedDate = "", string? acceptedDate = null,
-        string? extraInfo = null, double? assignedTimestamp = null, double? acceptedTimestamp = null) => new()
+        string? extraInfo = null, double? assignedTimestamp = null, double? acceptedTimestamp = null,
+        ScribeDate? date = null) => new()
     {
         OwnerDocId = Guid.NewGuid(),
         TaskId = Guid.NewGuid(),
@@ -31,6 +32,7 @@ public class ScribePinCodecTests
         AcceptedDate = acceptedDate,
         ExtraInfo = extraInfo,
         AssignedTimestamp = assignedTimestamp,
+        Date = date,
         AcceptedTimestamp = acceptedTimestamp,
     };
 
@@ -56,6 +58,7 @@ public class ScribePinCodecTests
         Assert.Equal(expected.ExtraInfo, actual.ExtraInfo);
         Assert.Equal(expected.AssignedTimestamp, actual.AssignedTimestamp);
         Assert.Equal(expected.AcceptedTimestamp, actual.AcceptedTimestamp);
+        Assert.Equal(expected.Date, actual.Date);
     }
 
     // ---- SPIN: list round-trip ----
@@ -612,12 +615,100 @@ public class ScribePinCodecTests
         Assert.Null(restored[1].AcceptedTimestamp);
     }
 
+    // ---- v10: date snapshot ----
+
+    /// <summary>A one-pin SPIN blob at <paramref name="version"/> up to the v9 fields; the caller appends the rest.</summary>
+    private static MemoryStream BlobThroughV9(byte version)
+    {
+        var ms = new MemoryStream();
+        using var w = new BinaryWriter(ms, System.Text.Encoding.UTF8, leaveOpen: true);
+        w.Write("SPIN"u8.ToArray());
+        w.Write(version);
+        w.Write(1);
+        w.Write(Guid.NewGuid().ToByteArray());
+        w.Write(Guid.NewGuid().ToByteArray());
+        w.Write(5.0);
+        w.Write(false);            // Orphaned
+        w.Write(false);            // Done
+        w.Write("Pay the toll");
+        w.Write((byte)ScribeBlockKind.Task);
+        w.Write(false);            // hasLinkTarget
+        w.Write(false);            // hasTargetItemCode
+        w.Write(1);
+        w.Write(0);
+        w.Write(false);            // hasLinkLabel
+        w.Write(0);                // Depth
+        w.Write(false);            // IsAcceptedAssignment
+        w.Write("");
+        w.Write("");
+        w.Write(false);            // hasAcceptedDate
+        w.Write(false);            // hasExtraInfo
+        w.Write(false);            // hasAssignedTimestamp
+        w.Write(false);            // hasAcceptedTimestamp
+        return ms;
+    }
+
     [Fact]
-    public void TryDeserialize_V10Bytes_FailSafesFalse()
+    public void TryDeserialize_V9Bytes_LoadsUndated()
+    {
+        using var ms = BlobThroughV9(9);
+
+        Assert.True(ScribePinCodec.TryDeserializeList(ms.ToArray(), out var restored));
+        var pin = Assert.Single(restored!);
+        Assert.Null(pin.Date);
+    }
+
+    [Fact]
+    public void List_RoundTrip_PreservesDate()
+    {
+        var pins = new List<ScribePinnedRef>
+        {
+            Pin("Dated", date: ScribeDate.Create(3, 5, 25)),
+            Pin("Dated once", date: ScribeDate.Create(9999, 12, 255)),
+            Pin("Undated"),
+        };
+
+        Assert.True(ScribePinCodec.TryDeserializeList(ScribePinCodec.SerializeList(pins), out var restored));
+
+        for (int i = 0; i < pins.Count; i++) AssertPinEqual(pins[i], restored![i]);
+    }
+
+    [Fact]
+    public void Store_RoundTrip_PreservesDate()
+    {
+        var store = new Dictionary<string, List<ScribePinnedRef>>
+        {
+            ["p"] = new() { Pin("Dated", date: ScribeDate.Create(2, 1, 1)) },
+        };
+
+        Assert.True(ScribePinCodec.TryDeserializeStore(ScribePinCodec.SerializeStore(store), out var restored));
+        AssertPinEqual(store["p"][0], restored!["p"][0]);
+    }
+
+    [Fact]
+    public void TryDeserialize_InvalidDate_LoadsUndated_AndStaysAligned()
+    {
+        using var ms = BlobThroughV9(10);
+        using (var w = new BinaryWriter(ms, System.Text.Encoding.UTF8, leaveOpen: true))
+        {
+            w.Write(true);         // hasDate
+            w.Write(3);
+            w.Write((byte)13);     // month 13 is invalid
+            w.Write((byte)5);
+        }
+
+        Assert.True(ScribePinCodec.TryDeserializeList(ms.ToArray(), out var restored));
+        var pin = Assert.Single(restored!);
+        Assert.Null(pin.Date);
+        Assert.Equal("Pay the toll", pin.LastKnownText);
+    }
+
+    [Fact]
+    public void TryDeserialize_VersionAboveMaximum_FailSafesFalse()
     {
         var pins = new List<ScribePinnedRef> { Pin("A") };
         byte[] bytes = ScribePinCodec.SerializeList(pins);
-        bytes[4] = 10;
+        bytes[4] = 11;
 
         Assert.False(ScribePinCodec.TryDeserializeList(bytes, out var restored));
         Assert.Null(restored);

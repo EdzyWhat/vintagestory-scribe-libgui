@@ -20,7 +20,8 @@ namespace Scribe.Core;
 /// Per-pin fields in serialized order: OwnerDocId, TaskId, PinnedAtTotalHours, Orphaned, LastKnownDone,
 /// LastKnownText (v1); Kind, LinkTarget (v2); TargetItemCode, TargetQuantity, CurrentQuantity (v3);
 /// LinkLabel (v4); Depth (v5); IsAcceptedAssignment (v6); AssignerUid, AssignedDate, AcceptedDate (v7);
-/// ExtraInfo (v8); AssignedTimestamp, AcceptedTimestamp (v9). Optional fields are a presence bool plus
+/// ExtraInfo (v8); AssignedTimestamp, AcceptedTimestamp (v9); hasDate then, only when true, Date year (int),
+/// month (byte), day (byte) (v10). Optional fields are a presence bool plus
 /// the value; a missing timestamp is distinct from <c>Calendar.TotalDays == 0</c>. v1 pins are migrated
 /// by <see cref="ApplyPreV2Defaults"/>.
 /// </summary>
@@ -30,7 +31,7 @@ public static class ScribePinCodec
     private static readonly byte[] StoreMagic = "SPST"u8.ToArray();
 
     /// <summary>Version of the pin-list blobs (SPIN/SPST); see the type summary for the per-version fields.</summary>
-    private const byte PinVersion = 9;
+    private const byte PinVersion = 10;
 
     /// <summary>
     /// The OLDEST pin-list version still accepted; any version in <c>[MinPinVersion, PinVersion]</c> is read
@@ -103,6 +104,15 @@ public static class ScribePinCodec
             bool hasAcceptedTimestamp = pin.AcceptedTimestamp.HasValue;
             w.Write(hasAcceptedTimestamp);
             if (hasAcceptedTimestamp) w.Write(pin.AcceptedTimestamp!.Value);
+            bool hasDate = pin.Date.HasValue;
+            w.Write(hasDate);
+            if (hasDate)
+            {
+                var date = pin.Date!.Value;
+                w.Write(date.Year);
+                w.Write((byte)date.Month);
+                w.Write((byte)date.Day);
+            }
         }
     }
 
@@ -205,6 +215,15 @@ public static class ScribePinCodec
             {
                 if (r.ReadBoolean()) pin.AssignedTimestamp = r.ReadDouble();
                 if (r.ReadBoolean()) pin.AcceptedTimestamp = r.ReadDouble();
+            }
+            if (version >= 10 && r.ReadBoolean())
+            {
+                int year = r.ReadInt32();
+                byte month = r.ReadByte();
+                byte day = r.ReadByte();
+                // A date the snapshot cannot represent loads as undated; the fields are consumed either way so
+                // the rest of the blob stays aligned.
+                if (ScribeDate.TryCreate(year, month, day, out var date)) pin.Date = date;
             }
 
             list.Add(pin);

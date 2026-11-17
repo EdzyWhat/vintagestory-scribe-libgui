@@ -63,11 +63,16 @@ Calendar Handbook (TheJimmyBlaze) and Wall Calendar (nikok).
 ### Repeats
 - **"Repeat yearly" is a checkbox in the row menu, shown only on a row that has a date** (and can be
   completed: never on notes or quest objectives). An undated row's menu offers Add date instead.
-  Clearing the date removes the entry and the flag. Checking off a repeating task marks it done.
-  Once its date has passed, its date moves to the next occurrence on or after today and the check
-  clears. Change 4 applies this lazily on the server whenever a document is loaded or viewed, so
+  Clearing the date removes the entry and the flag. Checking off a repeating task completes it like any task, under the player's
+  Completion Policy: the repeat flag does not change completion, and under Delete the checked task is
+  deleted. Deleting or completing one instance leaves every other instance of the repeat alone; the
+  rollover creates the next instance. Once its date has passed, its date moves to the next occurrence on or after today and the check
+  clears. Change 4b applies this lazily on the server whenever a document is loaded or viewed, so
   documents left unloaded roll over correctly later. It stays one task, and
   the calendar shows only its next occurrence.
+  **To reconcile in change 4b:** completing a repeating task under Delete deletes that task, so a rollover
+  that moves one task's date forward only applies when the task survives (Keep, Sink, Unpin, UnpinSink). The
+  4b design must decide whether Delete creates the next instance before deleting or ends the repeat.
 
 ## Changes
 
@@ -76,7 +81,8 @@ Calendar Handbook (TheJimmyBlaze) and Wall Calendar (nikok).
 | 1 | `add-task-row-context-menu`: right-click menu on task rows (Edit, Pin/Unpin, Delete) | none |
 | 2 | `add-dated-task-core`: date field, save-format bump, calendar shape, date formatting, status rules | none |
 | 3 | Notebook dating: Add/Change/Clear date and Repeat yearly in the row menu, date chip, date picker | 1, 2 |
-| 4 | Pins, HUD and reminders: pin snapshot date, badges, due and overdue states, reminder Settings, repeat rollover | 2 |
+| 4a | `add-pinned-task-dates`: the pin snapshot carries the date, Pin Tab and HUD rows show the date chip, HUD chips follow the day | 2, 3 |
+| 4b | Reminders: due and overdue reminders, chat alerts, reminder Settings, repeat rollover | 4a |
 | 5 | Calendar block and dialog: wall block, split view (filterable list plus month view), Today button | 2, 3 |
 | 6 | Year view: 12-month grid, year navigation (world start to 10 years ahead), Today button | 5 |
 | 7 | Calendar block face: month name, day grid, today marker, marks on days with tasks | 5 |
@@ -113,6 +119,10 @@ Calendar Handbook (TheJimmyBlaze) and Wall Calendar (nikok).
   needs a save-format change (a cadence and an end rule per block instead of one flag), rollover and
   reminder rules for each cadence, and a submenu widget in the row menu host. Per-year completion history
   stays out of scope.
+- **Pin store downgrade safety.** Refuse to overwrite a pin store with a newer version (a mod downgrade on a
+  world whose store is newer loads it empty and the next save replaces every player's pins).
+- **Pin store downgrade safety.** Refuse to overwrite a pin store with a newer version (a mod downgrade on a
+  world whose store is newer loads it empty and the next save replaces every player's pins).
 - **Per-task lead time and reminder time.**
 - **Month colors and seasonal art.**
 - **Event colors** (a small fixed palette that reads on Scribe's backdrops).

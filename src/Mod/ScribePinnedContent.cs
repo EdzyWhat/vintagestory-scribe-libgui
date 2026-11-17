@@ -35,7 +35,7 @@ internal readonly record struct ScribePinRowData(
     int TargetQuantity = 1, int CurrentQuantity = 0, string? LinkTarget = null, int Depth = 0,
     bool IsAcceptedAssignment = false,
     string? AssignerName = null, string? AssignedDate = null, string? AcceptedDate = null,
-    bool IsStaticVsQuestObjective = false, string? ExtraInfo = null)
+    bool IsStaticVsQuestObjective = false, string? ExtraInfo = null, ScribeRowChip? Chip = null)
 {
     public bool IsTracker => Kind == ScribeBlockKind.Tracker;
     public bool IsLink => Kind == ScribeBlockKind.Link;
@@ -244,7 +244,7 @@ internal sealed class ScribePinnedContentState : State<ScribePinnedContent>
                         TargetQuantity: r.TargetQuantity, CurrentQuantity: r.CurrentQuantity, LinkTarget: r.LinkTarget,
                         Depth: r.Depth, IsAcceptedAssignment: r.IsAcceptedAssignment,
                         AssignerName: r.AssignerName, AssignedDate: r.AssignedDate, AcceptedDate: r.AcceptedDate,
-                        IsStaticVsQuestObjective: r.IsStaticVsQuestObjective, ExtraInfo: r.ExtraInfo),
+                        IsStaticVsQuestObjective: r.IsStaticVsQuestObjective, ExtraInfo: r.ExtraInfo, Chip: r.Chip),
                     Widget.Style, Widget.AssignedStampBitmap, Widget.ExternalStampBitmap)))
             .ToList();
 
@@ -618,7 +618,14 @@ internal sealed class ScribePinRowState : State<ScribePinRow>
         }
         else
         {
-            children.Add(new Expanded(child: new Opacity(contentOpacity, child: new ScribeMultilineField(
+            // The date chip sits under the text in the same column; the column is always present so a row that
+            // gains or loses a date keeps its text field mounted.
+            children.Add(new Expanded(child: new Opacity(contentOpacity, child: new Column(
+                crossAxisAlignment: CrossAxisAlignment.Stretch,
+                mainAxisSize: MainAxisSize.Min,
+                children: new Widget[]
+                {
+                    new ScribeMultilineField(
                 initialText: data.Text,
                 focusNode: Widget.FocusNode,
                 fontSize: style.FontSize,
@@ -634,7 +641,9 @@ internal sealed class ScribePinRowState : State<ScribePinRow>
                 onCommitAndRetreat: () => Widget.OnCommitText(data.TaskId),
                 onInsertTaskBelow: () => Widget.OnCommitText(data.TaskId),
                 onBlur: () => Widget.OnCommitText(data.TaskId),
-                onSecondaryPress: e => menu.Secondary(e, context)))));
+                onSecondaryPress: e => menu.Secondary(e, context)),
+                    ScribeDateChipView.Build(data.Chip, style),
+                }))));
         }
 
         // Subtask indent matches the editor/read rows.

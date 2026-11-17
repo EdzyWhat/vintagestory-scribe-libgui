@@ -81,8 +81,7 @@ public sealed partial class ScribeModSystem
         ScribeDocumentAttributes.WriteTo(stack, doc);
         slot.MarkDirty();
 
-        if (pinStore is { } store)
-            PushPinsTo(store.ReconcileSnapshotsForActor(player.PlayerUID, doc.DocId, doc));
+        ReconcilePinsAfterEdit(player.PlayerUID, doc.DocId, doc);
 
         sapi.Network.GetChannel(NetworkChannelName).SendPacket(new ScribeNotebookSaveMessage
         {

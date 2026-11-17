@@ -69,7 +69,8 @@ public abstract partial class ScribeDialogBase
                     AcceptedDate: p.IsAcceptedAssignment
                         ? OptionalAssignmentDate(p.AcceptedDate, p.AcceptedTimestamp)
                         : null,
-                    IsStaticVsQuestObjective: isStaticVsQuestObjective);
+                    IsStaticVsQuestObjective: isStaticVsQuestObjective,
+                    Chip: BuildPinChip(p));
             })
             .ToList();
 
@@ -103,6 +104,14 @@ public abstract partial class ScribeDialogBase
             assignedStampBitmap: modSystem.GetGuiTextureBitmap(ScribeAssignedTaskIcon.Asset),
             externalStampBitmap: modSystem.GetGuiTextureBitmap(ScribeExternalInfoIcon.Asset),
             rowMenu: RowMenu);
+    }
+
+    /// <summary>The date chip a Pin Tab row shows for <paramref name="p"/>; null when the dialog shows no row dates
+    /// (a Tablet or the Assignment Desk) or the pin shows no date (an orphan, another kind, undated).</summary>
+    private ScribeRowChip? BuildPinChip(ScribePinnedRef p)
+    {
+        if (!SupportsRowDates || !ScribeDateRules.PinShowsDate(p)) return null;
+        return ScribeRowChips.For(capi.World, p.Date, p.LastKnownDone, completable: true, DateOrder);
     }
 
     /// <summary>Resolves a pinned item's icon + name from its snapshot code (like <see cref="ResolveRowItem"/> but without a live document block, so it works when the source is unloaded); <c>(null, null)</c> for a plain Task pin.</summary>

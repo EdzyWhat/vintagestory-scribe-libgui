@@ -70,7 +70,7 @@ public class DatedTaskScenarios : AtlasScenarioBase
         Assert.True(block.RepeatYearly);
     }
 
-    // ── Server date operations and repeat-aware completion ──────────────────────────────────────────
+    // ── Server date operations and completion ──────────────────────────────────────────
 
     private ScribeModSystem Mod => World.Api.ModLoader.GetModSystem<ScribeModSystem>();
 
@@ -168,35 +168,18 @@ public class DatedTaskScenarios : AtlasScenarioBase
     }
 
     [AtlasScenario(RollbackWorld = true)]
-    public async Task CompletingARepeatingTask_UnderDelete_SinksItAndKeepsThePin()
+    public async Task CompletingARepeatingTask_UnderDelete_DeletesIt_AndLeavesTheOtherTasks()
     {
         var player = await World.JoinPlayer("DateRepeat1");
-        var (lectern, docId, taskId, _) = await SeedLectern(player, World.Spawn.Offset(5, 0, 0));
+        var (lectern, docId, taskId, noteId) = await SeedLectern(player, World.Spawn.Offset(5, 0, 0));
         Mod.SetPinForPlayer(player.Player, docId, taskId, pinned: true);
         Mod.SetTaskDateForPlayer(player.Player, docId, taskId, ScribeDateOperation.SetDate, 1, 1, 1);
         Mod.SetTaskDateForPlayer(player.Player, docId, taskId, ScribeDateOperation.SetRepeat, repeat: true);
 
         Mod.CompleteTaskForPlayer(player.Player, docId, taskId, ScribeCompletionPolicy.Delete);
 
-        var block = lectern.Document.FindByTaskId(taskId);
-        Assert.NotNull(block);
-        Assert.True(block!.Done);
-        Assert.Equal(taskId, lectern.Document.Blocks[^1].TaskId);
-        Assert.True(Mod.PinStore!.IsPinned(player.Player.PlayerUID, docId, taskId));
-    }
-
-    [AtlasScenario(RollbackWorld = true)]
-    public async Task CompletingARepeatingTask_UnderUnpin_StillUnpins()
-    {
-        var player = await World.JoinPlayer("DateRepeat2");
-        var (lectern, docId, taskId, _) = await SeedLectern(player, World.Spawn.Offset(5, 0, 0));
-        Mod.SetPinForPlayer(player.Player, docId, taskId, pinned: true);
-        Mod.SetTaskDateForPlayer(player.Player, docId, taskId, ScribeDateOperation.SetDate, 1, 1, 1);
-        Mod.SetTaskDateForPlayer(player.Player, docId, taskId, ScribeDateOperation.SetRepeat, repeat: true);
-
-        Mod.CompleteTaskForPlayer(player.Player, docId, taskId, ScribeCompletionPolicy.Unpin);
-
-        Assert.True(lectern.Document.FindByTaskId(taskId)!.Done);
+        Assert.Null(lectern.Document.FindByTaskId(taskId));
+        Assert.NotNull(lectern.Document.FindByTaskId(noteId));
         Assert.False(Mod.PinStore!.IsPinned(player.Player.PlayerUID, docId, taskId));
     }
 
