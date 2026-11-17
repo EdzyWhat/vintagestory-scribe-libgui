@@ -62,11 +62,13 @@ text selection. It SHALL only open the row's menu, or do nothing on a surface wi
 The menu SHALL offer **Pin** for an unpinned row or **Unpin** for a pinned one, wherever the view's pin
 control is live, and **Delete** wherever the player may delete the row. Each entry SHALL act on the row's
 current state when chosen, identified by its `TaskId`. Editor and Pin Tab entries SHALL use the same path
-and server messages as the row's existing hover control. When no entry is allowed, the menu SHALL NOT open.
+and server messages as the row's existing hover control. The menu MAY also offer further entries where
+`add-notebook-task-dating` offers them. When no entry is allowed, the menu SHALL NOT open.
 
 #### Scenario: Editor view entries
 - **WHEN** a player right-clicks a task row in the editor view
-- **THEN** the menu shows Pin or Unpin and Delete, and no Edit entry
+- **THEN** the menu shows Pin or Unpin and Delete, plus the date entries where `add-notebook-task-dating`
+  offers them, and no Edit entry
 
 #### Scenario: Pin Tab entry acts by identity
 - **WHEN** a player chooses Unpin from the menu on a Pin Tab row
@@ -120,7 +122,17 @@ editor session.
 The menu SHALL close when the player chooses an action entry, clicks or right-clicks outside the menu,
 presses Escape, switches the dialog's view, closes the dialog, scrolls the row out of view, or the row's
 `TaskId` is no longer shown in the view. Escape while a menu is open SHALL close only the menu. A rebuild
-that keeps the row on screen SHALL NOT close the menu. Only one row menu SHALL be open per dialog.
+that keeps the row on screen SHALL NOT close the menu. Only one row menu SHALL be open per dialog. A menu
+whose entries all disappear while its row is still shown SHALL close. Choosing a toggle entry (an entry that
+shows a checked or unchecked state) SHALL NOT close the menu; choosing an action entry SHALL.
+
+#### Scenario: A menu with no entries left closes
+- **WHEN** a menu is open and every entry it offered stops being allowed while its row is still shown
+- **THEN** the menu closes
+
+#### Scenario: A toggle entry keeps the menu open
+- **WHEN** a menu is open and the player chooses a toggle entry
+- **THEN** the entry shows its new state and the menu stays open
 
 #### Scenario: Clicking outside closes the menu
 - **WHEN** the menu is open and the player clicks elsewhere in the dialog

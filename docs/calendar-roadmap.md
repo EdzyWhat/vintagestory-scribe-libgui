@@ -98,7 +98,7 @@ Calendar Handbook (TheJimmyBlaze) and Wall Calendar (nikok).
 ## Later
 - **Assign in the row menu.** The `assignment-desk-block` spec makes the Create Assignments tab the only
   place assignments are created, so "Assign..." must route into that tab rather than create one directly.
-- **Date picker improvements.** The first picker is a month dropdown with day and year steppers. Later
+- **Date picker improvements.** The first picker has month, day and year steppers; a month dropdown is a later option. Later
   options are quick choices (Today, Tomorrow, +3 days, Next month, First day of next season) and a mini
   month grid popover reusing the calendar's month view. Typed dates are out because parsing them in
   every language costs too much.
