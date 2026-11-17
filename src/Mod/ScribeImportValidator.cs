@@ -60,13 +60,14 @@ internal static class ScribeImportValidator
         return false; // Task / Text carry no game reference
     }
 
-    /// <summary>Rewrite as a plain Task keeping done state and depth; text falls back to the raw reference
+    /// <summary>Rewrite as a plain Task keeping done state, depth and date; text falls back to the raw reference
     /// code when the row's text is blank.</summary>
     private static ScribeBlock Degrade(ScribeBlock block)
     {
         string text = !string.IsNullOrEmpty(block.Text)
             ? block.Text
             : (block.Kind == ScribeBlockKind.Tracker ? block.TargetItemCode : block.LinkTarget) ?? "";
-        return new ScribeBlock(ScribeBlockKind.Task, text, done: block.Done, depth: block.Depth);
+        return new ScribeBlock(ScribeBlockKind.Task, text, done: block.Done, depth: block.Depth,
+            date: block.Date, repeatYearly: block.RepeatYearly);
     }
 }

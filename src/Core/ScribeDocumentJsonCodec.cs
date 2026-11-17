@@ -10,9 +10,10 @@ namespace Scribe.Core;
 ///
 /// Shape (indented, camelCase keys):
 /// <code>
-/// { "v": 1, "title": "My List",
+/// { "v": 3, "title": "My List",
 ///   "blocks": [
 ///     { "kind": "task", "text": "Chop wood", "done": false, "depth": 0 },
+///     { "kind": "task", "text": "Harvest festival", "date": "3-5-25", "repeatYearly": true },
 ///     { "kind": "tracker", "done": false, "depth": 0, "targetItemCode": "game:ingot-copper", "targetQuantity": 8 },
 ///     { "kind": "link", "linkTarget": "page:craftinginfo-knapping", "linkLabel": "Knapping" },
 ///     { "kind": "link", "linkTarget": "quest:vsquest:quest-freeghost", "linkLabel": "Free the Ghost",
@@ -26,12 +27,15 @@ namespace Scribe.Core;
 /// <para>Versioning: <c>"v"</c> is a single counter and a new field is a version bump. Any document with
 /// <c>v &gt;= <see cref="MinVersion"/></c> is accepted (a newer producer's extra fields are ignored). A
 /// payload lacking <c>v</c> is rejected, so a foreign JSON object can't import as an empty document.
-/// v2 added the optional <c>extraInfo</c> key. See docs/CODEC-MIGRATION.md.</para>
+/// v2 added the optional <c>extraInfo</c> key; v3 added the optional <c>date</c> (<c>"Y-M-D"</c>, see
+/// <see cref="ScribeDate.TryParse"/>) and <c>repeatYearly</c> keys, on any kind. A malformed or out-of-range
+/// <c>date</c> imports undated, and <c>repeatYearly</c> without a valid <c>date</c> reads as not repeating.
+/// See docs/CODEC-MIGRATION.md.</para>
 /// </summary>
 public static class ScribeDocumentJsonCodec
 {
     /// <summary>Current JSON format version; bump when adding a field.</summary>
-    public const int Version = 2;
+    public const int Version = 3;
 
     /// <summary>Oldest JSON version still accepted; a lower or missing <c>v</c> is rejected.</summary>
     public const int MinVersion = 1;
@@ -73,6 +77,8 @@ public static class ScribeDocumentJsonCodec
                 LinkDescription = block.LinkDescription,
                 RecipeSignature = string.IsNullOrEmpty(block.RecipeSignature) ? null : block.RecipeSignature,
                 ExtraInfo = block.ExtraInfo,
+                Date = block.Date is { } date ? JsonSerializer.SerializeToElement(date.ToString()) : null,
+                RepeatYearly = block.RepeatYearly ? JsonSerializer.SerializeToElement(true) : null,
             });
         }
         return JsonSerializer.Serialize(dto, WriteOptions);
@@ -114,6 +120,7 @@ public static class ScribeDocumentJsonCodec
                 ScribeBlockKindToken.TryParse(b.Kind, out var kind); // unknown/blank → Task (loose import)
                 string text = ClipText(b.Text ?? string.Empty, kind);
                 int targetQuantity = b.TargetQuantity is int q && q >= 1 ? q : 1; // block setter also clamps ≥ 1
+                ScribeDate? date = ReadDate(b.Date);
 
                 blocks.Add(new ScribeBlock(
                     kind,
@@ -129,7 +136,9 @@ public static class ScribeDocumentJsonCodec
                     linkLabel: b.LinkLabel,
                     recipeSignature: b.RecipeSignature, // empty for non-Craft; Craft re-generates ingredients from it
                     linkDescription: b.LinkDescription,
-                    extraInfo: b.ExtraInfo));
+                    extraInfo: b.ExtraInfo,
+                    date: date,
+                    repeatYearly: date is not null && b.RepeatYearly is { ValueKind: JsonValueKind.True }));
             }
         }
 
@@ -141,6 +150,13 @@ public static class ScribeDocumentJsonCodec
         document = doc;
         return true;
     }
+
+    /// <summary>The block's date from its <c>date</c> value, or null when it is absent, not a string, or not
+    /// a valid <c>Y-M-D</c>. Read as a raw element so a wrong-typed value never fails the whole import.</summary>
+    private static ScribeDate? ReadDate(JsonElement? value) =>
+        value is { ValueKind: JsonValueKind.String } element && ScribeDate.TryParse(element.GetString(), out var date)
+            ? date
+            : null;
 
     /// <summary>Clips over-long text to the same per-kind caps the binary codec enforces.</summary>
     private static string ClipText(string text, ScribeBlockKind kind)
@@ -171,5 +187,7 @@ public static class ScribeDocumentJsonCodec
         public string? LinkDescription { get; set; }
         public string? RecipeSignature { get; set; }
         public string? ExtraInfo { get; set; }
+        public JsonElement? Date { get; set; }
+        public JsonElement? RepeatYearly { get; set; }
     }
 }

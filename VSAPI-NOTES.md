@@ -1140,11 +1140,19 @@ data, detect crafting milestones, and reach temporal-storm / Handbook systems?**
 chronicle/integration features — decompiled, not yet exercised.)
 
 - **Calendar:** `api.World.Calendar` is `IGameCalendar`. Server-side it is NULL until run stage
-  `LoadGamePre`, non-null after. Reads: `Year` (starts 1386), `DayOfYear`, `Month`/`MonthName`
+  `LoadGamePre`, non-null after. Reads: `Year`, `DayOfYear`, `Month`/`MonthName`
   (`EnumMonth`), `GetSeason(BlockPos)` (`EnumSeason`), `TotalDays`/`TotalHours` (double, monotonic
   — good stable sort/dedup key), `HourOfDay`, and `PrettyDate()` for an engine-formatted string.
   For a game-agnostic Core model, store the numeric stamp and format in the Mod layer — don't call
   `PrettyDate()` in Core.
+- **`Calendar.Year` counts from 0, not 1386.** Decompiled `GameCalendar`: `Year => (int)(TotalDays /
+  DaysPerYear)`. The `IGameCalendar` doc-comment ("Every game begins with 1386") and the
+  `IGameCalendar.StartYear = 1386` constant are misleading: `StartYear` is only used in the solar-position
+  math, and vanilla's own `PrettyDate()` prints `Year` as-is (Year 0 in a world's first year). Scribe's
+  displayed dates count from 1 via `TotalDays` (`ScribeWorldCalendar`); the server identity stamp
+  (`NotebookHost.FormatDate`) keeps `Calendar.Year`. Also, `Month => (int)Math.Ceiling(YearRel * 12)` reads
+  one low at the exact first moment of a month (0 at midnight on January 1st), so derive month and day from
+  `TotalDays` with integer division instead.
 - **Player death:** `IServerEventAPI.PlayerDeath` → `PlayerDeathDelegate(IServerPlayer byPlayer,
   DamageSource damageSource)`. Server-side, once per death, gives identity + cause.
 - **Resolving the attacker — use `DamageSource.GetCauseEntity()`, NOT `SourceEntity`.** The API

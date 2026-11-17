@@ -92,3 +92,11 @@ identity stamp (finding 1).
 ## Applied
 
 All Fix items and the three decisions were applied. New MODIFIED deltas: notebook-history, lectern-guestbook, inbox-tab, player-pins, scribe-item-hover-summary, task-note-document (generated from the main-spec text, only the date-format phrase and the Year 0 example changed), settings-tab, scribe-locales and codec-migration. `docs/calendar-roadmap.md` updated (4 orders, stamp rule, rollover owner). `openspec validate --strict` passes.
+
+## Correction found during apply
+
+Decompiling `GameCalendar` showed `Calendar.Year` is `(int)(TotalDays / DaysPerYear)`: it counts from 0,
+not from 1386 (the `IGameCalendar` doc-comment and `StartYear` constant are misleading). Every "1386" above
+should read "Year 0 in a world's first year". The decisions are unaffected: stamps still keep their form to
+protect Guest Book dedup, and displayed years still count from 1. The lectern-guestbook example "Year 0" was
+in fact accurate for stamps; the delta's move to "Year 1" matches the display. Recorded in `VSAPI-NOTES.md`.

@@ -15,7 +15,9 @@ namespace Scribe.Core;
 /// <item><b>Done</b> — <c>x</c> / blank. Ignored for note/title.</item>
 /// <item><b>Text</b> — the human-readable label (task text, a guide-link's title, or the title row's title).</item>
 /// <item><b>Special</b> — the machine reference: a tracker's item code, a link's target, or a craft's
-/// <c>outputCode[,recipeSignature]</c>.</item>
+/// <c>outputCode[,recipeSignature]</c>, or a plain task's date as <c>date:Y-M-D</c> with an optional
+/// <c>,yearly</c>. Dates on other kinds are not exported here, because their Special cell already holds
+/// their reference (the JSON codec carries them).</item>
 /// <item><b>Count</b> — a tracker's or craft's target quantity.</item>
 /// <item><b>Depth</b> — integer nesting (no parent links).</item>
 /// </list>
@@ -59,6 +61,7 @@ public static class ScribeDocumentTsvCodec
                 ScribeBlockKind.Craft => CraftSpecial(block),
                 // The objective's own match code (LinkTarget) is JSON-only and does not round-trip here.
                 ScribeBlockKind.QuestObjective => block.TargetItemCode ?? "",
+                ScribeBlockKind.Task => TaskDateSpecial(block),
                 _ => "",
             };
             string count = block.Kind is ScribeBlockKind.Tracker or ScribeBlockKind.Craft or ScribeBlockKind.QuestObjective
@@ -180,9 +183,42 @@ public static class ScribeDocumentTsvCodec
                 return new ScribeBlock(kind, "", done: done, depth: depth,
                     targetItemCode: questItemCode, targetQuantity: count, linkLabel: questLabel);
 
-            default: // Task, Text, and any future/unknown kind degraded to Task
+            case ScribeBlockKind.Task:
+                bool dated = TryParseTaskDateSpecial(special, out var date, out bool yearly);
+                return new ScribeBlock(kind, text, done: done, depth: depth,
+                    date: dated ? date : null, repeatYearly: dated && yearly);
+
+            default: // Text, and any future kind
                 return new ScribeBlock(kind, text, done: done, depth: depth);
         }
+    }
+
+    private const string DatePrefix = "date:";
+    private const string YearlySuffix = ",yearly";
+
+    /// <summary>The Special-cell payload for a plain task: <c>date:Y-M-D</c>, plus <c>,yearly</c> when it
+    /// repeats; empty when undated.</summary>
+    private static string TaskDateSpecial(ScribeBlock block)
+    {
+        if (block.Date is not { } date) return "";
+        return DatePrefix + date + (block.RepeatYearly ? YearlySuffix : "");
+    }
+
+    /// <summary>Inverse of <see cref="TaskDateSpecial"/>. False (undated) for a blank, malformed or
+    /// out-of-range cell.</summary>
+    private static bool TryParseTaskDateSpecial(string special, out ScribeDate date, out bool yearly)
+    {
+        date = default;
+        yearly = false;
+        string cell = special.Trim();
+        if (!cell.StartsWith(DatePrefix, System.StringComparison.OrdinalIgnoreCase)) return false;
+        string body = cell[DatePrefix.Length..];
+        if (body.EndsWith(YearlySuffix, System.StringComparison.OrdinalIgnoreCase))
+        {
+            yearly = true;
+            body = body[..^YearlySuffix.Length];
+        }
+        return ScribeDate.TryParse(body, out date);
     }
 
     /// <summary>The Special-cell payload for a Craft: the output item code, optionally followed by <c>","</c>

@@ -48,6 +48,11 @@ public sealed class ScribePlayerSettings
     /// parent ignores this setting.</summary>
     public ScribePinInsert PinInsert { get; set; } = ScribePinInsert.Bottom;
 
+    /// <summary>The order displayed dates use: <see cref="ScribeDateOrder.LanguageDefault"/> (default, the
+    /// language's own template) or a fixed day/month/year order. Display only; the dates the server stores
+    /// never depend on it. An unknown value falls back to the default on load.</summary>
+    public ScribeDateOrder DateOrder { get; set; } = ScribeDateOrder.LanguageDefault;
+
     /// <summary>Whether the pinned-task HUD header shows its settings gear (the Settings tab stays available
     /// either way).</summary>
     public bool HudShowSettingsGear { get; set; } = true;
@@ -303,6 +308,10 @@ public sealed class ScribePlayerSettings
     public static ScribePinInsert NormalizePinInsert(ScribePinInsert value) =>
         Enum.IsDefined(typeof(ScribePinInsert), value) ? value : ScribePinInsert.Bottom;
 
+    /// <summary>Maps an unrecognized Date order to <see cref="ScribeDateOrder.LanguageDefault"/>.</summary>
+    public static ScribeDateOrder NormalizeDateOrder(ScribeDateOrder value) =>
+        Enum.IsDefined(typeof(ScribeDateOrder), value) ? value : ScribeDateOrder.LanguageDefault;
+
     /// <summary>Maps an unrecognized timer-mode value to <see cref="TimerMode.RealTime"/>.</summary>
     public static TimerMode NormalizeTimerMode(TimerMode value) =>
         Enum.IsDefined(typeof(TimerMode), value) ? value : TimerMode.RealTime;
@@ -333,6 +342,7 @@ public sealed class ScribePlayerSettings
         SubtaskBehavior = NormalizeSubtaskBehavior(SubtaskBehavior);
         NewTaskInsert = NormalizeNewTaskInsert(NewTaskInsert);
         PinInsert = NormalizePinInsert(PinInsert);
+        DateOrder = NormalizeDateOrder(DateOrder);
         PreferredTimerMode = NormalizeTimerMode(PreferredTimerMode);
         HudAnchor = NormalizeAnchor(HudAnchor);
         HudRowWidth = ClampHudRowWidth(HudRowWidth);

@@ -49,6 +49,9 @@ public sealed class GuiDialogTaskNotice : GuiBase
 
     private readonly ItemSlot slot;
     private readonly ScribeModSystem modSystem;
+
+    /// <summary>The viewer's Date order, read fresh each build.</summary>
+    private ScribeDateOrder DateOrder => modSystem.MySettings.DateOrder;
     private readonly ScribeDocument document;
     private readonly ScrollController scrollController = new();
     private readonly ScribeAnimationRegistry collapseRegistry = new();
@@ -109,7 +112,7 @@ public sealed class GuiDialogTaskNotice : GuiBase
         var first = document.Blocks.FirstOrDefault();
         string fromLine = first?.Assignment is { } assignment
             ? Lang.Get("scribe:scribe-assignment-assigned-by", ResolvePlayerName(assignment.AssignerUid),
-                AssignmentDisplay.Date(assignment.AssignedDate, assignment.AssignedTimestamp, capi.World))
+                AssignmentDisplay.Date(assignment.AssignedDate, assignment.AssignedTimestamp, capi.World, DateOrder))
             : "";
 
         var rows = document.Blocks.Select((b, i) =>
@@ -346,8 +349,28 @@ public sealed class GuiDialogTaskNotice : GuiBase
             onTap: _ => onTap());
     }
 
+    /// <summary>Rebuilds on a settings change (via <see cref="ScribeModSystem.MyPinsChanged"/>) so the "Assigned
+    /// by" date follows a new Date order while the notice is open. Subscribed only while open.</summary>
+    public override void OnGuiOpened()
+    {
+        base.OnGuiOpened();
+        modSystem.MyPinsChanged += OnSettingsOrPinsChanged;
+    }
+
+    public override void OnGuiClosed()
+    {
+        modSystem.MyPinsChanged -= OnSettingsOrPinsChanged;
+        base.OnGuiClosed();
+    }
+
+    private void OnSettingsOrPinsChanged()
+    {
+        if (IsOpened()) ForceRebuild();
+    }
+
     public override void Dispose()
     {
+        modSystem.MyPinsChanged -= OnSettingsOrPinsChanged;
         scrollController.Dispose();
         collapseRegistry.Dispose();
         base.Dispose();

@@ -139,9 +139,33 @@ public sealed class ScribeBlock
     /// nothing was attached.</summary>
     public string? ExtraInfo { get; set; }
 
+    /// <summary>The block's optional calendar date; null for an undated block. Any kind may carry one, and
+    /// changing it never changes the block's identity. Setting it to null also clears
+    /// <see cref="RepeatYearly"/>, so the repeat flag never exists without a date.</summary>
+    public ScribeDate? Date
+    {
+        get => _date;
+        set
+        {
+            _date = value;
+            if (value is null) _repeatYearly = false;
+        }
+    }
+    private ScribeDate? _date;
+
+    /// <summary>Whether the dated block repeats every year (see <see cref="ScribeDateRules.NextOccurrence"/>).
+    /// Always false while <see cref="Date"/> is null: setting it on an undated block is ignored.</summary>
+    public bool RepeatYearly
+    {
+        get => _repeatYearly;
+        set => _repeatYearly = value && _date is not null;
+    }
+    private bool _repeatYearly;
+
     public ScribeBlock(ScribeBlockKind kind, string text, bool done = false, int depth = 0, string? assignedToUid = null, Guid? taskId = null,
         string? targetItemCode = null, int targetQuantity = 1, int currentQuantity = 0, string? linkTarget = null, string? linkLabel = null,
-        string? recipeSignature = null, ScribeAssignment? assignment = null, string? linkDescription = null, string? extraInfo = null)
+        string? recipeSignature = null, ScribeAssignment? assignment = null, string? linkDescription = null, string? extraInfo = null,
+        ScribeDate? date = null, bool repeatYearly = false)
     {
         Kind = kind;
         Text = text;
@@ -157,6 +181,8 @@ public sealed class ScribeBlock
         RecipeSignature = recipeSignature ?? "";
         LinkDescription = linkDescription;
         ExtraInfo = extraInfo;
+        Date = date;
+        RepeatYearly = repeatYearly;
     }
 
     public bool IsTask => Kind == ScribeBlockKind.Task;

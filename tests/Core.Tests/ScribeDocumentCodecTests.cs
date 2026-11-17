@@ -171,6 +171,7 @@ public class ScribeDocumentCodecTests
         Assert.NotNull(restored);
         Assert.Equal("V11 Notes", restored!.Title);
         Assert.Null(restored.Blocks[0].ExtraInfo);
+        Assert.Null(restored.Blocks[0].Date); // v14 field — defaulted for a v11 blob
     }
 
     [Fact]
@@ -217,15 +218,16 @@ public class ScribeDocumentCodecTests
         Assert.NotNull(assignment);
         Assert.Equal("Year 1, Day 1", assignment!.AssignedDate);
         Assert.Null(assignment.AssignedTimestamp);
+        Assert.Null(restored.Blocks[0].Date); // v14 field — defaulted for a v12 blob
     }
 
     [Fact]
-    public void TryDeserialize_V14Bytes_FailSafesFalse()
+    public void TryDeserialize_NewerThanCurrentVersion_FailsSafely()
     {
         var original = new ScribeDocument();
         original.AddTask("anything");
         byte[] bytes = ScribeDocumentCodec.Serialize(original);
-        bytes[4] = 14;
+        bytes[4] = 15;
 
         Assert.False(ScribeDocumentCodec.TryDeserialize(bytes, out var restored));
         Assert.Null(restored);
@@ -344,6 +346,7 @@ public class ScribeDocumentCodecTests
         Assert.Null(block.LinkLabel); // v7 field — defaulted for a v5 blob
         Assert.Equal("", block.RecipeSignature); // v8 field — defaulted for a v5 blob
         Assert.Empty(legacyPinned);
+        Assert.Null(block.Date); // v14 field — defaulted for a v5 blob
     }
 
     [Fact]
@@ -385,6 +388,7 @@ public class ScribeDocumentCodecTests
         Assert.Equal("game:ingot-tin", link.LinkTarget);
         Assert.Null(link.LinkLabel); // v7 field — defaulted for a v6 blob
         Assert.Equal("", link.RecipeSignature); // v8 field — defaulted for a v6 blob
+        Assert.Null(link.Date); // v14 field — defaulted for a v6 blob
     }
 
     [Fact]
@@ -429,6 +433,7 @@ public class ScribeDocumentCodecTests
         Assert.Equal("page:craftinginfo-knapping", link.LinkTarget);
         Assert.Equal("Knapping", link.LinkLabel);
         Assert.Equal("", link.RecipeSignature); // v8 field — defaulted for a v7 blob
+        Assert.Null(link.Date); // v14 field — defaulted for a v7 blob
     }
 
     [Fact]
@@ -482,7 +487,7 @@ public class ScribeDocumentCodecTests
     [Fact]
     public void TryDeserialize_UnsupportedOlderVersionBytes_FailsSafely()
     {
-        // The reader accepts [MinVersion=5, Version=8]; a v2-shaped payload must be rejected, not misread as v5+.
+        // The reader accepts [MinVersion, Version]; a v2-shaped payload must be rejected, not misread as v5+.
         using var ms = new MemoryStream();
         using (var w = new BinaryWriter(ms))
         {
@@ -649,5 +654,117 @@ public class ScribeDocumentCodecTests
         Assert.True(ok);
         Assert.NotNull(restored);
         Assert.Equal(ScribeDocument.DefaultTitle, restored!.Title);
+    }
+
+    [Fact]
+    public void RoundTrip_PreservesDateAndRepeatYearly()
+    {
+        var original = new ScribeDocument();
+        original.AddTask("Harvest festival");
+        original.AddTask("Undated");
+        original.AddTextSection("A dated note");
+        original.Blocks[0].Date = ScribeDate.Create(3, 5, 25);
+        original.Blocks[0].RepeatYearly = true;
+        original.Blocks[2].Date = ScribeDate.Create(1, 12, 1);
+
+        byte[] bytes = ScribeDocumentCodec.Serialize(original);
+        Assert.True(ScribeDocumentCodec.TryDeserialize(bytes, out var restored));
+
+        Assert.Equal(ScribeDate.Create(3, 5, 25), restored!.Blocks[0].Date);
+        Assert.True(restored.Blocks[0].RepeatYearly);
+        Assert.Null(restored.Blocks[1].Date);
+        Assert.False(restored.Blocks[1].RepeatYearly);
+        Assert.Equal(ScribeDate.Create(1, 12, 1), restored.Blocks[2].Date);
+        Assert.False(restored.Blocks[2].RepeatYearly);
+    }
+
+    /// <summary>Writes a one-Task v13 document whose block layout ends at the v13 assigned timestamp, then
+    /// optionally the v14 date field. Used for the v13 older-blob test and the invalid-date tests.</summary>
+    private static byte[] BuildSingleTaskBlob(byte version, Action<BinaryWriter>? writeV14Fields, string text = "Task")
+    {
+        using var ms = new MemoryStream();
+        using (var w = new BinaryWriter(ms, System.Text.Encoding.UTF8, leaveOpen: true))
+        {
+            w.Write(new byte[] { (byte)'S', (byte)'C', (byte)'R', (byte)'B' });
+            w.Write(version);
+            w.Write(Guid.NewGuid().ToByteArray());
+            w.Write(2); // blockCount
+            for (int i = 0; i < 2; i++)
+            {
+                w.Write(Guid.NewGuid().ToByteArray());
+                w.Write((byte)ScribeBlockKind.Task);
+                w.Write(false); // done
+                w.Write(0);     // depth
+                w.Write(false); // hasAssignedToUid
+                w.Write(i == 0 ? text : "Second");
+                w.Write(false); // hasTargetItemCode
+                w.Write(1);
+                w.Write(0);
+                w.Write(false); // hasLinkTarget
+                w.Write(false); // hasLinkLabel
+                w.Write("");    // RecipeSignature
+                w.Write(false); // hasAssignment
+                w.Write(false); // hasLinkDescription
+                w.Write(false); // hasExtraInfo
+                w.Write(false); // hasAssignedTimestamp — v13 ends here
+                if (i == 0) writeV14Fields?.Invoke(w);
+                else if (version >= 14) w.Write(false); // second block: undated
+            }
+            w.Write("Blob Notes");
+        }
+        return ms.ToArray();
+    }
+
+    [Fact]
+    public void TryDeserialize_V13Bytes_Succeeds_AndDefaultsDateNull()
+    {
+        byte[] bytes = BuildSingleTaskBlob(13, writeV14Fields: null, text: "Existing v13 task");
+
+        Assert.True(ScribeDocumentCodec.TryDeserialize(bytes, out var restored));
+        Assert.Equal("Existing v13 task", restored!.Blocks[0].Text);
+        Assert.Null(restored.Blocks[0].Date);
+        Assert.False(restored.Blocks[0].RepeatYearly);
+        Assert.Equal("Blob Notes", restored.Title);
+        Assert.True(ScribeDocumentCodec.IsPriorVersion(bytes));
+    }
+
+    [Theory]
+    [InlineData(3, 13, 1)]  // month past 12
+    [InlineData(3, 0, 1)]   // month 0
+    [InlineData(3, 5, 0)]   // day 0
+    [InlineData(0, 5, 1)]   // year 0
+    [InlineData(int.MaxValue, 5, 1)]
+    public void TryDeserialize_InvalidStoredDate_LoadsUndated_AndKeepsTheRestOfTheDocument(int year, int month, int day)
+    {
+        byte[] bytes = BuildSingleTaskBlob(14, w =>
+        {
+            w.Write(true); // hasDate
+            w.Write(year);
+            w.Write((byte)month);
+            w.Write((byte)day);
+            w.Write(true); // repeatYearly
+        });
+
+        Assert.True(ScribeDocumentCodec.TryDeserialize(bytes, out var restored));
+        Assert.Null(restored!.Blocks[0].Date);
+        Assert.False(restored.Blocks[0].RepeatYearly);
+        Assert.Equal("Second", restored.Blocks[1].Text); // stream stayed aligned
+        Assert.Equal("Blob Notes", restored.Title);
+    }
+
+    [Fact]
+    public void TryDeserialize_DayPastMonthEnd_IsKept()
+    {
+        byte[] bytes = BuildSingleTaskBlob(14, w =>
+        {
+            w.Write(true);
+            w.Write(3);
+            w.Write((byte)5);
+            w.Write((byte)25);
+            w.Write(false);
+        });
+
+        Assert.True(ScribeDocumentCodec.TryDeserialize(bytes, out var restored));
+        Assert.Equal(ScribeDate.Create(3, 5, 25), restored!.Blocks[0].Date);
     }
 }

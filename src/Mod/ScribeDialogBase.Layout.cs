@@ -493,6 +493,9 @@ public abstract partial class ScribeDialogBase
         _                          => BuildReadContent(),
     };
 
+    /// <summary>The viewer's Date order, read fresh each build so a settings change shows on the next rebuild.</summary>
+    private protected ScribeDateOrder DateOrder => modSystem.MySettings.DateOrder;
+
     /// <summary>The live row style, derived from current settings each build (not cached at open) so a font-scale change repaints the open dialog. Passes through <see cref="DecorateRowStyle"/> for tier-specific behavior.</summary>
     private protected ScribeRowStyle RowStyle => DecorateRowStyle(ScribeRowStyle.FromSettings(modSystem.MySettings)
         // SubtaskIndent depends on window width, so it is layered on here (10px + 3%·W) before DecorateRowStyle so subclass `with` tweaks still compose.

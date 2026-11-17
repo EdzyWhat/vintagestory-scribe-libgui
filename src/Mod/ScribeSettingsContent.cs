@@ -212,8 +212,8 @@ internal sealed class ScribeSettingsContent : StatelessWidget
             children: children);
     }
 
-    /// <summary>Window Appearance: Lectern look (pixel-art theme, Pixel Art Size, window/task fonts)
-    /// plus tablet cuneiform toggles.</summary>
+    /// <summary>Window Appearance: Lectern look (pixel-art theme, Pixel Art Size, window/task fonts), Date
+    /// order, plus tablet cuneiform toggles.</summary>
     private Widget BuildWindowAppearanceSection(ColorScheme colors, float scale)
     {
         return new Column(
@@ -251,6 +251,22 @@ internal sealed class ScribeSettingsContent : StatelessWidget
                     LabeledControl(
                         "settings-windowfontscale", colors, scale,
                         FontScaleField("windowfontscale", settings.WindowFontScale, v => onMutate(s => s.WindowFontScale = v)))),
+
+                // Display order for every timestamp-built date (History, Guest Book, Inbox, tooltips).
+                PairedControls(scale,
+                    LabeledControl(
+                        "settings-dateorder", colors, scale,
+                        new Dropdown<ScribeDateOrder>(
+                            value: ScribePlayerSettings.NormalizeDateOrder(settings.DateOrder),
+                            items: new List<DropdownItem<ScribeDateOrder>>
+                            {
+                                new() { Value = ScribeDateOrder.LanguageDefault, Label = Lang.Get("scribe:scribe-dateorder-language") },
+                                new() { Value = ScribeDateOrder.DayMonthYear,    Label = Lang.Get("scribe:scribe-dateorder-dmy") },
+                                new() { Value = ScribeDateOrder.MonthDayYear,    Label = Lang.Get("scribe:scribe-dateorder-mdy") },
+                                new() { Value = ScribeDateOrder.YearMonthDay,    Label = Lang.Get("scribe:scribe-dateorder-ymd") },
+                            },
+                            onChanged: v => onMutate(s => s.DateOrder = v))),
+                    new SizedBox()),
 
                 // Cuneiform press-in only applies while Cuneiform tablets is on, so it sits alone below.
                 PairedControls(scale,

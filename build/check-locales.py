@@ -124,6 +124,29 @@ def build_crossrefs(en):
     return crossrefs
 
 
+# Fixed-order date templates: a player's chosen Date order must survive translation, so these keep their
+# placeholders in the order the key names ({0} = day, {1} = month, {2} = year). Only surrounding words change.
+FIXED_ORDER_DATE_KEYS = {
+    "date-format-dmy": [0, 1, 2],
+    "date-format-mdy": [1, 0, 2],
+    "date-format-ymd": [2, 1, 0],
+}
+
+
+def check_fixed_order_dates(data):
+    errors = []
+    for k, expected in FIXED_ORDER_DATE_KEYS.items():
+        v = data.get(k)
+        if not isinstance(v, str):
+            continue
+        order = [int(n) for n in PLACEHOLDER_RE.findall(v)]
+        if order != expected:
+            errors.append(
+                f"{k}: placeholders must appear in the order {expected} (day=0, month=1, year=2), found {order}"
+            )
+    return errors
+
+
 def check_locale(code, path, en, en_required_keys, en_optional_keys, crossrefs):
     errors = []
     try:
@@ -185,6 +208,8 @@ def check_locale(code, path, en, en_required_keys, en_optional_keys, crossrefs):
 
         if len(en_v) > COPY_THRESHOLD and v == en_v:
             errors.append(f"{k}: value is identical to English (len={len(en_v)}) -- looks copied, not translated")
+
+    errors.extend(check_fixed_order_dates(data))
 
     by_handbook = defaultdict(list)
     for hk, idx, lk in crossrefs:
@@ -259,6 +284,13 @@ def main(argv):
         return 0
 
     ok = True
+    en_order_errors = check_fixed_order_dates(en)
+    if en_order_errors:
+        ok = False
+        print(f"\n✗ en.json ({len(en_order_errors)} problem(s)):")
+        for e in en_order_errors:
+            print(f"  - {e}")
+
     target_codes = [a for a in argv if not a.startswith("-")]
     if target_codes:
         locale_files = [SCRIBE_LANG_DIR / f"{c}.json" for c in target_codes]

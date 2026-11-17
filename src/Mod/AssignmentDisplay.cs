@@ -1,14 +1,15 @@
+using Scribe.Core;
 using Vintagestory.API.Common;
 
 namespace Scribe;
 
-/// <summary>Formats an assignment calendar date in the viewing player's locale when a real in-game
+/// <summary>Formats an assignment calendar date in the viewing player's locale and Date order when a real in-game
 /// timestamp is present; otherwise returns the stored identity string (an assignment without a timestamp
 /// has nothing to rebuild from). Mirrors Guestbook's display rule.</summary>
 internal static class AssignmentDisplay
 {
-    internal static string Date(string baked, double? timestamp, IWorldAccessor world)
+    internal static string Date(string baked, double? timestamp, IWorldAccessor world, ScribeDateOrder order)
         => timestamp is { } ts
-            ? NotebookHost.FormatDateFromTimestamp(world, ts)
+            ? NotebookHost.FormatDateFromTimestamp(world, ts, order)
             : baked;
 }

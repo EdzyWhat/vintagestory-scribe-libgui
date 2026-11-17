@@ -6,7 +6,7 @@ namespace Scribe.Core;
 /// Serializes a <see cref="ScribeDocument"/> to bytes and back. The same bytes serve world persistence and
 /// network sync; malformed input fails safely (returns false) rather than throwing.
 ///
-/// Current format (v13, little-endian via <see cref="BinaryWriter"/>):
+/// Current format (v14, little-endian via <see cref="BinaryWriter"/>):
 ///   [4 bytes magic "SCRB"][1 byte version][16 bytes DocId][int blockCount]
 ///   [per block: 16 bytes TaskId, byte kind, bool done, int depth, bool hasAssignedToUid,
 ///    string assignedToUid (only if hasAssignedToUid), string text,
@@ -19,7 +19,8 @@ namespace Scribe.Core;
 ///    string targetPlayerUid (only when hasAssignment; v10+),
 ///    bool hasLinkDescription, string linkDescription (only if hasLinkDescription; v11+),
 ///    bool hasExtraInfo, string extraInfo (only if hasExtraInfo; v12+),
-///    bool hasAssignedTimestamp, double assignedTimestamp (only if hasAssignedTimestamp; v13+)]
+///    bool hasAssignedTimestamp, double assignedTimestamp (only if hasAssignedTimestamp; v13+),
+///    bool hasDate, int year, byte month, byte day, bool repeatYearly (all four only if hasDate; v14+)]
 ///   [string title]
 ///
 /// Accepted-version window: progressive append-only reads of any version in
@@ -38,12 +39,14 @@ namespace Scribe.Core;
 ///   block, empty for non-Craft); v9 optional assignment state; v10 assignment TargetPlayerUid;
 ///   v11 LinkDescription; v12 ExtraInfo (external-mod hover string); v13 assigned timestamp (cannot sit
 ///   inside the v9 assignment sub-blob because v11/v12 already follow it; a missing timestamp is distinct
-///   from Calendar.TotalDays == 0).
+///   from Calendar.TotalDays == 0); v14 optional block date and repeat-yearly flag (read through
+///   <see cref="ScribeDate.TryCreate"/>; an out-of-range stored date loads as undated, and the fixed-size
+///   field keeps the stream aligned).
 /// </summary>
 public static class ScribeDocumentCodec
 {
     private static readonly byte[] Magic = "SCRB"u8.ToArray();
-    private const byte Version = 13;
+    private const byte Version = 14;
 
     /// <summary>Oldest accepted format version: the last SHIPPED layout still live in player saves.</summary>
     private const byte MinVersion = 5;
@@ -117,6 +120,15 @@ public static class ScribeDocumentCodec
                 bool hasAssignedTimestamp = block.Assignment?.AssignedTimestamp is not null;
                 w.Write(hasAssignedTimestamp);
                 if (hasAssignedTimestamp) w.Write(block.Assignment!.AssignedTimestamp!.Value);
+                // v14: optional date and repeat flag.
+                w.Write(block.Date is not null);
+                if (block.Date is { } date)
+                {
+                    w.Write(date.Year);
+                    w.Write((byte)date.Month);
+                    w.Write((byte)date.Day);
+                    w.Write(block.RepeatYearly);
+                }
             }
             w.Write(doc.Title); // v5+
         }
@@ -232,10 +244,25 @@ public static class ScribeDocumentCodec
                     }
                 }
 
+                ScribeDate? date = null;
+                bool repeatYearly = false;
+                if (version >= 14 && r.ReadBoolean())
+                {
+                    int year = r.ReadInt32();
+                    byte month = r.ReadByte();
+                    byte day = r.ReadByte();
+                    bool storedRepeat = r.ReadBoolean();
+                    if (ScribeDate.TryCreate(year, month, day, out var stored))
+                    {
+                        date = stored;
+                        repeatYearly = storedRepeat;
+                    }
+                }
+
                 // The block's setters clamp TargetQuantity (≥ 1), CurrentQuantity (≥ 0), and Depth ([0, 1]).
                 blocks.Add(new ScribeBlock(kind, text, done, depth, assignedToUid, taskId,
                     targetItemCode, targetQuantity, currentQuantity, linkTarget, linkLabel, recipeSignature,
-                    assignment, linkDescription, extraInfo));
+                    assignment, linkDescription, extraInfo, date, repeatYearly));
             }
 
             // Every accepted version appends the title after the block list.

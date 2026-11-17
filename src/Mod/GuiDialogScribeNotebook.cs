@@ -137,7 +137,7 @@ public class GuiDialogScribeNotebook : ScribeDialogBase
         if (_manualDraftId is { } draftId)
         {
             rowContents.Add(new ScribeManualHistoryRow(
-                entryId: draftId, actorName: myName, inGameDate: NotebookHost.FormatDate(capi.World),
+                entryId: draftId, actorName: myName, inGameDate: NotebookHost.FormatDateFromTimestamp(capi.World, capi.World.Calendar.TotalDays, DateOrder),
                 detailText: _manualLiveText.GetValueOrDefault(draftId, ""), isAuthor: true, autoFocus: autoFocusDraft,
                 focusNode: _manualFocusNodes[draftId], focusBorderColor: InputFocusBorderColor(colors),
                 kindStyle: kindStyle, dateStyle: dateStyle, bodyStyle: bodyStyle, colors: colors,
@@ -155,7 +155,7 @@ public class GuiDialogScribeNotebook : ScribeDialogBase
                 bool isAuthor = entry.ActorName == myName;
                 Guid entryId = entry.EntryId;
                 rowContents.Add(new ScribeManualHistoryRow(
-                    entryId: entryId, actorName: entry.ActorName, inGameDate: HistoryDisplay.Date(entry, capi.World),
+                    entryId: entryId, actorName: entry.ActorName, inGameDate: HistoryDisplay.Date(entry, capi.World, DateOrder),
                     detailText: isAuthor ? _manualLiveText.GetValueOrDefault(entryId, entry.Detail) : entry.Detail,
                     isAuthor: isAuthor, autoFocus: false,
                     focusNode: isAuthor ? _manualFocusNodes[entryId] : null, focusBorderColor: InputFocusBorderColor(colors),
@@ -178,7 +178,7 @@ public class GuiDialogScribeNotebook : ScribeDialogBase
                         new Expanded(
                             new Padding(EdgeInsets.Only(left: 6f), new Text(KindLabel(entry), kindStyle)),
                             flex: 1),
-                        new Text(HistoryDisplay.Date(entry, capi.World), dateStyle),
+                        new Text(HistoryDisplay.Date(entry, capi.World, DateOrder), dateStyle),
                     }),
                     new Padding(EdgeInsets.Only(left: 8f),
                         new Text(HistoryDisplay.Body(entry), bodyStyle)),

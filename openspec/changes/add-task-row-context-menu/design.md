@@ -115,7 +115,8 @@ labels in cuneiform on the Tablet. It has no Escape handling.
   and `base`: Escape closes the menu and is consumed, so the dialog stays open. The menu also closes on view
   switch, dialog close and when its row scrolls out of the viewport.
 
-- **Later toggle entries.** Change 3 adds a "Repeat yearly" checkbox entry. The entry model leaves room for
+- **Later toggle entries.** Change 3 adds a "Repeat yearly" checkbox entry, shown only on a dated, completable
+  row, so the gating function will take "row has a date" as one more input. The entry model leaves room for
   a toggle kind that does not close the menu. Only action entries close on choose.
 
 ## Risks / Trade-offs

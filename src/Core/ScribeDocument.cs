@@ -129,7 +129,9 @@ public sealed class ScribeDocument
         linkLabel: block.LinkLabel,
         recipeSignature: block.RecipeSignature,
         assignment: block.Assignment?.Clone(),
-        linkDescription: block.LinkDescription);
+        linkDescription: block.LinkDescription,
+        date: block.Date,
+        repeatYearly: block.RepeatYearly);
 
     /// <summary>The index a document-level create uses for <paramref name="pos"/>: 0 for Top,
     /// <see cref="Blocks"/>.Count for Bottom. Unknown values follow

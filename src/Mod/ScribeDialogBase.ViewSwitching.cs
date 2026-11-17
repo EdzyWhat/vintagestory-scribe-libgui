@@ -354,7 +354,7 @@ public abstract partial class ScribeDialogBase
                 TaskId: b.TaskId, Text: b.Text, Depth: b.Depth,
                 State: b.Assignment!.State, AssignerUid: b.Assignment.AssignerUid,
                 TargetPlayerUid: b.Assignment.TargetPlayerUid,
-                AssignedDate: AssignmentDisplay.Date(b.Assignment.AssignedDate, b.Assignment.AssignedTimestamp, capi.World),
+                AssignedDate: AssignmentDisplay.Date(b.Assignment.AssignedDate, b.Assignment.AssignedTimestamp, capi.World, DateOrder),
                 Seen: b.Assignment.Seen, ViewerRole: ScribeAssignmentActor.Assignee,
                 DisplayName: ResolveRowItem(b).Name,
                 AcceptedDate: OptionalAssignmentDate(b.Assignment.AcceptedDate, b.Assignment.AcceptedTimestamp),
@@ -467,7 +467,7 @@ public abstract partial class ScribeDialogBase
         ScribeAssignment? assignment)
         => assignment is { State: ScribeAssignmentState.Accepted }
             ? (ResolvePlayerNameForInbox(assignment.AssignerUid),
-                AssignmentDisplay.Date(assignment.AssignedDate, assignment.AssignedTimestamp, capi.World),
+                AssignmentDisplay.Date(assignment.AssignedDate, assignment.AssignedTimestamp, capi.World, DateOrder),
                 OptionalAssignmentDate(assignment.AcceptedDate, assignment.AcceptedTimestamp))
             : (null, null, null);
 
@@ -475,7 +475,7 @@ public abstract partial class ScribeDialogBase
     /// stored identity string (null stays null).</summary>
     private protected string? OptionalAssignmentDate(string? baked, double? timestamp)
         => timestamp is { } ts
-            ? AssignmentDisplay.Date(baked ?? "", ts, capi.World)
+            ? AssignmentDisplay.Date(baked ?? "", ts, capi.World, DateOrder)
             : baked;
 
     /// <summary>Sends a Decline/Cancel/Discard request (<see cref="ScribeAssignmentActionMessage"/>). Accept uses
@@ -545,7 +545,7 @@ public abstract partial class ScribeDialogBase
                 TaskId: b.TaskId, Text: b.Text, Depth: b.Depth,
                 State: b.Assignment!.State, AssignerUid: b.Assignment.AssignerUid,
                 TargetPlayerUid: b.Assignment.TargetPlayerUid,
-                AssignedDate: AssignmentDisplay.Date(b.Assignment.AssignedDate, b.Assignment.AssignedTimestamp, capi.World),
+                AssignedDate: AssignmentDisplay.Date(b.Assignment.AssignedDate, b.Assignment.AssignedTimestamp, capi.World, DateOrder),
                 Seen: b.Assignment.Seen, ViewerRole: ScribeAssignmentActor.Assigner,
                 DisplayName: ResolveRowItem(b).Name,
                 AcceptedDate: OptionalAssignmentDate(b.Assignment.AcceptedDate, b.Assignment.AcceptedTimestamp),

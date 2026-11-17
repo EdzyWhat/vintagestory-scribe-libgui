@@ -15,7 +15,7 @@ Calendar Handbook (TheJimmyBlaze) and Wall Calendar (nikok).
   If the stored day is past the end of its month, it is shown clamped to the last day. This only
   matters if a world's days per month changes, which is not expected.
 - **Displayed years count from 1** everywhere in Scribe, derived from `Calendar.TotalDays`, never the
-  game's 1386-based `Calendar.Year`. The date text the server stores as an identity (Guest Book dedup,
+  game's `Calendar.Year`, which counts from 0. The date text the server stores as an identity (Guest Book dedup,
   History, assignments) keeps its existing form and is never shown when a timestamp exists. Dates stored as
   text before timestamps existed keep their stored text. The year view runs from Year 1 to 10 years ahead
   of today.
@@ -61,7 +61,9 @@ Calendar Handbook (TheJimmyBlaze) and Wall Calendar (nikok).
 - **Reminders are computed on the client** from the pin snapshot, which gains the task's date.
 
 ### Repeats
-- **"Repeat yearly" is a checkbox in the row menu.** Checking off a repeating task marks it done.
+- **"Repeat yearly" is a checkbox in the row menu, shown only on a row that has a date** (and can be
+  completed: never on notes or quest objectives). An undated row's menu offers Add date instead.
+  Clearing the date removes the entry and the flag. Checking off a repeating task marks it done.
   Once its date has passed, its date moves to the next occurrence on or after today and the check
   clears. Change 4 applies this lazily on the server whenever a document is loaded or viewed, so
   documents left unloaded roll over correctly later. It stays one task, and

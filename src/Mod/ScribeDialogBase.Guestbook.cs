@@ -157,11 +157,11 @@ public abstract partial class ScribeDialogBase
     /// can't appear in either. Keys the row's <see cref="ValueKey{T}"/> and its focus node.</summary>
     private static string GuestbookNoteKey(GuestbookEntry entry) => $"{entry.PlayerName}\0{entry.InGameDate}";
 
-    /// <summary>Viewer-locale calendar date when the entry carries a real timestamp; otherwise the
+    /// <summary>Viewer-locale calendar date, in the viewer's Date order, when the entry carries a real timestamp; otherwise the
     /// stored identity string (v1 blobs have no timestamp to rebuild from).</summary>
     private string GuestbookDisplayDate(GuestbookEntry entry)
         => entry.InGameTimestamp is { } ts
-            ? NotebookHost.FormatDateFromTimestamp(capi.World, ts)
+            ? NotebookHost.FormatDateFromTimestamp(capi.World, ts, DateOrder)
             : entry.InGameDate;
 
     /// <summary>Keeps <see cref="_guestbookNoteFocusNodes"/> in sync with the local player's own entries (add new,

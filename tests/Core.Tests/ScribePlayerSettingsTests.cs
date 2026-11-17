@@ -216,6 +216,21 @@ public class ScribePlayerSettingsTests
     }
 
     [Fact]
+    public void Default_DateOrder_IsLanguageDefault_AndChoicesSurviveNormalize()
+    {
+        Assert.Equal(ScribeDateOrder.LanguageDefault, new ScribePlayerSettings().DateOrder);
+        Assert.Equal(ScribeDateOrder.MonthDayYear,
+            new ScribePlayerSettings { DateOrder = ScribeDateOrder.MonthDayYear }.Normalized().DateOrder);
+    }
+
+    [Fact]
+    public void NormalizeDateOrder_Unknown_FallsBackToLanguageDefault()
+    {
+        Assert.Equal(ScribeDateOrder.LanguageDefault,
+            new ScribePlayerSettings { DateOrder = (ScribeDateOrder)99 }.Normalized().DateOrder);
+    }
+
+    [Fact]
     public void Default_PinInsert_IsBottom()
     {
         Assert.Equal(ScribePinInsert.Bottom, new ScribePlayerSettings().PinInsert);

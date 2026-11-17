@@ -219,4 +219,55 @@ public class ScribeDocumentTsvCodecTests
 
         Assert.Equal(ScribeDocumentCodec.MaxBlocks, doc!.Blocks.Count);
     }
+
+    [Fact]
+    public void RoundTrip_PlainTaskKeepsDateAndRepeat()
+    {
+        var original = SampleDocument();
+        original.Blocks[0].Date = ScribeDate.Create(3, 5, 25);
+        original.Blocks[0].RepeatYearly = true;
+        original.AddTask("One-off");
+        original.Blocks[^1].Date = ScribeDate.Create(1, 2, 3);
+
+        string tsv = ScribeDocumentTsvCodec.Serialize(original);
+        Assert.Contains("date:3-5-25,yearly", tsv);
+        Assert.True(ScribeDocumentTsvCodec.TryDeserialize(tsv, out var restored));
+
+        Assert.Equal(ScribeDate.Create(3, 5, 25), restored!.Blocks[0].Date);
+        Assert.True(restored.Blocks[0].RepeatYearly);
+        Assert.Equal(ScribeDate.Create(1, 2, 3), restored.Blocks[^1].Date);
+        Assert.False(restored.Blocks[^1].RepeatYearly);
+    }
+
+    [Fact]
+    public void RoundTrip_DatedTrackerImportsUndated_WithItemAndCountIntact()
+    {
+        var original = new ScribeDocument();
+        original.AddTracker("game:ingot-copper", 8);
+        original.Blocks[0].Date = ScribeDate.Create(3, 5, 25);
+
+        string tsv = ScribeDocumentTsvCodec.Serialize(original);
+        Assert.True(ScribeDocumentTsvCodec.TryDeserialize(tsv, out var restored));
+
+        var tracker = restored!.Blocks[0];
+        Assert.Equal(ScribeBlockKind.Tracker, tracker.Kind);
+        Assert.Equal("game:ingot-copper", tracker.TargetItemCode);
+        Assert.Equal(8, tracker.TargetQuantity);
+        Assert.Null(tracker.Date);
+    }
+
+    [Theory]
+    [InlineData("date:3-13-1")]
+    [InlineData("date:soon")]
+    [InlineData("date:")]
+    [InlineData("3-5-25")]
+    public void Deserialize_MalformedTaskDateCell_ImportsUndated(string special)
+    {
+        string tsv = "Type\tDone\tText\tSpecial\tCount\tDepth\ntask\t\tChop wood\t" + special + "\t\t0\n";
+
+        Assert.True(ScribeDocumentTsvCodec.TryDeserialize(tsv, out var doc));
+        Assert.Equal("Chop wood", doc!.Blocks[0].Text);
+        Assert.Null(doc.Blocks[0].Date);
+        Assert.False(doc.Blocks[0].RepeatYearly);
+    }
 }

@@ -279,6 +279,29 @@ Pre-v13 documents stop before the field and leave `AssignedTimestamp` null — t
 baked `AssignedDate` identity string. Covered by `TryDeserialize_V12Bytes_Succeeds_AndDefaultsAssignedTimestampNull`
 and `BinaryCodecRoundTripsAssignedTimestampIncludingZero`.
 
+### Worked example: v13 → v14 (`ScribeDocumentCodec`)
+
+v14 appends an optional per-block date after the v13 assigned timestamp: `hasDate`, then (only when true)
+`int year`, `byte month`, `byte day` and `bool repeatYearly`. The values are read through
+`ScribeDate.TryCreate` (year 1–9999, month 1–12, day 1–255; a day past its month's end is valid and clamped
+at use). An out-of-range stored date loads as **undated with the repeat flag cleared**, and because the field
+has a fixed size the rest of the document still reads normally. The repeat flag is written only with a date
+(`ScribeBlock` clears it whenever the date is cleared), so nothing is lost.
+
+```text
+// v13 per-block: ...v12... | hasAssignedTimestamp | [assignedTimestamp]
+// v14 per-block: ...v13... | hasDate | [year | month | day | repeatYearly]
+```
+
+Pre-v14 documents stop before the field and load undated. Covered by
+`TryDeserialize_V13Bytes_Succeeds_AndDefaultsDateNull`, the null-date assertions in the v5, v6, v7, v11 and v12
+older-blob tests, `RoundTrip_PreservesDateAndRepeatYearly` and
+`TryDeserialize_InvalidStoredDate_LoadsUndated_AndKeepsTheRestOfTheDocument`.
+
+Rebuild paths: `ScribeDocument.CloneBlockWithNewTaskId` (Scriptorium replace and append) and the import
+validator's Degrade keep the date. The Assignment Desk capture and assignment placement deliberately build
+blocks without one (assignments carry no dates).
+
 ### Worked example: v8 → v9 (`ScribeAssignmentStore`)
 
 v9 appends eight optional numeric timestamps after the v8 redirect strings, one per existing date
@@ -549,8 +572,11 @@ Two properties make them safe to evolve, and both differ from the binary codecs'
 
 ### JSON: a version window, extra fields ignored
 
-- `ScribeDocumentJsonCodec.Version` (currently **1**) is a single `"v"` counter, and `MinVersion`
-  (currently **1**) is the oldest `v` still accepted. `TryDeserialize` rejects any payload with
+- `ScribeDocumentJsonCodec.Version` (currently **3**) is a single `"v"` counter, and `MinVersion`
+  (currently **1**) is the oldest `v` still accepted. v2 added the optional `extraInfo` key; v3 added the
+  optional `date` (`"Y-M-D"`, for example `"3-5-25"`) and `repeatYearly` keys on every kind, written only when
+  set. A malformed, wrong-typed or out-of-range `date` imports undated, and `repeatYearly` without a valid
+  `date` reads as not repeating; neither fails the import. `TryDeserialize` rejects any payload with
   `v < MinVersion` — **and a payload with no `v` at all parses as `v = 0` and is rejected**, so a
   foreign JSON object (or hand-typed junk that happens to be valid JSON) can't slip in as an empty
   document.
@@ -575,7 +601,10 @@ Type · Done · Text · Special · Count · Depth
 
 - **The six columns are frozen.** New per-kind richness goes INSIDE the `Special` cell as a
   comma-separated payload the kind parses itself (a future map block's `x,y,z,icon,color` is the worked
-  example) — **never a new column.** This keeps the table narrow and keeps old and new exports mutually
+  example; a plain task's date is the shipped one, as `date:Y-M-D` with an optional `,yearly`) — **never a
+  new column.** Tracker, Link, Craft and quest-objective rows already use `Special` for their reference, so
+  their dates are **omitted by design** from TSV (the JSON lane carries them); a malformed date cell imports
+  undated. This keeps the table narrow and keeps old and new exports mutually
   loadable in a spreadsheet.
 - The header is matched **by name, case-insensitive**, so column *order* is cosmetic and **unknown
   trailing columns are ignored** while **missing columns default**. That is the TSV analogue of the JSON
@@ -591,11 +620,11 @@ Type · Done · Text · Special · Count · Depth
 
 | Codec | Kind | Current | Accepted | Migration method / stability rule |
 |---|---|---|---|---|
-| `ScribeDocumentCodec` | binary (save/sync) | v13 | v5–v13 (progressive reads) | `ApplyPreV6Defaults` — defaults Tracker/Link per-block fields (v6) + guide-page `LinkLabel` (v7) + Craft `RecipeSignature` (v8); v9 assignment then reads behind `version >= 9`, v10 `TargetPlayerUid` behind `version >= 10`, v11 `LinkDescription` behind `version >= 11`, v12 `ExtraInfo` behind `version >= 12`, v13 assigned timestamp (after ExtraInfo, not inside the assignment blob) behind `version >= 13` |
+| `ScribeDocumentCodec` | binary (save/sync) | v14 | v5–v14 (progressive reads) | `ApplyPreV6Defaults` — defaults Tracker/Link per-block fields (v6) + guide-page `LinkLabel` (v7) + Craft `RecipeSignature` (v8); v9 assignment then reads behind `version >= 9`, v10 `TargetPlayerUid` behind `version >= 10`, v11 `LinkDescription` behind `version >= 11`, v12 `ExtraInfo` behind `version >= 12`, v13 assigned timestamp (after ExtraInfo, not inside the assignment blob) behind `version >= 13`, v14 optional date + repeat flag behind `version >= 14` (an invalid stored date reads as undated) |
 | `ScribeAssignmentStore` | binary (save/sync) | v9 | v1–v9 (progressive reads) | v2 recipe signature, v3 `BatchId` (legacy v1/v2 synthesized via `DeriveLegacyBatchId`), v4–v8 optional strings (transition dates, destination label, hidden-flags, received date, redirect), v9 eight optional timestamps (`bool has` + `double`; missing = null, `0` is a real day) |
 | `HistoryStore` | binary (item attribute) | v4 | v1–v4 (progressive reads) | `ApplyV2ToV3Migrations` — assigns a synthetic negative-sequence `InGameTimestamp` (preserving existing order) to any v1/v2 payload; `ApplyV3ToV4Migrations` — marks v1–v3 entries `Baked` with empty fact fields; v2's `EntryId` reads behind `version >= 2`, v3's timestamp behind `version >= 3`, v4's schema/facts behind `version >= 4` |
 | `PendingHistoryStore` | binary (savegame) | v2 | v1–v2 (progressive reads) | SPHS v1 stores the SHST-v3 per-entry layout (baked sentences); v2 matches SHST v4 (schema + live facts). A v3+ pending blob is rejected (fail-safe empty load) |
 | `GuestbookStore` | binary (block entity) | v2 | v1–v2 (progressive reads) | v1 is name + identity date string + note (no timestamp); v2 appends `bool hasTimestamp` + optional `double` so a missing timestamp (`null`) is distinct from real `TotalDays == 0`. A v0 or v3+ blob is rejected (fail-safe empty load) |
 | `ScribePinCodec` | binary (save/sync) | v9 | v1–v9 (progressive reads) | `ApplyPreV2Defaults` — seeds Kind (→Task), LinkTarget (→null), TargetItemCode (→null), quantities, LinkLabel (→null), Depth (→0); v2–v9 fields then read behind `version >=` thresholds (v9's assigned/accepted timestamps default null on a pre-v9 pin) |
-| `ScribeDocumentJsonCodec` | text (clipboard) | v1 | v1+ (`v >= MinVersion`; missing `v` → rejected) | Version window; unknown keys ignored on read. Add a field → append to DTO + bump `Version`; raise `MinVersion` only if an old payload becomes unreadable |
-| `ScribeDocumentTsvCodec` | text (clipboard) | — (no version) | any header with the known columns (by name) | Fixed 6 columns forever (`Type · Done · Text · Special · Count · Depth`); new richness goes in the comma-packed `Special` cell, never a new column; unknown columns ignored, missing columns defaulted |
+| `ScribeDocumentJsonCodec` | text (clipboard) | v3 | v1+ (`v >= MinVersion`; missing `v` → rejected) | Version window; unknown keys ignored on read. v2 `extraInfo`, v3 `date` + `repeatYearly` (malformed dates import undated). Add a field → append to DTO + bump `Version`; raise `MinVersion` only if an old payload becomes unreadable |
+| `ScribeDocumentTsvCodec` | text (clipboard) | — (no version) | any header with the known columns (by name) | Fixed 6 columns forever (`Type · Done · Text · Special · Count · Depth`); a plain task's date rides in `Special` as `date:Y-M-D[,yearly]` (other kinds' dates are omitted); new richness goes in the comma-packed `Special` cell, never a new column; unknown columns ignored, missing columns defaulted |

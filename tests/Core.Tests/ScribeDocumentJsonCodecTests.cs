@@ -200,4 +200,64 @@ public class ScribeDocumentJsonCodecTests
 
         Assert.Equal(ScribeDocument.DefaultTitle, doc!.Title);
     }
+
+    [Fact]
+    public void RoundTrip_PreservesDatesOnSeveralKinds()
+    {
+        var original = SampleDocument();
+        original.Blocks[0].Date = ScribeDate.Create(3, 5, 25); // task
+        original.Blocks[0].RepeatYearly = true;
+        original.Blocks[1].Date = ScribeDate.Create(1, 1, 1);  // note
+        original.Blocks[2].Date = ScribeDate.Create(12, 12, 9); // tracker
+
+        string json = ScribeDocumentJsonCodec.Serialize(original);
+        Assert.True(ScribeDocumentJsonCodec.TryDeserialize(json, out var restored));
+
+        Assert.Equal(ScribeDate.Create(3, 5, 25), restored!.Blocks[0].Date);
+        Assert.True(restored.Blocks[0].RepeatYearly);
+        Assert.Equal(ScribeDate.Create(1, 1, 1), restored.Blocks[1].Date);
+        Assert.False(restored.Blocks[1].RepeatYearly);
+        Assert.Equal(ScribeDate.Create(12, 12, 9), restored.Blocks[2].Date);
+        Assert.Null(restored.Blocks[3].Date);
+    }
+
+    [Fact]
+    public void Serialize_UndatedBlocks_WriteNoDateKeys()
+    {
+        string json = ScribeDocumentJsonCodec.Serialize(SampleDocument());
+
+        Assert.DoesNotContain("\"date\"", json);
+        Assert.DoesNotContain("repeatYearly", json);
+        Assert.Contains("\"v\": 3", json);
+    }
+
+    [Fact]
+    public void Deserialize_V2Payload_ImportsUndated()
+    {
+        string json = """
+        { "v": 2, "title": "Old export", "blocks": [ { "kind": "task", "text": "Chop wood" } ] }
+        """;
+
+        Assert.True(ScribeDocumentJsonCodec.TryDeserialize(json, out var doc));
+        Assert.Null(doc!.Blocks[0].Date);
+        Assert.False(doc.Blocks[0].RepeatYearly);
+    }
+
+    [Theory]
+    [InlineData("\"date\": \"not a date\", \"repeatYearly\": true")]
+    [InlineData("\"date\": \"3-13-1\", \"repeatYearly\": true")]
+    [InlineData("\"date\": \"0-5-1\"")]
+    [InlineData("\"date\": 12345")]
+    [InlineData("\"repeatYearly\": true")]
+    [InlineData("\"date\": \"3-5-1\", \"repeatYearly\": \"yes\"")]
+    public void Deserialize_MalformedDateOrLoneRepeat_ImportsUndatedOrNonRepeating(string fields)
+    {
+        string json = "{ \"v\": 3, \"blocks\": [ { \"kind\": \"task\", \"text\": \"Chop wood\", " + fields + " }, "
+            + "{ \"kind\": \"task\", \"text\": \"Second\" } ] }";
+
+        Assert.True(ScribeDocumentJsonCodec.TryDeserialize(json, out var doc));
+        Assert.False(doc!.Blocks[0].RepeatYearly);
+        Assert.Equal("Second", doc.Blocks[1].Text);
+        if (!fields.Contains("3-5-1")) Assert.Null(doc.Blocks[0].Date);
+    }
 }

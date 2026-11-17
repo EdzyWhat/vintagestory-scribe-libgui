@@ -964,3 +964,16 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
 - [x] `000000eb` **Resize and rescale.** With a dialog and the HUD open, resize the game window and change GUI scale. Confirm layout and hit areas follow, and the HUD stays visible and in position.
       *(bump-libgui-4-0-0 4.6)*
       - **Confirmed 2026-10-26**: window resize and GUI scale change with a dialog and the HUD open; layout, hit areas and HUD position all followed.
+
+## add-dated-task-core
+
+- [ ] `000000ec` **Old save loads unchanged.** Load a world saved before this update that has a Notebook and a Lectern with tasks of several kinds. Confirm every task, note, tracker and link is still there with the same text, done state and pins.
+      *(add-dated-task-core 5.2)*
+- [ ] `000000ed` **Each Date order shows correctly.** In Scribe Settings > Window Appearance, step Date order through Language default, Day-Month-Year, Month-Day-Year and Year-Month-Day. Each time, check a History entry, a Guest Book visit, an Inbox assignment and a Pin Tab assignment tooltip. Confirm all four use the chosen order and the same year.
+      *(add-dated-task-core 5.2)*
+- [ ] `000000ee` **Date order changes live.** Open a Notebook on its History tab and a Lectern on its Guest Book or Pin Tab, then change Date order in Settings without closing them. Confirm the open views show the new order immediately.
+      *(add-dated-task-core 4.4)*
+- [ ] `000000ef` **Draft History preview counts years from 1.** In a Notebook's History tab, start a manual entry. Confirm the draft's date shows the same year as the saved entries below it (Year 1 in a world's first year), not Year 0.
+      *(add-dated-task-core 5.2)*
+- [ ] `000000f0` **No duplicate Guest Book entry after upgrading.** Visit a Lectern on an older Scribe build, update to this build, and visit the same Lectern again on the same in-game day. Confirm the Guest Book still has one entry for you that day.
+      *(add-dated-task-core 5.2)*

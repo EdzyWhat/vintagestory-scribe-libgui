@@ -288,39 +288,28 @@ public class NotebookHost : IScribeDocumentHost, IHistoryRecordable
         return bytes;
     }
 
-    internal static string FormatDate(ICoreServerAPI sapi) => FormatDate(sapi.World);
-
-    /// <summary>Client-side date formatter, used to preview a pending Manual entry draft before the server stamps it.</summary>
-    internal static string FormatDate(IWorldAccessor world)
+    /// <summary>The server's identity stamp for today: the date text stored as <c>InGameDate</c> on History
+    /// entries, Guest Book visits, assignments and pins, where Guest Book deduplication and pin dirty-checks
+    /// compare it. Its form never changes (<c>scribe:date-format</c>, the game's <c>Calendar.Year</c>, which
+    /// counts from 0, and the server's language) and never reads any player's Date order. Players see these dates through
+    /// <see cref="FormatDateFromTimestamp"/>, rebuilt from the timestamp stored beside them.</summary>
+    internal static string FormatDate(ICoreServerAPI sapi)
     {
-        var cal = world.Calendar;
+        var cal = sapi.World.Calendar;
         int dayOfMonth = (int)(cal.TotalDays % cal.DaysPerMonth) + 1;
-        return FormatCalendarDate(dayOfMonth, cal.MonthName, cal.Year);
+        return Lang.Get("scribe:date-format", dayOfMonth, Lang.Get("month-" + cal.MonthName), cal.Year);
     }
 
-    /// <summary>Builds the in-game date string through the localizable <c>scribe:date-format</c> template
-    /// ({0}=day, {1}=localized month, {2}=year). Every history/guestbook date stamp routes through here.</summary>
-    internal static string FormatCalendarDate(int dayOfMonth, EnumMonth monthName, int year)
-        => Lang.Get("scribe:date-format", dayOfMonth, Lang.Get("month-" + monthName), year);
-
-    /// <summary>Formats a stored <c>Calendar.TotalDays</c> timestamp in the viewing client's locale
-    /// (clamped at 0; same math as <see cref="FormatDateDaysAgo"/>).</summary>
-    internal static string FormatDateFromTimestamp(IWorldAccessor world, double totalDays)
-    {
-        var cal = world.Calendar;
-        totalDays = Math.Max(0, totalDays);
-        int monthsPerYear = Math.Max(1, cal.DaysPerYear / cal.DaysPerMonth);
-        int dayOfMonth = (int)(totalDays % cal.DaysPerMonth) + 1;
-        int monthIndex = (int)(totalDays / cal.DaysPerMonth) % monthsPerYear + 1;
-        int year = (int)(totalDays / cal.DaysPerYear) + 1;
-        var monthName = (EnumMonth)monthIndex;
-        return FormatCalendarDate(dayOfMonth, monthName, year);
-    }
+    /// <summary>Formats a stored <c>Calendar.TotalDays</c> timestamp for display in the viewing client's
+    /// language and <paramref name="order"/>, with years counted from 1 (see <see cref="ScribeWorldCalendar"/>).
+    /// Negative timestamps clamp to the world's first day.</summary>
+    internal static string FormatDateFromTimestamp(IWorldAccessor world, double totalDays, ScribeDateOrder order)
+        => ScribeWorldCalendar.Format(world, ScribeWorldCalendar.FromTotalDays(world, totalDays), order);
 
     /// <summary>Formats the date <paramref name="daysAgo"/> in-game days before now (clamped at 0), so seeded
     /// demo entries span multiple days. Display-only.</summary>
     internal static string FormatDateDaysAgo(ICoreServerAPI sapi, int daysAgo)
-        => FormatDateFromTimestamp(sapi.World, CalendarTotalDaysAgo(sapi, daysAgo));
+        => FormatDateFromTimestamp(sapi.World, CalendarTotalDaysAgo(sapi, daysAgo), ScribeDateOrder.LanguageDefault);
 
     /// <summary>The raw <c>Calendar.TotalDays</c> <paramref name="daysAgo"/> days before now (clamped at 0): the
     /// sortable counterpart of <see cref="FormatDateDaysAgo"/> for seeded entries.</summary>

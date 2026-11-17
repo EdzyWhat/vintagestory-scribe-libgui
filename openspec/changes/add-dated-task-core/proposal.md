@@ -23,7 +23,7 @@ player's date order. Building this first, as pure logic with tests, keeps the la
   existing History, Guest Book, Inbox, Task Notice and pin tooltip dates, and updates open views live.
 - **Displayed years count from 1 everywhere in Scribe.** Every displayed date is built through one calendar
   adapter from `Calendar.TotalDays`. The draft History preview, the only display that used the game's
-  1386-based year, moves onto that rule.
+  0-based `Calendar.Year`, moves onto that rule.
 - **Stored identity dates do not change.** The date text the server stores as an identity (Guest Book
   dedup, History, assignments, pins) keeps its current form and never reads Date order, so no duplicate
   Guest Book entries appear on upgrade. Dates stored as text before timestamps existed keep showing their

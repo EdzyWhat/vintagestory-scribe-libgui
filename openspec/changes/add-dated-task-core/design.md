@@ -11,16 +11,17 @@ Dates today exist only as text and timestamps, in two roles:
 - **Identity stamps.** `NotebookHost.FormatDate(sapi)` runs on the server and produces the date text
   stored as `InGameDate` on History entries, Guest Book visits (deduplicated on `(PlayerName, InGameDate)`
   in `GuestbookStore`), assignment transitions and pin snapshots (pin dirty-checking compares them). It
-  uses `Calendar.Year`, which starts at 1386, in the server's language.
+  uses `Calendar.Year`, which counts whole years from 0, in the server's language.
 - **Display.** Where a numeric `Calendar.TotalDays` timestamp was stored alongside the text, the viewing
   client rebuilds the date with `FormatDateFromTimestamp`, which counts years from 1, in its own language
   through `scribe:date-format`. Rows stored before timestamps existed show their stored text. The History
-  draft preview (`GuiDialogScribeNotebook`) calls `FormatDate(capi.World)` directly, so it shows 1386.
+  draft preview (`GuiDialogScribeNotebook`) calls `FormatDate(capi.World)` directly, so it shows Year 0 in a world's first year.
 
 `ScribePlayerSettings` is client-local and never synced, so the server never knows a player's preferences.
 
 Vintage Story facts that shape this: a year is always 12 months; days per month is a single world setting;
-there are no weekdays; `IGameCalendar.Year` starts at 1386 (`IGameCalendar.StartYear`); `TotalDays` counts
+there are no weekdays; `IGameCalendar.Year` counts from 0 despite its doc-comment and the
+`IGameCalendar.StartYear` (1386) constant, which only the solar math uses; `TotalDays` counts
 from January 1st of the first year, and a world starts part-way through it.
 
 ## Goals / Non-Goals
@@ -39,15 +40,16 @@ from January 1st of the first year, and a world starts part-way through it.
 
 ## Decisions
 
-- **`ScribeDate` is a value type of (Year >= 1, Month 1-12, Day >= 1).** Stored as written, never as a day
+- **`ScribeDate` is a value type of (Year 1-9999, Month 1-12, Day 1-255).** The day cap matches the
+  byte the binary save holds it in. Stored as written, never as a day
   count, so its label stays the same if the calendar shape changes. (Today's date is also derived from
   `TotalDays`, so a days-per-month change still moves "now" relative to stored dates; the stored label just
   stays readable.) `ScribeDate.TryCreate` rejects out-of-range values and is the only way codecs build one.
   Alternative: store `TotalDays`. Rejected because a shape change would relabel every stored date.
 
 - **`ScribeBlock.Date` is nullable plus a separate `RepeatYearly` bool, on any kind.** Both are constructor
-  parameters, defaulting to null and false. A null date is an undated block. `WithDate(null)` also clears
-  `RepeatYearly`, so the flag never exists without a date and the codec's "flag only when `hasDate`" rule
+  parameters, defaulting to null and false. A null date is an undated block. Setting `Date` to null also clears
+  `RepeatYearly` (and the flag cannot be set without a date), so the flag never exists without a date and the codec's "flag only when `hasDate`" rule
   loses nothing. Only plain tasks get date UI in later changes; the field is on every kind so the model
   doesn't have to change when more kinds get dates.
   Alternative: a new `Dated` kind. Rejected because turning a task into an event would change its kind,
@@ -125,13 +127,13 @@ from January 1st of the first year, and a world starts part-way through it.
   `Calendar.TotalDays`: year = whole years elapsed + 1, month and day from the remainder. It never uses
   `Calendar.Year`. This is the rule `FormatDateFromTimestamp` already follows. Dates stored as text before
   timestamps existed keep their stored text, which notebook-history already requires (no reverse-deriving).
-  Alternative: show the game's 1386-based year. Rejected for readability, by the author's decision.
+  Alternative: show the game's 0-based year, as vanilla's `PrettyDate` does. Rejected for readability, by the author's decision.
 
 ## Risks / Trade-offs
 
-- [Legacy rows without a timestamp show 1386-based years in the server's order] → Accepted and specified.
+- [Legacy rows without a timestamp show 0-based years in the server's order] → Accepted and specified.
   Those rows predate timestamps and are rare in current worlds.
-- [Identity text still contains 1386] → Accepted. It is never shown when a timestamp exists, and keeping it
+- [Identity text still uses the 0-based year] → Accepted. It is never shown when a timestamp exists, and keeping it
   avoids an upgrade-day duplicate and any migration.
 - [New save format is one-way] → Standard for every codec bump. Older-blob tests cover v13 and earlier.
 - [Nine new lang keys per locale] → Authored with the existing locale workflow. The locale checker

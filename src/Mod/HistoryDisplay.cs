@@ -17,9 +17,9 @@ internal static class HistoryDisplay
             HistoryEventKind.Death or HistoryEventKind.PvpKill
             or HistoryEventKind.BossKill or HistoryEventKind.TemporalStorm;
 
-    internal static string Date(HistoryEntry entry, IWorldAccessor world)
+    internal static string Date(HistoryEntry entry, IWorldAccessor world, ScribeDateOrder order)
         => entry.InGameTimestamp >= 0
-            ? NotebookHost.FormatDateFromTimestamp(world, entry.InGameTimestamp)
+            ? NotebookHost.FormatDateFromTimestamp(world, entry.InGameTimestamp, order)
             : entry.InGameDate;
 
     internal static string Body(HistoryEntry entry)

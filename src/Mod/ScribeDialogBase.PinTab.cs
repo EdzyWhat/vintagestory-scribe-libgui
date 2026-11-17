@@ -64,7 +64,7 @@ public abstract partial class ScribeDialogBase
                     Depth: p.Depth, IsAcceptedAssignment: p.IsAcceptedAssignment, ExtraInfo: p.ExtraInfo,
                     AssignerName: assignerName,
                     AssignedDate: p.IsAcceptedAssignment
-                        ? AssignmentDisplay.Date(p.AssignedDate, p.AssignedTimestamp, capi.World)
+                        ? AssignmentDisplay.Date(p.AssignedDate, p.AssignedTimestamp, capi.World, DateOrder)
                         : null,
                     AcceptedDate: p.IsAcceptedAssignment
                         ? OptionalAssignmentDate(p.AcceptedDate, p.AcceptedTimestamp)
