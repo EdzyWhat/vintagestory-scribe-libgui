@@ -121,13 +121,14 @@ Calendar Handbook (TheJimmyBlaze) and Wall Calendar (nikok).
   stays out of scope.
 - **Pin store downgrade safety.** Refuse to overwrite a pin store with a newer version (a mod downgrade on a
   world whose store is newer loads it empty and the next save replaces every player's pins).
-- **Pin store downgrade safety.** Refuse to overwrite a pin store with a newer version (a mod downgrade on a
-  world whose store is newer loads it empty and the next save replaces every player's pins).
 - **Per-task lead time and reminder time.**
 - **Month colors and seasonal art.**
 - **Event colors** (a small fixed palette that reads on Scribe's backdrops).
 - **Short month names**, only if full names do not fit.
-- **Due dates on assignments.**
+- **Dates on assigned tasks.** The assigner sets a due date that both the sender's and the recipient's copy
+  show as a separate chip beside the assignment info chip. The assignee cannot edit an assigned task at all,
+  including its date. Assignment placement and the Assignment Desk capture stop dropping the date;
+  `IsDatable` stops excluding assignments, but only the assigner can change the date.
 - **Sorting the HUD by date** as an option.
 - **Uneven month lengths** (Solar Years compatibility).
 

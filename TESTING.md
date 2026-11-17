@@ -1055,3 +1055,14 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
 - [ ] `00000113` **Chips only where they belong.** Confirm no chip on pinned notes, trackers, links or an orphaned pin, and none on the Pin Tab of a Tablet or the Assignment Desk. In a temporal-instability storm confirm the chip text is not corrupted.
 
 - [ ] `00000114` **Old pins catch up.** A pin made before this change shows no date until its document is next saved or the task is re-pinned (also for a Notebook you only read). Re-pin or save and confirm the chip appears.
+
+- [ ] `00000115` **Date a pin from the Pin Tab.** Right-click an undated pinned task on the Pin Tab: the menu lists Unpin, Add date, a separator and Delete. Add a date: the picker opens at today, and after Set the Pin Tab row, the HUD row and the task in its Notebook show the date. Right-click it again: Unpin, Change date, Clear date, separator, Delete, and Change date opens the picker at the pin's date. Clear date removes the chip everywhere.
+      *(add-pin-tab-dating 3.2)*
+
+- [ ] `00000116` **No Repeat yearly or date entries where they don't belong.** The Pin Tab menu has no Repeat yearly entry. An orphaned pin, a pinned note, tracker or link, and every row of a Tablet's or the Assignment Desk's Pin Tab, and a pin of a task from a carried Tablet shown on a Notebook's Pin Tab, offer no date entries. Leave the Pin Tab while the picker is open and confirm it closes; unpin the row while the picker is open and confirm it closes.
+      *(add-pin-tab-dating 2.3, 3.2)*
+
+- [ ] `00000117` **Pin Tab dating respects the editor lock.** With another player editing the pinned task's Lectern, set or clear its date from the Pin Tab: the locked message shows and the date does not change.
+      *(add-pin-tab-dating 3.2)*
+      - **Backlogged 2026-11-17**: "Locked by another player: I will playtest later."
+

@@ -56,12 +56,35 @@ public class ScribeDatingTests
     }
 
     [Fact]
-    public void ReadOnlyAndPinTab_NeverOfferDateEntries()
+    public void ReadOnly_NeverOffersDateEntries()
     {
         Assert.Equal(new[] { Pin },
             ScribeRowMenuEntries.For(ScribeRowMenuView.Read, readOnly: true, pinLive: true, isPinned: false, canDate: true, hasDate: false));
+    }
+
+    [Theory]
+    [InlineData(false, new[] { Unpin, AddDate, Delete })]
+    [InlineData(true, new[] { Unpin, ChangeDate, ClearDate, Delete })]
+    public void PinTab_CanDate_OffersTheDateGroupBetweenUnpinAndDelete(bool hasDate, ScribeRowMenuAction[] expected)
+    {
+        Assert.Equal(expected, ScribeRowMenuEntries.For(ScribeRowMenuView.PinTab, readOnly: false, pinLive: true,
+            isPinned: true, canDate: true, hasDate: hasDate, allowRepeat: false));
+    }
+
+    [Fact]
+    public void PinTab_CannotDate_OffersOnlyUnpinAndDelete()
+    {
         Assert.Equal(new[] { Unpin, Delete },
-            ScribeRowMenuEntries.For(ScribeRowMenuView.PinTab, readOnly: false, pinLive: true, isPinned: true, canDate: true, hasDate: true));
+            ScribeRowMenuEntries.For(ScribeRowMenuView.PinTab, readOnly: false, pinLive: true, isPinned: true,
+                canDate: false, hasDate: true, allowRepeat: false));
+    }
+
+    [Fact]
+    public void AllowRepeatFalse_OmitsRepeatYearlyEverywhere()
+    {
+        Assert.Equal(new[] { Edit, Pin, ChangeDate, ClearDate, Delete },
+            ScribeRowMenuEntries.For(ScribeRowMenuView.Read, readOnly: false, pinLive: true, isPinned: false,
+                canDate: true, hasDate: true, allowRepeat: false));
     }
 
     [Fact]

@@ -58,12 +58,15 @@ public static class ScribeRowMenuEntries
     /// except on the Pin Tab, whose Unpin is always available.</param>
     /// <param name="isPinned">Whether the row is currently pinned for the viewing player.</param>
     /// <param name="canDate">Whether the row can be dated here: the surface supports dates, the row is
-    /// datable and (in the read view) the document is editable. Never honored on the Pin Tab.</param>
+    /// datable and (in the read view) the document is editable. On the Pin Tab: the dialog supports dates and the
+    /// pin can be dated.</param>
     /// <param name="hasDate">Whether the row already has a date: offers Change date, Clear date and Repeat
     /// yearly instead of Add date.</param>
+    /// <param name="allowRepeat">Whether Repeat yearly is offered on a dated row. False on the Pin Tab, whose
+    /// pins carry no repeat flag.</param>
     public static IReadOnlyList<ScribeRowMenuAction> For(
         ScribeRowMenuView view, bool readOnly, bool pinLive, bool isPinned,
-        bool canDate = false, bool hasDate = false)
+        bool canDate = false, bool hasDate = false, bool allowRepeat = true)
     {
         var entries = new List<ScribeRowMenuAction>(7);
         switch (view)
@@ -71,23 +74,24 @@ public static class ScribeRowMenuEntries
             case ScribeRowMenuView.Read:
                 if (!readOnly) entries.Add(ScribeRowMenuAction.Edit);
                 if (pinLive) entries.Add(PinOrUnpin(isPinned));
-                if (!readOnly && canDate) AddDateGroup(entries, hasDate);
+                if (!readOnly && canDate) AddDateGroup(entries, hasDate, allowRepeat);
                 if (!readOnly) entries.Add(ScribeRowMenuAction.Delete);
                 break;
             case ScribeRowMenuView.Editor:
                 if (pinLive) entries.Add(PinOrUnpin(isPinned));
-                if (canDate) AddDateGroup(entries, hasDate);
+                if (canDate) AddDateGroup(entries, hasDate, allowRepeat);
                 entries.Add(ScribeRowMenuAction.Delete);
                 break;
             case ScribeRowMenuView.PinTab:
                 entries.Add(ScribeRowMenuAction.Unpin);
+                if (canDate) AddDateGroup(entries, hasDate, allowRepeat);
                 entries.Add(ScribeRowMenuAction.Delete);
                 break;
         }
         return entries;
     }
 
-    private static void AddDateGroup(List<ScribeRowMenuAction> entries, bool hasDate)
+    private static void AddDateGroup(List<ScribeRowMenuAction> entries, bool hasDate, bool allowRepeat)
     {
         if (!hasDate)
         {
@@ -96,7 +100,7 @@ public static class ScribeRowMenuEntries
         }
         entries.Add(ScribeRowMenuAction.ChangeDate);
         entries.Add(ScribeRowMenuAction.ClearDate);
-        entries.Add(ScribeRowMenuAction.RepeatYearly);
+        if (allowRepeat) entries.Add(ScribeRowMenuAction.RepeatYearly);
     }
 
     private static ScribeRowMenuAction PinOrUnpin(bool isPinned) =>

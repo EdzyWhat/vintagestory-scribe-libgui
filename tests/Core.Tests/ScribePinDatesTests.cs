@@ -50,6 +50,17 @@ public class ScribePinDatesTests
     }
 
     [Fact]
+    public void PinCanDate_AcceptsALiveTaskPinDatedOrNot()
+    {
+        var d = ScribeDate.Create(3, 5, 25);
+        Assert.True(ScribeDateRules.PinCanDate(Pin()));
+        Assert.True(ScribeDateRules.PinCanDate(Pin(date: d)));
+        Assert.False(ScribeDateRules.PinCanDate(Pin(orphaned: true)));
+        Assert.False(ScribeDateRules.PinCanDate(Pin(ScribeBlockKind.Text)));
+        Assert.False(ScribeDateRules.PinCanDate(Pin(ScribeBlockKind.Tracker, d)));
+    }
+
+    [Fact]
     public void ShouldRebuildForDayChange_ForwardAndBackward_OnlyWithADatedPin()
     {
         var yesterday = ScribeDate.Create(2, 6, 14);

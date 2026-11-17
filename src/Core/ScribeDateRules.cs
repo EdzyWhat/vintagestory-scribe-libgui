@@ -39,6 +39,11 @@ public static class ScribeDateRules
     public static bool PinShowsDate(ScribePinnedRef pin) =>
         pin.Kind == ScribeBlockKind.Task && pin.Date is not null && !pin.Orphaned;
 
+    /// <summary>Whether the Pin Tab offers date entries on a pin: a live (not orphaned) Task pin, dated or not.
+    /// The server re-checks the block, so a stale snapshot changes nothing.</summary>
+    public static bool PinCanDate(ScribePinnedRef pin) =>
+        pin.Kind == ScribeBlockKind.Task && !pin.Orphaned;
+
     /// <summary>Whether a surface that stays open across days rebuilds its date chips: the in-game day changed
     /// (forward or backward) since <paramref name="lastDay"/> and a displayed pin is dated.</summary>
     public static bool ShouldRebuildForDayChange(ScribeDate lastDay, ScribeDate currentDay, bool anyDatedDisplayed) =>

@@ -101,6 +101,31 @@ public class PinnedTaskDateScenarios : AtlasScenarioBase
         }
     }
 
+    // ── Dating from the Pin Tab ─────────────────────────────────────────────────────────────────────
+
+    [AtlasScenario(RollbackWorld = true)]
+    public async Task DateOperationsByIdentity_UpdateTheHoldersPin_AndAreRefusedWhileAnotherPlayerEdits()
+    {
+        var holder = await World.JoinPlayer("PinTabDateA");
+        var pinner = await World.JoinPlayer("PinTabDateB");
+        var (lectern, docId, taskId, _) = await SeedLectern(holder, World.Spawn.Offset(5, 0, 0));
+        Mod.SetPinForPlayer(pinner.Player, docId, taskId, pinned: true);
+
+        Mod.SetTaskDateForPlayer(holder.Player, docId, taskId, ScribeDateOperation.SetDate, 3, 5, 25);
+        Assert.Equal(ScribeDate.Create(3, 5, 25), PinOf(pinner, docId, taskId).Date);
+
+        Mod.SetTaskDateForPlayer(holder.Player, docId, taskId, ScribeDateOperation.SetDate, 4, 1, 2);
+        Assert.Equal(ScribeDate.Create(4, 1, 2), PinOf(pinner, docId, taskId).Date);
+
+        // The pinning player does not hold the editor lock, so the change is refused and the pin keeps its date.
+        Mod.SetTaskDateForPlayer(pinner.Player, docId, taskId, ScribeDateOperation.ClearDate);
+        Assert.Equal(ScribeDate.Create(4, 1, 2), lectern.Document.FindByTaskId(taskId)!.Date);
+        Assert.Equal(ScribeDate.Create(4, 1, 2), PinOf(pinner, docId, taskId).Date);
+
+        Mod.SetTaskDateForPlayer(holder.Player, docId, taskId, ScribeDateOperation.ClearDate);
+        Assert.Null(PinOf(pinner, docId, taskId).Date);
+    }
+
     // ── Refresh ─────────────────────────────────────────────────────────────────────────────────────
 
     [AtlasScenario(RollbackWorld = true)]

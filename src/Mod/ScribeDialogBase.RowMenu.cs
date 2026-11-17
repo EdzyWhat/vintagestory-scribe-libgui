@@ -50,10 +50,13 @@ public abstract partial class ScribeDialogBase
         bool pinLive = view != ScribeRowMenuView.Read || !ReadViewIsReadOnly || ReadViewCompletionAndPinLive;
         bool isPinned = view == ScribeRowMenuView.PinTab || IsPinnedForMe(taskId);
         var block = RowMenuBlock(view, taskId);
-        bool canDate = SupportsRowDates && view != ScribeRowMenuView.PinTab && block is not null
-            && ScribeDateRules.IsDatable(block) && !(view == ScribeRowMenuView.Read && ReadViewIsReadOnly);
+        var pin = view == ScribeRowMenuView.PinTab ? PinForRowMenu(taskId) : null;
+        bool canDate = SupportsRowDates && (view == ScribeRowMenuView.PinTab
+            ? pin is not null && ScribeDateRules.PinCanDate(pin) && !IsCarriedTabletDocument(pin.OwnerDocId)
+            : block is not null && ScribeDateRules.IsDatable(block) && !(view == ScribeRowMenuView.Read && ReadViewIsReadOnly));
+        bool hasDate = view == ScribeRowMenuView.PinTab ? pin?.Date is not null : block?.Date is not null;
         var actions = ScribeRowMenuEntries.For(view, ReadViewIsReadOnly, pinLive, isPinned,
-            canDate, hasDate: block?.Date is not null);
+            canDate, hasDate, allowRepeat: view != ScribeRowMenuView.PinTab);
 
         // Delete sits in its own group; Edit and the date group follow the document
         // while the menu is open (Refreshable), Pin or Unpin and Delete keep what the menu opened with.
@@ -73,8 +76,29 @@ public abstract partial class ScribeDialogBase
             .ToList();
     }
 
+    /// <summary>True when a Tablet the player carries holds the document <paramref name="docId"/>. Tablet tasks
+    /// take no dates, so a pin from one offers no date entries.</summary>
+    private bool IsCarriedTabletDocument(Guid docId)
+    {
+        foreach (var inv in capi.World.Player.InventoryManager.InventoriesOrdered)
+        {
+            IEnumerable<Vintagestory.API.Common.ItemSlot> slots;
+            try { slots = new List<Vintagestory.API.Common.ItemSlot>(inv); }
+            catch { continue; }
+            foreach (var slot in slots)
+            {
+                if (slot?.Itemstack?.Collectible is not ItemScribeTablet) continue;
+                if (ScribeDocumentAttributes.TryReadFrom(slot.Itemstack, out var doc) && doc?.DocId == docId) return true;
+            }
+        }
+        return false;
+    }
+
+    /// <summary>The pin behind a Pin Tab row, by task id.</summary>
+    private ScribePinnedRef? PinForRowMenu(Guid taskId) => modSystem.MyPins.FirstOrDefault(p => p.TaskId == taskId);
+
     /// <summary>The block a row menu in <paramref name="view"/> acts on: the live document's in the read view, the
-    /// scratch copy's in the editor, none on the Pin Tab (a pin snapshot carries no date).</summary>
+    /// scratch copy's in the editor, none on the Pin Tab (its rows act on the pin snapshot).</summary>
     private ScribeBlock? RowMenuBlock(ScribeRowMenuView view, Guid taskId) => view switch
     {
         ScribeRowMenuView.Read => host.Document.FindByTaskId(taskId),
@@ -221,9 +245,17 @@ public abstract partial class ScribeDialogBase
             RefreshReadView();
         }
 
+        SendTaskDate(host.Document.DocId, taskId, operation, date, repeat);
+    }
+
+    /// <summary>Sends a date operation for the task <paramref name="taskId"/> in the document
+    /// <paramref name="docId"/>. The server resolves the document, enforces the editor lock and answers with the
+    /// authoritative document or pin set.</summary>
+    private void SendTaskDate(Guid docId, Guid taskId, ScribeDateOperation operation, ScribeDate date, bool repeat)
+    {
         capi.Network.GetChannel(ScribeModSystem.NetworkChannelName).SendPacket(new ScribeSetTaskDateMessage
         {
-            DocId = host.Document.DocId.ToByteArray(),
+            DocId = docId.ToByteArray(),
             TaskId = taskId.ToByteArray(),
             Operation = (byte)operation,
             Year = operation == ScribeDateOperation.SetDate ? date.Year : 0,
@@ -254,6 +286,18 @@ public abstract partial class ScribeDialogBase
                 break;
             case ScribeRowMenuAction.Delete:
                 OnPinDeleteTask(pin.OwnerDocId, taskId);
+                break;
+            case ScribeRowMenuAction.AddDate:
+            case ScribeRowMenuAction.ChangeDate:
+                if (!ScribeDateRules.PinCanDate(pin) || IsCarriedTabletDocument(pin.OwnerDocId)) break;
+                var today = ScribeWorldCalendar.Today(capi.World);
+                var model = new ScribeDatePickerModel(ScribeWorldCalendar.Shape(capi.World), pin.Date ?? today);
+                RowMenu.OpenPicker(taskId, model, today,
+                    date => SendTaskDate(pin.OwnerDocId, taskId, ScribeDateOperation.SetDate, date, repeat: false));
+                break;
+            case ScribeRowMenuAction.ClearDate:
+                if (ScribeDateRules.PinCanDate(pin) && !IsCarriedTabletDocument(pin.OwnerDocId))
+                    SendTaskDate(pin.OwnerDocId, taskId, ScribeDateOperation.ClearDate, default, repeat: false);
                 break;
         }
     }
