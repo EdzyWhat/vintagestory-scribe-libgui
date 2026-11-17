@@ -977,3 +977,43 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
       *(add-dated-task-core 5.2)*
 - [ ] `000000f0` **No duplicate Guest Book entry after upgrading.** Visit a Lectern on an older Scribe build, update to this build, and visit the same Lectern again on the same in-game day. Confirm the Guest Book still has one entry for you that day.
       *(add-dated-task-core 5.2)*
+
+## add-task-row-context-menu
+
+- [ ] `000000f1` **Menu opens in every dialog and view.** Right-click a task row in the read view, the editor view and the Pin Tab of a Notebook, a Clockmaker's Notebook, a Lectern, a Chalkboard and a Scriptorium; then in a wet Tablet's editor and the Assignment Desk's editor. Confirm a menu opens at the row each time, with Edit (read view only), Pin or Unpin, and Delete as the proposal's table lists.
+      *(add-task-row-context-menu 3.1)*
+- [ ] `000000f2` **Note, tracker, link and crafting rows get the menu.** In an editor, right-click a note, an item tracker, a link and a crafting task. Confirm each opens Pin or Unpin and Delete, and in the read view also Edit.
+      *(add-task-row-context-menu 3.4)*
+- [ ] `000000f3` **Hard or fired Tablet offers only Pin.** On a hard (dried) or fired Tablet, right-click a task. Confirm the menu has only Pin or Unpin, and that choosing it pins or unpins the task.
+      *(add-task-row-context-menu 3.1)*
+- [ ] `000000f4` **Read-view Delete respects the editor lock.** On a Lectern nobody is editing, right-click a read-view task and choose Delete; confirm it is removed. Then have a second player open the same Lectern's editor and, from your read view, choose Delete on another task; confirm the "Another player is making edits" message appears and the task stays.
+      *(add-task-row-context-menu 3.2)*
+      - **Backlogged 2026-11-16**: "Cannot test with a second player holding the lock right now."
+- [ ] `000000f5` **Edit enters the editor on that row.** In a read view, right-click a task and choose Edit. Confirm the editor opens with that row focused and the caret in its text. Repeat on a tracker or link row far down a long list: it should scroll into view with no caret. With a second player holding the editor lock, choose Edit and confirm the locked message appears and the dialog stays on the read view; after that player leaves, open the editor with the Edit button and confirm no row is focused.
+      *(add-task-row-context-menu 3.3)*
+- [x] `000000f6` **A right-click on any row control does nothing else.** Right-click each of: a task checkbox, a link name, a tracker name, a collapse caret, the hover Pin, Unpin and Delete buttons, and the text of a row on a hard Tablet. Confirm none of them acts (nothing is checked, no Handbook page opens, nothing collapses, pinned or deleted) and the menu opens instead.
+      *(add-task-row-context-menu 2.1)*
+      - **Confirmed 2026-11-16**: "Right-click on each control only opens the menu."
+- [x] `000000f7` **Right-click in the editor leaves the caret and rows alone.** In an editor with text selected in one row, right-click inside another row's text. Confirm the selection and caret do not move and no drag starts. Add a new empty task and right-click it: confirm the row is not removed. Right-click the grip, then a tracker's +/- buttons: confirm neither acts.
+      *(add-task-row-context-menu 2.2)*
+      - **Confirmed 2026-11-16**: "Editor text: caret and selection stay put."
+- [ ] `000000f8` **The menu closes predictably.** With a menu open: click elsewhere in the dialog, then reopen it and press Escape (also with an editor row focused), then reopen it and switch to the Pin Tab, then reopen it and close the dialog. Confirm each closes only the menu (Escape leaves the dialog open) and runs no action. With a menu open, right-click a different row: the first menu closes and the new row's menu opens at the pointer.
+      *(add-task-row-context-menu 1.4)*
+- [x] `000000f9` **The menu stays inside the dialog.** Right-click the last visible row of a long list and a row at the far right of the dialog. Confirm the menu flips above the row near the bottom edge and shifts left near the right edge.
+      *(add-task-row-context-menu 1.2)*
+      - **Confirmed 2026-11-16**: "Flips above near the bottom and shifts left near the right edge at all locations."
+- [ ] `000000fa` **The menu survives unrelated updates and follows its row.** Open a menu on a read-view task, then (a) walk from daylight into a dark cave so the dialog's shading changes, and (b) have another player check off a different task in the same document. Confirm the menu stays open and attached to its row. Scroll its row out of view and confirm it closes; have another player delete its row and confirm it closes.
+      *(add-task-row-context-menu 1.3)*
+- [ ] `000000fb` **Hover controls still work.** Hover rows in the read view, the editor and the Pin Tab. Confirm the Pin, Unpin and Delete hover buttons still appear and work with a left click.
+      *(add-task-row-context-menu 2.3)*
+- [x] `000000fc` **macOS right-click gestures open the menu.** On macOS, ctrl-click and a two-finger tap on a row. Confirm each opens the menu like a right-click.
+      *(add-task-row-context-menu 2.3)*
+      - **Confirmed 2026-11-16**: "macOS ctrl-click and two-finger tap work."
+- [ ] `000000fd` **Pin Tab menu matches the hover controls.** In the Pin Tab, right-click a pinned task and choose Unpin: confirm the pin is removed and the task stays in its document. Right-click another and choose Delete: confirm the task is removed from its document. Repeat from the hover buttons and confirm the same results.
+      *(add-task-row-context-menu 3.5)*
+- [ ] `000000fe` **No menu on the HUD or Task Notice.** Right-click a pinned row on the HUD and a row in a Task Notice. Confirm no menu opens and nothing else happens.
+      *(add-task-row-context-menu 3.1)*
+- [ ] `000000ff` **Tablet menu reads in cuneiform.** On a wet Tablet, right-click a row. Confirm the entry labels draw in cuneiform like the add-task picker, and the menu darkens with the room's light.
+      *(add-task-row-context-menu 1.2)*
+- [ ] `00000100` **Editor Features handbook entry mentions the row menu.** Open the Handbook's Editor Features entry (Scribe Mod) and confirm it ends with a Row menu section describing right-click.
+      *(add-task-row-context-menu 3.6)*

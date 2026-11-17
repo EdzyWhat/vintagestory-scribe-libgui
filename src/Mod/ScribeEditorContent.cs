@@ -175,8 +175,10 @@ internal sealed class ScribeEditorContent : StatefulWidget
         bool supportsTabHeader = true,
         bool showSubtitleRow = true,
         SKBitmap? assignedStampBitmap = null,
-        SKBitmap? externalStampBitmap = null)
+        SKBitmap? externalStampBitmap = null,
+        ScribeRowMenuHost? rowMenu = null)
     {
+        RowMenu = rowMenu;
         Blocks = blocks;
         FocusNodes = focusNodes;
         AutoFocusIndex = autoFocusIndex;
@@ -302,6 +304,8 @@ internal sealed class ScribeEditorContent : StatefulWidget
     /// <summary>The external-mod hover-info stamp raster, resolved by the dialog so this widget stays API-free;
     /// null falls back to the SVG glyph.</summary>
     public SKBitmap? ExternalStampBitmap { get; }
+    /// <summary>The dialog's row context menu, handed to every row.</summary>
+    public ScribeRowMenuHost? RowMenu { get; }
 
     public override State CreateState() => new ScribeEditorContentState();
 }
@@ -430,6 +434,7 @@ internal sealed class ScribeEditorContentState : State<ScribeEditorContent>
                     assignedStampBitmap: Widget.AssignedStampBitmap,
                     externalStampBitmap: Widget.ExternalStampBitmap,
                     currentShade: Widget.CurrentShade,
+                    rowMenu: Widget.RowMenu,
                     // Keyed by TaskId, not list index: reconciliation is positional, so a stable key lets an
                     // unshifted slot's row be reused and keep its field State (caret + unsaved buffer) across
                     // RebuildBody(). A delete/insert ABOVE the focused row still remounts it; text survives via

@@ -570,7 +570,18 @@ public abstract partial class ScribeDialogBase : GuiDialogBlockEntityBase
     {
         if (args.Handled) return;
         if (ScribeVanillaDialogGuard.IsVanillaDialogAt(capi, args.X, args.Y)) return;
-        base.OnMouseDown(args);
+        // Recorded before dispatch: LibGUI's checkbox and the empty-row blur purge need to know which button is down.
+        ScribeRowPointer.DownButton = (Gui.Widgets.Events.PointerButton)args.Button;
+        ScribeRowPointer.Dispatching = true;
+        try { base.OnMouseDown(args); }
+        finally { ScribeRowPointer.Dispatching = false; }
+    }
+
+    /// <summary>Escape closes an open row menu instead of the dialog.</summary>
+    public override bool OnEscapePressed()
+    {
+        if (TryCloseRowMenuOnEscape()) return true;
+        return base.OnEscapePressed();
     }
 
     // ---------------- Input capture + macOS caret translation ----------------
@@ -597,6 +608,13 @@ public abstract partial class ScribeDialogBase : GuiDialogBlockEntityBase
     /// </summary>
     public override void OnKeyDown(KeyEvent args)
     {
+        // An open row menu takes Escape before the focused field and the dialog's own handling.
+        if (args.KeyCode == (int)GlKeys.Escape && TryCloseRowMenuOnEscape())
+        {
+            args.Handled = true;
+            return;
+        }
+
         if (isEditorMode && args.CommandPressed)
         {
             switch (args.KeyCode)

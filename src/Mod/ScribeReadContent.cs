@@ -99,8 +99,10 @@ internal sealed class ScribeReadContent : StatefulWidget
         ReadViewFilterCategory activeFilterCategory = ReadViewFilterCategory.All,
         Action<ReadViewFilterCategory>? onFilterCategoryChanged = null,
         System.Func<Guid, bool>? isGroupCollapsed = null,
-        Action<Guid>? onToggleGroupCollapsed = null)
+        Action<Guid>? onToggleGroupCollapsed = null,
+        ScribeRowMenuHost? rowMenu = null)
     {
+        RowMenu = rowMenu;
         Blocks = blocks;
         OnToggleTask = onToggleTask;
         OnTogglePinned = onTogglePinned;
@@ -204,6 +206,8 @@ internal sealed class ScribeReadContent : StatefulWidget
     public System.Func<Guid, bool> IsGroupCollapsed { get; }
     /// <summary>Requests a subtask group's collapsed state be flipped, by its parent's TaskId.</summary>
     public Action<Guid> OnToggleGroupCollapsed { get; }
+    /// <summary>The dialog's row context menu, handed to every row; null where the surface has none (the Task Notice).</summary>
+    public ScribeRowMenuHost? RowMenu { get; }
 
     public override State CreateState() => new ScribeReadContentState();
 }
@@ -276,6 +280,7 @@ internal sealed class ScribeReadContentState : State<ScribeReadContent>
                     showCollapseToggle: groupParentsWithRun is not null && groupParentsWithRun.Contains(b.TaskId),
                     collapsed: Widget.IsGroupCollapsed(b.TaskId),
                     onToggleCollapse: () => Widget.OnToggleGroupCollapsed(b.TaskId),
+                    rowMenu: Widget.RowMenu,
                     key: new ValueKey<Guid>(b.TaskId)),
                 Ghost: new ScribeFrozenEditorRow(
                     new ScribeEditRowData(
@@ -403,9 +408,10 @@ internal sealed class ScribeReadContentState : State<ScribeReadContent>
 /// </summary>
 internal sealed class ScribeReadRow : StatefulWidget
 {
-    public ScribeReadRow(ScribeReadRowData data, Action<Guid> onToggleTask, Action<Guid> onTogglePinned, Action<Guid> onOpenLink, ScribeRowStyle style, bool readOnly = false, bool completionAndPinLive = false, Action<Guid>? onTextEditRefused = null, SKBitmap? assignedStampBitmap = null, SKBitmap? externalStampBitmap = null, ScribeAmbientLightSampler.Shade currentShade = default, bool shadow = false, bool showCollapseToggle = false, bool collapsed = false, Action? onToggleCollapse = null, Gui.Widgets.Framework.Key? key = null)
+    public ScribeReadRow(ScribeReadRowData data, Action<Guid> onToggleTask, Action<Guid> onTogglePinned, Action<Guid> onOpenLink, ScribeRowStyle style, bool readOnly = false, bool completionAndPinLive = false, Action<Guid>? onTextEditRefused = null, SKBitmap? assignedStampBitmap = null, SKBitmap? externalStampBitmap = null, ScribeAmbientLightSampler.Shade currentShade = default, bool shadow = false, bool showCollapseToggle = false, bool collapsed = false, Action? onToggleCollapse = null, ScribeRowMenuHost? rowMenu = null, Gui.Widgets.Framework.Key? key = null)
         : base(key)
     {
+        RowMenu = rowMenu;
         Data = data;
         OnToggleTask = onToggleTask;
         OnTogglePinned = onTogglePinned;
@@ -466,6 +472,9 @@ internal sealed class ScribeReadRow : StatefulWidget
     /// view (<see cref="ReadOnly"/> = false) OR on a read-only surface that keeps completion/pin live
     /// (<see cref="CompletionAndPinLive"/>). Consolidates the two so the checkbox/pin render off one predicate.</summary>
     public bool TogglesLive => !ReadOnly || CompletionAndPinLive;
+    /// <summary>The dialog's row context menu; null on a surface without one (the Task Notice), where a
+    /// right-click on the row does nothing.</summary>
+    public ScribeRowMenuHost? RowMenu { get; }
 
     public override State CreateState() => new ScribeReadRowState();
 }
@@ -476,11 +485,19 @@ internal sealed class ScribeReadRowState : State<ScribeReadRow>
     /// <summary>True while the pointer is over this row: the pin control is hidden until then, mirroring
     /// the editor row's hover-conditional icons.</summary>
     private bool hovered;
+    private readonly ScribeRowMenuAnchor menu = new();
 
     public override void InitState()
     {
         base.InitState();
         done = Widget.Data.Done;
+        menu.Mount(Widget.RowMenu, Widget.Data.TaskId, () => Element?.RenderObject);
+    }
+
+    public override void Dispose()
+    {
+        menu.Unmount();
+        base.Dispose();
     }
 
     /// <summary>Resync the optimistic <see cref="done"/> when an external change flips this row's authoritative
@@ -493,6 +510,7 @@ internal sealed class ScribeReadRowState : State<ScribeReadRow>
     {
         base.UpdateWidget(oldWidget);
         if (oldWidget.Data.Done != Widget.Data.Done) done = Widget.Data.Done;
+        menu.Update(Widget.RowMenu, Widget.Data.TaskId);
     }
 
     /// <summary>The content of an item-kind read row (Tracker, Link, Craft parent, QuestObjective): the
@@ -500,7 +518,7 @@ internal sealed class ScribeReadRowState : State<ScribeReadRow>
     /// hyperlink — tapping it opens the item's Handbook page via <see cref="ScribeReadRow.OnOpenLink"/> and
     /// never touches the row's checkbox (distinct from the completion control). The icon/name are the
     /// dialog-resolved snapshot carried on the row data, so this stays <c>capi</c>-free.</summary>
-    private Widget BuildItemContent(ColorScheme colors, ScribeRowStyle style)
+    private Widget BuildItemContent(BuildContext context, ColorScheme colors, ScribeRowStyle style)
     {
         float iconSize = ScribeRowConstants.ItemIconSize
             * (style.ControlSize / ScribeRowConstants.RowCheckboxSize);
@@ -537,7 +555,12 @@ internal sealed class ScribeReadRowState : State<ScribeReadRow>
         bool canOpen = !Widget.Data.IsStaticVsQuestObjective || Widget.Data.DisplayStack is not null;
         Widget nameLink = new Expanded(child: canOpen
             ? new GestureDetector(
-                onPress: e => { e.Handled = true; Widget.OnOpenLink(Widget.Data.TaskId); },
+                onPress: e =>
+                {
+                    e.Handled = true;
+                    if (menu.Secondary(e, context)) return;
+                    Widget.OnOpenLink(Widget.Data.TaskId);
+                },
                 child: name)
             : name);
 
@@ -624,7 +647,8 @@ internal sealed class ScribeReadRowState : State<ScribeReadRow>
                 Widget.Data.IsStaticVsQuestObjective, Widget.Data.DisplayStack),
             child: Widget.ShowCollapseToggle
                 ? new GestureDetector(
-                    onTap: _ => Widget.OnToggleCollapse(),
+                    onPress: e => menu.Secondary(e, context),
+                    onTap: e => { if (e.Button == PointerButton.Left) Widget.OnToggleCollapse(); },
                     child: new ScribeVsIconGlyph(
                         Widget.Collapsed ? "scribetriangleright" : "scribetriangledown",
                         style.ControlSize,
@@ -655,7 +679,8 @@ internal sealed class ScribeReadRowState : State<ScribeReadRow>
                     {
                         SetState(() => done = !done);
                         Widget.OnToggleTask(Widget.Data.TaskId);
-                    })));
+                    },
+                    menu)));
         }
 
         // Assignment marker: unlike the grip spacer above, this column is NOT reserved for an ordinary row.
@@ -683,7 +708,7 @@ internal sealed class ScribeReadRowState : State<ScribeReadRow>
         // have/need counter for the count-tracked kinds): the block's own Text is empty, its content is the
         // referenced item.
         Widget textChild = Widget.Data.IsItemKind
-            ? BuildItemContent(colors, style)
+            ? BuildItemContent(context, colors, style)
             : style.UseCuneiform
             ? new ScribeCuneiformFieldRenderWidget(
                 text: Widget.Data.Text,
@@ -722,7 +747,12 @@ internal sealed class ScribeReadRowState : State<ScribeReadRow>
         if (Widget.OnTextEditRefused is { } onTextEditRefused && Widget.Data.IsTask)
         {
             textChild = new GestureDetector(
-                onPress: e => { e.Handled = true; onTextEditRefused(Widget.Data.TaskId); },
+                onPress: e =>
+                {
+                    e.Handled = true;
+                    if (menu.Secondary(e, context)) return;
+                    onTextEditRefused(Widget.Data.TaskId);
+                },
                 child: textChild);
         }
 
@@ -755,6 +785,11 @@ internal sealed class ScribeReadRowState : State<ScribeReadRow>
             },
             child: rowBody);
 
+        // A right-press on the row background (no child under it) opens the menu; every child forwards its own
+        // right-press the same way.
+        if (Widget.RowMenu is not null)
+            rowBody = new GestureDetector(onPress: e => menu.Secondary(e, context), child: rowBody);
+
         // The pin toggle floats on the right, task-only, shown on hover, mirroring the editor row's pin button.
         // The read view exposes no edit/delete/drag; only pin and the checkbox are interactive. The pin follows
         // the same live-toggle rule as the checkbox: offered on any editable read view AND on a hard/fired
@@ -769,13 +804,16 @@ internal sealed class ScribeReadRowState : State<ScribeReadRow>
                     iconColor: Widget.Data.Pinned ? colors.Primary : colors.OnSurfaceVariant,
                     size: style.ControlSize,
                     onTap: () => Widget.OnTogglePinned(Widget.Data.TaskId),
-                    iconScale: 1.15f))); // pin glyph +15%, matching the editor
+                    iconScale: 1.15f, // pin glyph +15%, matching the editor
+                    onSecondaryPress: e => menu.Secondary(e, context))));
         }
 
         Widget row = new MouseRegion(
             onEnter: _ => { if (!hovered) SetState(() => hovered = true); },
             onExit: _ => { if (hovered) SetState(() => hovered = false); },
+            onHover: menu.NotePointer,
             child: new Stack(stackChildren));
+        row = menu.Wrap(row);
 
         // Shadow opacity: a row shown only for its group's context, not because it matches the active filter
         // itself, renders deemphasized. Opacity is paint-only and does not intercept hit-testing, so the row's

@@ -140,6 +140,8 @@ public abstract class BlockEntityScribeWritingStation : BlockEntity, IRotatable,
     // ── IScribeDocumentHost explicit implementations ──────────────────────
     ScribeDocument IScribeDocumentHost.Document => Document;
     bool IScribeDocumentHost.IsLockedByOther(string viewerUid) => IsLockedByOther(viewerUid);
+    bool IScribeDocumentHost.IsEditorLockHeldByOther(string playerUid) =>
+        lockHolderUid is not null && lockHolderUid != playerUid;
     void IScribeDocumentHost.ApplyLocalOptimisticEdit(ScribeDocument doc) => ApplyLocalOptimisticEdit(doc);
     ScribeBackdropSpec IScribeDocumentHost.BackdropSpec => PageBackdrop;
     ScribeDocumentPolicy IScribeDocumentHost.Policy => HostPolicy;
@@ -633,6 +635,7 @@ public abstract class BlockEntityScribeWritingStation : BlockEntity, IRotatable,
             // Editor access refused (lock held elsewhere, or a lock-less autosave). Surface the error;
             // if nothing is open yet, fall back to the read view.
             capi.TriggerIngameError(this, "scribe-writing-station-locked", Lang.Get(message.RefusalReason ?? "scribe:scribe-gui-locked"));
+            dialog?.ClearPendingEditFocus();
 
             // A save-failed ack is recoverable: ask the open editor to re-request the lock and re-flush
             // its edit (bounded internally).

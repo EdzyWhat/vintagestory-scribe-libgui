@@ -127,7 +127,8 @@ internal static class ScribeRowControlNudge
     /// background muted to <see cref="DisabledCheckboxOpacity"/> (the Task Notice's read-only rows),
     /// taking priority over <see cref="ScribeRowStyle.CheckTickColor"/>.</para></summary>
     public static Checkbox BuildTaskCheckbox(
-        BuildContext context, ScribeRowStyle style, bool value, Action<bool>? onChanged)
+        BuildContext context, ScribeRowStyle style, bool value, Action<bool>? onChanged,
+        Func<bool>? onSecondaryToggle = null)
     {
         CheckboxStyle? resolvedStyle;
         if (onChanged is null)
@@ -147,9 +148,15 @@ internal static class ScribeRowControlNudge
                 : null;
         }
 
+        // A toggle that came from a right-click is handed to onSecondaryToggle (which opens the row's menu) instead
+        // of completing the task.
+        Action<bool>? guarded = onChanged is null || onSecondaryToggle is null
+            ? onChanged
+            : v => { if (!onSecondaryToggle()) onChanged(v); };
+
         return new Checkbox(
             value: value,
-            onChanged: onChanged,
+            onChanged: guarded,
             size: style.CheckboxSize,
             style: resolvedStyle);
     }
@@ -161,7 +168,8 @@ internal static class ScribeRowControlNudge
     /// or <see cref="ScribeTheme.QuestLinkAccent"/>. Used by Read, Editor, Pinned and HUD; the
     /// Assignment-stage row's checkbox is a SELECTION control and does not use it.</summary>
     public static Widget BuildLeadingControl(
-        BuildContext context, ScribeRowStyle style, string? linkTarget, bool value, Action<bool>? onChanged)
+        BuildContext context, ScribeRowStyle style, string? linkTarget, bool value, Action<bool>? onChanged,
+        ScribeRowMenuAnchor? menu = null)
     {
         if (ScribeLinkTarget.IsQuest(linkTarget))
         {
@@ -169,7 +177,8 @@ internal static class ScribeRowControlNudge
             return new ScribeVsIconGlyph("scribequest", style.CheckboxSize, questColor);
         }
 
-        return BuildTaskCheckbox(context, style, value, onChanged);
+        return BuildTaskCheckbox(context, style, value, onChanged,
+            menu is null ? null : () => menu.SecondaryToggle(context));
     }
 
     /// <summary>The grip glyph's insets: the vertical top-nudge shared with the checkbox, plus a NEGATIVE
@@ -606,9 +615,10 @@ internal static class ScribeTrackerCounterText
 /// (see <see cref="ScribeVsIconGlyph"/>).</summary>
 internal sealed class ScribeRowButton : StatefulWidget
 {
-    public ScribeRowButton(string iconName, Vector4 iconColor, float size, Action onTap, float iconScale = 1f, BoxShadow[]? boxShadows = null, Vector4? activeColor = null, Gui.Widgets.Framework.Key? key = null)
+    public ScribeRowButton(string iconName, Vector4 iconColor, float size, Action onTap, float iconScale = 1f, BoxShadow[]? boxShadows = null, Vector4? activeColor = null, Action<PointerEvent>? onSecondaryPress = null, Gui.Widgets.Framework.Key? key = null)
         : base(key)
     {
+        OnSecondaryPress = onSecondaryPress;
         IconName = iconName;
         IconColor = iconColor;
         Size = size;
@@ -624,6 +634,10 @@ internal sealed class ScribeRowButton : StatefulWidget
     /// <see cref="BoxShrink"/> px smaller per dimension; the glyph is still sized from this value.</summary>
     public float Size { get; }
     public Action OnTap { get; }
+
+    /// <summary>When set, the button acts on the left button only and hands a right-button press to this callback
+    /// (the row's context menu). Null leaves the button reacting to any button.</summary>
+    public Action<PointerEvent>? OnSecondaryPress { get; }
 
     /// <summary>Multiplier on the GLYPH only (not the box), e.g. the pin +10%; the padding split keeps it
     /// centered. Default 1 = unchanged.</summary>
@@ -688,10 +702,22 @@ internal sealed class ScribeRowButtonState : State<ScribeRowButton>
         float drawnPad = MathF.Max(0f, (box - glyph) / 2f);
 
         return new GestureDetector(
-            onTap: _ => Widget.OnTap(),
+            onTap: e =>
+            {
+                if (Widget.OnSecondaryPress is not null && e.Button != PointerButton.Left) return;
+                Widget.OnTap();
+            },
             onEnter: _ => { if (!hovered) SetState(() => hovered = true); },
             onExit: _ => { if (hovered || pressed) SetState(() => { hovered = false; pressed = false; }); },
-            onPress: _ => { if (!pressed) SetState(() => pressed = true); },
+            onPress: e =>
+            {
+                if (Widget.OnSecondaryPress is { } secondary && e.Button != PointerButton.Left)
+                {
+                    if (e.Button == PointerButton.Right) secondary(e);
+                    return;
+                }
+                if (!pressed) SetState(() => pressed = true);
+            },
             onRelease: _ => { if (pressed) SetState(() => pressed = false); },
             child: new Container(
                 style: new BoxStyle

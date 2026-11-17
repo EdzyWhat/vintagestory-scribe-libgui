@@ -41,6 +41,12 @@ internal sealed partial class ScribeMultilineFieldState
     /// double click at the same spot selects the word, a triple click the logical line.</summary>
     private void OnFieldPress(PointerEvent e)
     {
+        if (e.Button != PointerButton.Left)
+        {
+            if (e.Button == PointerButton.Right) Widget.OnSecondaryPress?.Invoke(e);
+            return;
+        }
+
         focusNode.RequestFocus();
 
         if (OffsetAt(e) is not { } offset) return;

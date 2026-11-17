@@ -101,7 +101,8 @@ public abstract partial class ScribeDialogBase
             // Per-surface restyle of the policy picker's open menu (the chalkboard fixes unreadable selected-row colors).
             decoratePolicyDropdownStyle: DecoratePolicyDropdownStyle,
             assignedStampBitmap: modSystem.GetGuiTextureBitmap(ScribeAssignedTaskIcon.Asset),
-            externalStampBitmap: modSystem.GetGuiTextureBitmap(ScribeExternalInfoIcon.Asset));
+            externalStampBitmap: modSystem.GetGuiTextureBitmap(ScribeExternalInfoIcon.Asset),
+            rowMenu: RowMenu);
     }
 
     /// <summary>Resolves a pinned item's icon + name from its snapshot code (like <see cref="ResolveRowItem"/> but without a live document block, so it works when the source is unloaded); <c>(null, null)</c> for a plain Task pin.</summary>

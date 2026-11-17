@@ -40,6 +40,8 @@ public abstract partial class ScribeDialogBase
         currentShade = lightSampler.Sample(deltaTime);
         if (currentShade.Changed) RebuildBody();
 
+        ServiceRowMenu();
+
         // Keep the window sized to the live Pixel Art Size: CreateWindowConfig sets Size once per open, so a live W change would leave _layoutSize stale and clamp the art Container. Done here (post-layout) rather than in Build() to avoid mutating size mid-rebuild; SyncLayoutSize no-ops when unchanged.
         var liveLayout = host.GetLayout(modSystem.MySettings.PixelArtSize);
         var wantSize = new Vector2(liveLayout.W, liveLayout.H);
@@ -231,6 +233,9 @@ public abstract partial class ScribeDialogBase
         // Workaround for a gui@3.1.0 bug: ButtonState.PlaySound() calls Element.Owner.GetSoundPlayer() in a SetState callback that can fire after unmount (e.g. the close click), when Owner is null -> NRE. A silent player keeps it non-null.
         BuildOwner.SetSoundPlayer(new SilentSoundPlayer(capi));
 
+        rowMenuHost?.Dispose();
+        pendingEditFocusTaskId = null;
+        pendingEditScrollTaskId = null;
         CommitTitleIfEditing();
         if (isEditorMode)
         {

@@ -80,8 +80,10 @@ internal sealed class ScribePinnedContent : StatefulWidget
         System.Func<DropdownStyle, DropdownStyle>? decoratePolicyDropdownStyle = null,
         bool showSubtitleRow = true,
         SKBitmap? assignedStampBitmap = null,
-        SKBitmap? externalStampBitmap = null)
+        SKBitmap? externalStampBitmap = null,
+        ScribeRowMenuHost? rowMenu = null)
     {
+        RowMenu = rowMenu;
         Rows = rows;
         FocusNodes = focusNodes;
         AutoFocusTaskId = autoFocusTaskId;
@@ -145,6 +147,8 @@ internal sealed class ScribePinnedContent : StatefulWidget
     /// <summary>External-mod hover-info stamp raster (see <see cref="ScribeExternalInfoIcon"/>); null falls back
     /// to the plain SVG glyph.</summary>
     public SKBitmap? ExternalStampBitmap { get; }
+    /// <summary>The dialog's row context menu, handed to every row.</summary>
+    public ScribeRowMenuHost? RowMenu { get; }
 
     public override State CreateState() => new ScribePinnedContentState();
 }
@@ -229,6 +233,7 @@ internal sealed class ScribePinnedContentState : State<ScribePinnedContent>
                     assignedStampBitmap: Widget.AssignedStampBitmap,
                     externalStampBitmap: Widget.ExternalStampBitmap,
                     currentShade: Widget.CurrentShade,
+                    rowMenu: Widget.RowMenu,
                     // Keyed by TaskId, not index, so identity tracks the pin across reorder/resync.
                     key: new ValueKey<Guid>(r.TaskId)),
                 Ghost: new ScribeFrozenEditorRow(
@@ -378,9 +383,11 @@ internal sealed class ScribePinRow : StatefulWidget
         SKBitmap? assignedStampBitmap = null,
         SKBitmap? externalStampBitmap = null,
         ScribeAmbientLightSampler.Shade currentShade = default,
+        ScribeRowMenuHost? rowMenu = null,
         Gui.Widgets.Framework.Key? key = null)
         : base(key)
     {
+        RowMenu = rowMenu;
         Data = data;
         Index = index;
         FocusNode = focusNode;
@@ -429,6 +436,8 @@ internal sealed class ScribePinRow : StatefulWidget
     /// <summary>See <see cref="ScribePinnedContent.ExternalStampBitmap"/>.</summary>
     public SKBitmap? ExternalStampBitmap { get; }
     public ScribeAmbientLightSampler.Shade CurrentShade { get; }
+    /// <summary>The dialog's row context menu; null on a surface without one.</summary>
+    public ScribeRowMenuHost? RowMenu { get; }
 
     public override State CreateState() => new ScribePinRowState();
 }
@@ -439,11 +448,19 @@ internal sealed class ScribePinRowState : State<ScribePinRow>
     /// <summary>True while the pointer is over this row; gates delete/unpin. The grip is NOT hover-gated so a
     /// drag it started can't lose pointer capture mid-move.</summary>
     private bool hovered;
+    private readonly ScribeRowMenuAnchor menu = new();
 
     public override void InitState()
     {
         base.InitState();
         done = Widget.Data.Done;
+        menu.Mount(Widget.RowMenu, Widget.Data.TaskId, () => Element?.RenderObject);
+    }
+
+    public override void Dispose()
+    {
+        menu.Unmount();
+        base.Dispose();
     }
 
     /// <summary>Resyncs the optimistic <see cref="done"/> when the authoritative completion flips externally
@@ -453,12 +470,13 @@ internal sealed class ScribePinRowState : State<ScribePinRow>
     {
         base.UpdateWidget(oldWidget);
         if (oldWidget.Data.Done != Widget.Data.Done) done = Widget.Data.Done;
+        menu.Update(Widget.RowMenu, Widget.Data.TaskId);
     }
 
     /// <summary>Item icon + name (a hyperlink via <see cref="ScribePinRow.OnOpenLink"/>), plus a left-hand
     /// have/need counter for a Tracker. Must match <c>ScribeReadRowState.BuildItemContent</c> so all views
     /// render these rows identically.</summary>
-    private Widget BuildItemContent(ColorScheme colors, ScribeRowStyle style)
+    private Widget BuildItemContent(BuildContext context, ColorScheme colors, ScribeRowStyle style)
     {
         var data = Widget.Data;
         float iconSize = ScribeRowConstants.ItemIconSize
@@ -488,7 +506,12 @@ internal sealed class ScribePinRowState : State<ScribePinRow>
         bool canOpen = !data.IsStaticVsQuestObjective || data.DisplayStack is not null;
         Widget nameLink = new Expanded(child: canOpen
             ? new GestureDetector(
-                onPress: e => { e.Handled = true; Widget.OnOpenLink(data.TaskId); },
+                onPress: e =>
+                {
+                    e.Handled = true;
+                    if (menu.Secondary(e, context)) return;
+                    Widget.OnOpenLink(data.TaskId);
+                },
                 child: name)
             : name);
 
@@ -542,7 +565,11 @@ internal sealed class ScribePinRowState : State<ScribePinRow>
             ScribeRowControlNudge.GripInsets(style, Widget.Data.IsItemKind, Widget.Data.LinkTarget,
                 Widget.Data.IsStaticVsQuestObjective, Widget.Data.DisplayStack),
             child: new GestureDetector(
-                onPress: _ => Widget.OnDragStart(Widget.Index),
+                onPress: e =>
+                {
+                    if (menu.Secondary(e, context)) return;
+                    Widget.OnDragStart(Widget.Index);
+                },
                 onRelease: _ => Widget.OnDragEnd(),
                 child: gripGlyph)));
 
@@ -569,7 +596,8 @@ internal sealed class ScribePinRowState : State<ScribePinRow>
                     }
                     SetState(() => done = !done);
                     Widget.OnToggleComplete(data.DocId, data.TaskId);
-                }))));
+                },
+                menu))));
 
         // Assignment marker, placed like the Read/Editor rows; takes space only for an accepted assignment.
         if (data.IsAcceptedAssignment)
@@ -586,7 +614,7 @@ internal sealed class ScribePinRowState : State<ScribePinRow>
         // buffers on every keystroke (OnTextChanged) and commits in place on Enter/blur (no insert-below here).
         if (data.IsItemKind)
         {
-            children.Add(new Expanded(child: new Opacity(contentOpacity, child: BuildItemContent(colors, style))));
+            children.Add(new Expanded(child: new Opacity(contentOpacity, child: BuildItemContent(context, colors, style))));
         }
         else
         {
@@ -605,7 +633,8 @@ internal sealed class ScribePinRowState : State<ScribePinRow>
                 onCommitAndAdvance: () => Widget.OnCommitText(data.TaskId),
                 onCommitAndRetreat: () => Widget.OnCommitText(data.TaskId),
                 onInsertTaskBelow: () => Widget.OnCommitText(data.TaskId),
-                onBlur: () => Widget.OnCommitText(data.TaskId)))));
+                onBlur: () => Widget.OnCommitText(data.TaskId),
+                onSecondaryPress: e => menu.Secondary(e, context)))));
         }
 
         // Subtask indent matches the editor/read rows.
@@ -633,6 +662,11 @@ internal sealed class ScribePinRowState : State<ScribePinRow>
             },
             child: rowBody);
 
+        // A right-press on the row background (no child under it) opens the menu; every child forwards its own
+        // right-press the same way.
+        if (Widget.RowMenu is not null)
+            rowBody = new GestureDetector(onPress: e => menu.Secondary(e, context), child: rowBody);
+
         // Hover-only buttons: delete right-most (the task itself), unpin to its left (just the pin).
         var stackChildren = new List<Widget> { rowBody };
         if (hovered)
@@ -648,7 +682,8 @@ internal sealed class ScribePinRowState : State<ScribePinRow>
                     iconName: "scribeclose",
                     iconColor: colors.Error,
                     size: btn,
-                    onTap: () => Widget.OnDelete(data.DocId, data.TaskId))));
+                    onTap: () => Widget.OnDelete(data.DocId, data.TaskId),
+                    onSecondaryPress: e => menu.Secondary(e, context))));
             stackChildren.Add(new Positioned(
                 right: btnRight + boxW + gap, top: btnTop,
                 child: new ScribeRowButton(
@@ -656,7 +691,8 @@ internal sealed class ScribePinRowState : State<ScribePinRow>
                     iconColor: colors.Primary,
                     size: btn,
                     onTap: () => Widget.OnUnpin(data.DocId, data.TaskId),
-                    iconScale: 1.1f))); // pin glyph +10%
+                    iconScale: 1.1f, // pin glyph +10%
+                    onSecondaryPress: e => menu.Secondary(e, context))));
         }
 
         return new MouseRegion(
@@ -666,7 +702,8 @@ internal sealed class ScribePinRowState : State<ScribePinRow>
                 Widget.OnDragOver(Widget.Index);
             },
             onExit: _ => { if (hovered) SetState(() => hovered = false); },
-            child: new Stack(stackChildren));
+            onHover: menu.NotePointer,
+            child: menu.Wrap(new Stack(stackChildren)));
     }
 }
 

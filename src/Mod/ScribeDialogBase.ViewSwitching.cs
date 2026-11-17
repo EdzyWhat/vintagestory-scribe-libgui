@@ -41,6 +41,7 @@ public abstract partial class ScribeDialogBase
             recoveringLostLock = false;
             optimisticEditorEntry = false;
             saveFailureRetries = 0;
+            pendingEditFocusTaskId = null;
             isEditorMode = true;
             StartAutosaveTick();
             isDirty = true;   // force the pending edit to be re-sent on the next flush
@@ -69,6 +70,9 @@ public abstract partial class ScribeDialogBase
         // branch above returns early, so this never fires on a lost-lock re-acquire. Applied BEFORE the ForceRebuild so the fresh tree
         // includes the new row: ApplyHandbookAppend's in-place RebuildBody no-ops right after Mount (GlobalKey state not yet resolvable).
         FlushPendingHandbookAppend();
+
+        // A read-view Edit entry's row, after the append so its index is final.
+        ApplyPendingEditFocus();
 
         if (IsOpened())
         {
@@ -675,6 +679,7 @@ public abstract partial class ScribeDialogBase
     {
         if (host.IsLockedByOther(capi.World.Player.PlayerUID))
         {
+            pendingEditFocusTaskId = null;
             capi.TriggerIngameError(this, "scribe-lectern-locked", Lang.Get("scribe:scribe-gui-locked"));
             return;
         }

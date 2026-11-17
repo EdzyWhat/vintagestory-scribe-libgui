@@ -631,7 +631,8 @@ public abstract partial class ScribeDialogBase
             activeFilterCategory: readViewFilterCategory,
             onFilterCategoryChanged: OnReadViewFilterCategoryChanged,
             isGroupCollapsed: collapsedReadViewGroupIds.Contains,
-            onToggleGroupCollapsed: OnReadViewToggleGroupCollapsed);
+            onToggleGroupCollapsed: OnReadViewToggleGroupCollapsed,
+            rowMenu: RowMenu);
 
     /// <summary>The editable task list for the current scratch document. Protected so a subclass can reuse the editor (the tablet stacks it under a cuneiform title banner); bound to the same scratch, focus nodes and handlers.</summary>
     protected Widget BuildEditorContent()
@@ -712,7 +713,8 @@ public abstract partial class ScribeDialogBase
             supportsTabHeader: SupportsTabHeader,
             showSubtitleRow: modSystem.VisualTuning.ShowSubtitleRow,
             assignedStampBitmap: modSystem.GetGuiTextureBitmap(ScribeAssignedTaskIcon.Asset),
-            externalStampBitmap: modSystem.GetGuiTextureBitmap(ScribeExternalInfoIcon.Asset));
+            externalStampBitmap: modSystem.GetGuiTextureBitmap(ScribeExternalInfoIcon.Asset),
+            rowMenu: RowMenu);
     }
 
     /// <summary>Whether the editor footer shows the "Done editing" button. False on the always-edit tablet, which has no Read view and where leaving editor mode would null the scratch the central region reads.</summary>

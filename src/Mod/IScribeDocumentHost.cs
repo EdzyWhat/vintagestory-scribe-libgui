@@ -67,6 +67,11 @@ public interface IScribeDocumentHost
     /// <summary>True when another player holds the editor lock on this block.</summary>
     bool IsLockedByOther(string viewerUid);
 
+    /// <summary>Server-side: true when a player other than <paramref name="playerUid"/> holds the editor lock. Unlike
+    /// <see cref="IsLockedByOther"/>, which reads the client's synced mirror, this reads the authoritative lock. Hosts
+    /// with no editor lock (items) report false.</summary>
+    bool IsEditorLockHeldByOther(string playerUid) => false;
+
     /// <summary>Updates the client-side cache with a fresh optimistic copy after a flush.</summary>
     void ApplyLocalOptimisticEdit(ScribeDocument doc);
 

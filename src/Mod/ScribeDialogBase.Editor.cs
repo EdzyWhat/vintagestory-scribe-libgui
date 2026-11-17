@@ -189,6 +189,8 @@ public abstract partial class ScribeDialogBase
     private void OnRowBlurred(int index)
     {
         if (!isEditorMode || scratch is null || index < 0 || index >= scratch.Blocks.Count) return;
+        // A right-press only opens the row menu: the focus change it causes must not purge an empty row.
+        if (ScribeRowPointer.Dispatching && ScribeRowPointer.RightDown) return;
         // Tracker/Link rows are excluded (empty Text by design); see IsAbandonableEmptyBlock.
         if (!IsAbandonableEmptyBlock(scratch.Blocks[index])) return;
         pendingEmptyRowRemoval = index;

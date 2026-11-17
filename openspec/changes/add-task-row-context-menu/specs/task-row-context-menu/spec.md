@@ -132,7 +132,7 @@ that keeps the row on screen SHALL NOT close the menu. Only one row menu SHALL b
 
 #### Scenario: Right-clicking another row
 - **WHEN** a menu is open and the player right-clicks a different row
-- **THEN** the first menu closes, and the player's next right-click on that row opens its menu
+- **THEN** the first menu closes and the other row's menu opens at the pointer
 
 #### Scenario: The row disappears
 - **WHEN** a menu is open and its row is removed (for example another player deletes the task)

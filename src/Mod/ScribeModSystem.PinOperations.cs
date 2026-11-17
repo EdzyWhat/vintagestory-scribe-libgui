@@ -195,10 +195,12 @@ public sealed partial class ScribeModSystem
     /// <summary>
     /// Deletes a pinned task by identity, independent of completion policy: removes it lock-free from the
     /// source via <see cref="BlockEntityScribeLectern.DeleteTaskFromReader"/> when it resolves, and always
-    /// removes the acting player's pin. Public for the integration suite.
+    /// removes the acting player's pin. With <paramref name="respectEditorLock"/> the delete is refused (nothing
+    /// removed, the player told the document is being edited) while another player holds the document's editor
+    /// lock. Public for the integration suite.
     /// </summary>
     public void DeleteTaskForPlayer(IServerPlayer player, Guid docId, Guid taskId,
-        ScribeSubtaskBehavior behavior = ScribeSubtaskBehavior.Bound)
+        ScribeSubtaskBehavior behavior = ScribeSubtaskBehavior.Bound, bool respectEditorLock = false)
     {
         if (sapi is null || pinStore is null) return;
         behavior = ScribePlayerSettings.NormalizeSubtaskBehavior(behavior);
@@ -206,6 +208,12 @@ public sealed partial class ScribeModSystem
         IReadOnlyList<Guid> deleted = new[] { taskId };
         if (TryResolveDocHost(docId, out var docHost, player))
         {
+            if (respectEditorLock && docHost!.IsEditorLockHeldByOther(player.PlayerUID))
+            {
+                player.SendIngameError("scribe-lectern-locked", Lang.Get("scribe:scribe-gui-locked"));
+                return;
+            }
+
             // Captured BEFORE the delete — the block is about to be removed from the document.
             var assignmentOnBlock = docHost!.Document.FindByTaskId(taskId)?.Assignment;
             deleted = ScribeCompletion.ApplyDelete(docHost.Document, taskId, behavior);

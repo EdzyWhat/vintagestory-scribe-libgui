@@ -48,16 +48,18 @@ labels in cuneiform on the Tablet. It has no Escape handling.
 - **A shared `ScribeRowContextMenu` on the picker's overlay pattern, owned by `ScribeDialogBase`.** The
   dialog holds at most one open menu (`openRowMenu`). Opening a menu closes any open one. It takes the row's
   `TaskId`, an anchor `LayerLink`, the pointer position and a list of entries (label key, action). The
-  barrier closes the menu on any press, including a right-click; the next right-click then opens the new
-  row's menu. Re-dispatching the closing press to the row underneath was considered and rejected as extra
-  complexity for one click.
+  barrier closes the menu on any press. When the press is a right-click that lands on a row, that row's menu
+  opens at the pointer in the same press, so moving between rows takes one right-click.
   Alternative: LibGUI's `Dropdown`. Rejected because a dropdown owns a selected value and a trigger button,
   while this menu is action-only and opened on an arbitrary row.
 
 - **Right-clicks are forwarded, not detected at the row.** Because LibGUI delivers a press only to the
   innermost handler and does not filter buttons, every row child that handles presses checks the button:
-  - the checkbox, link and tracker names, the collapse caret, the hover Pin/Unpin/Delete buttons and the
+  - the link and tracker names, the collapse caret, the hover Pin/Unpin/Delete buttons and the
     read-only tablet's text detector act only on the left button;
+  - LibGUI's checkbox reports only its toggle, not the button, so the dialog records the button of each press
+    before dispatch and the checkbox hands a toggle made by a right press to the row instead of completing the
+    task (the menu then opens when the button is released);
   - `ScribeMultilineField.OnFieldPress` returns early on a right press, without moving the caret, changing
     the selection or starting a drag.
   A right press anywhere on a row, on a child or on the row background, calls the row's
@@ -67,8 +69,8 @@ labels in cuneiform on the Tablet. It has no Escape handling.
   press; that is accepted. A blur that reaches an editor row's empty-row purge is suppressed for the
   right-press case, so right-clicking an empty new row does not delete it.
 
-- **Entry gating is one pure function.** `ScribeRowMenuEntries.For(view, kind, readOnly, pinLive, isPinned)`
-  returns the entry list, and rows call it instead of checking callbacks for null:
+- **Entry gating is one pure function.** `ScribeRowMenuEntries.For(view, readOnly, pinLive, isPinned)`
+  (in Core, since every block kind gets the same entries) returns the entry list, and the dialog calls it instead of checking callbacks for null:
 
   | View | Edit | Pin / Unpin | Delete |
   |---|---|---|---|
@@ -108,8 +110,12 @@ labels in cuneiform on the Tablet. It has no Escape handling.
   the dialog's bottom edge and shifts left when it would pass the right edge. The dialog's bounds come from
   the dialog's own layout size, which `ScribeDialogBase` already tracks.
 
-- **Look.** Entries are text tiles with hover highlight, using the picker's tile styling, the dialog's
-  `CurrentShade` and cuneiform labels on the Tablet. Choosing an entry is left-click only.
+- **Look.** An OS-style flat menu, not a stack of buttons: one raised panel in the dialog's `SurfaceHigh`
+  with a hairline border and rounded corners, and left-aligned text entries. The panel is as wide as its widest label, between a minimum and twice that. The entry under the
+  pointer gets a rounded accent (`Primary`) fill inset from the panel edge, with its label in `OnPrimary`;
+  other entries have no fill. A thin divider separates Delete from the entries above it. The panel appears
+  without an animation. It uses the dialog's `CurrentShade` and cuneiform labels on the Tablet. Choosing an
+  entry is left-click only.
 
 - **Escape and lifecycle.** `ScribeDialogBase.OnKeyDown` checks for an open menu before the focused field
   and `base`: Escape closes the menu and is consumed, so the dialog stays open. The menu also closes on view

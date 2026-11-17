@@ -1,6 +1,7 @@
 using Gui.Rendering;
 using Gui.Rendering.Text;
 using Gui.Widgets.Basic;
+using Gui.Widgets.Events;
 using Gui.Widgets.Framework;
 using Gui.Widgets.Input;
 using Gui.Widgets.Layout;
@@ -51,9 +52,11 @@ internal sealed class ScribeEditRow : StatefulWidget
         SKBitmap? assignedStampBitmap = null,
         SKBitmap? externalStampBitmap = null,
         ScribeAmbientLightSampler.Shade currentShade = default,
+        ScribeRowMenuHost? rowMenu = null,
         Gui.Widgets.Framework.Key? key = null)
         : base(key)
     {
+        RowMenu = rowMenu;
         Data = data;
         FocusNode = focusNode;
         AutoFocus = autoFocus;
@@ -136,6 +139,8 @@ internal sealed class ScribeEditRow : StatefulWidget
     /// <summary>The live ambient-illumination shade, threaded down so the assignment marker's hover
     /// tooltip can match the body's shading (see <see cref="ScribeEditorContent.CurrentShade"/>).</summary>
     public ScribeAmbientLightSampler.Shade CurrentShade { get; }
+    /// <summary>The dialog's row context menu; null on a surface without one.</summary>
+    public ScribeRowMenuHost? RowMenu { get; }
 
     public override State CreateState() => new ScribeEditRowState();
 }
@@ -156,11 +161,13 @@ internal sealed class ScribeEditRowState : State<ScribeEditRow>
     /// <see cref="MouseRegion"/> doesn't steal click-to-focus (hit-testing is innermost-first) and keeps firing
     /// enter/exit during grip-drag capture. The grip is NOT hover-gated so a drag can't lose capture mid-move.</summary>
     private bool hovered;
+    private readonly ScribeRowMenuAnchor menu = new();
 
     public override void InitState()
     {
         base.InitState();
         done = Widget.Data.Done;
+        menu.Mount(Widget.RowMenu, Widget.Data.TaskId, () => Element?.RenderObject);
         // Repaint the row Container on field focus change (the cuneiform path draws a focus border/background).
         // The focus node is dialog-owned and shared; ChangeNotifier accepts multiple listeners.
         Widget.FocusNode?.AddListener(OnFieldFocusChanged);
@@ -179,12 +186,14 @@ internal sealed class ScribeEditRowState : State<ScribeEditRow>
             Widget.FocusNode?.AddListener(OnFieldFocusChanged);
         }
         if (oldWidget.Data.Done != Widget.Data.Done) done = Widget.Data.Done;
+        menu.Update(Widget.RowMenu, Widget.Data.TaskId);
     }
 
     private void OnFieldFocusChanged() => SetState(() => { });
 
     public override void Dispose()
     {
+        menu.Unmount();
         Widget.FocusNode?.RemoveListener(OnFieldFocusChanged);
         base.Dispose();
     }
@@ -194,7 +203,7 @@ internal sealed class ScribeEditRowState : State<ScribeEditRow>
     /// seeded from the current target; rows reconcile in place and this is the target's only editor-side
     /// mutation, so no ValueKey remount (which would drop focus on every step) is needed. A Link edits nothing
     /// inline.</summary>
-    private Widget BuildItemEditorContent(ColorScheme colors, ScribeRowStyle style, int index)
+    private Widget BuildItemEditorContent(BuildContext context, ColorScheme colors, ScribeRowStyle style, int index)
     {
         float iconSize = ScribeRowConstants.ItemIconSize
             * (style.ControlSize / ScribeRowConstants.RowCheckboxSize);
@@ -255,7 +264,12 @@ internal sealed class ScribeEditRowState : State<ScribeEditRow>
         bool canOpen = !Widget.Data.IsStaticVsQuestObjective || Widget.Data.DisplayStack is not null;
         Widget nameLabel = Widget.OnOpenLink is { } openLink && canOpen
             ? new GestureDetector(
-                onPress: e => { e.Handled = true; openLink(Widget.Data.TaskId); },
+                onPress: e =>
+                {
+                    e.Handled = true;
+                    if (menu.Secondary(e, context)) return;
+                    openLink(Widget.Data.TaskId);
+                },
                 child: ScribeItemLabel.Build(Widget.Data.Label, linkColor, style))
             : ScribeItemLabel.Build(Widget.Data.Label, colors.OnSurface, style);
         rowChildren.Add(new Expanded(child: ScribeCenterIfShort.Name(nameLabel, style, bandHeight)));
@@ -302,6 +316,7 @@ internal sealed class ScribeEditRowState : State<ScribeEditRow>
             child: new GestureDetector(
                 onPress: e =>
                 {
+                    if (menu.Secondary(e, context)) return;
                     gripPressed = true;
                     localGripDragStarted = false;
                     gripPressX = e.X;
@@ -328,7 +343,7 @@ internal sealed class ScribeEditRowState : State<ScribeEditRow>
                 },
                 // LibGUI fires OnPointerClick (OnTap) after up regardless of movement. Parent skipGripTap
                 // swallows the tap once a drag started, including a from==to cancel.
-                onTap: _ => Widget.OnGripTap(index),
+                onTap: e => { if (e.Button == PointerButton.Left) Widget.OnGripTap(index); },
                 child: gripGlyph)));
 
         // Source-row dim: content (checkbox + text) paints at half opacity, per-child so the ◀ grip keeps full ink.
@@ -350,7 +365,8 @@ internal sealed class ScribeEditRowState : State<ScribeEditRow>
                     {
                         SetState(() => done = !done);
                         Widget.OnToggleTask(index);
-                    }))));
+                    },
+                    menu))));
         }
 
         // Assignment marker; takes space only for accepted assignments.
@@ -369,7 +385,7 @@ internal sealed class ScribeEditRowState : State<ScribeEditRow>
         if (Widget.Data.IsItemKind)
         {
             children.Add(new Expanded(child: new Opacity(contentOpacity,
-                child: BuildItemEditorContent(colors, style, index))));
+                child: BuildItemEditorContent(context, colors, style, index))));
         }
         else
         {
@@ -412,7 +428,8 @@ internal sealed class ScribeEditRowState : State<ScribeEditRow>
             onCaretMoved: () => Widget.OnCaretMoved(index),
             onPointerFocus: () => Widget.OnPointerFocus(index),
             onJumpToFirstRow: () => Widget.OnJumpToFirstRow(index),
-            onJumpToLastRow: () => Widget.OnJumpToLastRow(index)))));
+            onJumpToLastRow: () => Widget.OnJumpToLastRow(index),
+            onSecondaryPress: e => menu.Secondary(e, context)))));
         }
 
         // Row body [grip][checkbox][text]. Delete/pin float over the row rather than reserving columns; a Depth-1
@@ -449,6 +466,11 @@ internal sealed class ScribeEditRowState : State<ScribeEditRow>
             },
             child: rowBody);
 
+        // A right-press on the row background (no child under it) opens the menu; every child forwards its own
+        // right-press the same way.
+        if (Widget.RowMenu is not null)
+            rowBody = new GestureDetector(onPress: e => menu.Secondary(e, context), child: rowBody);
+
         // Delete + pin float on the RIGHT as hover-only buttons in a Stack over the non-positioned rowBody, so they
         // reserve no column. Right-anchored, pin left of delete.
         //
@@ -475,7 +497,8 @@ internal sealed class ScribeEditRowState : State<ScribeEditRow>
                     iconName: "scribeclose",
                     iconColor: colors.Error,
                     size: btn,
-                    onTap: () => Widget.OnDelete(index))));
+                    onTap: () => Widget.OnDelete(index),
+                    onSecondaryPress: e => menu.Secondary(e, context))));
             // Task, Tracker, Link, Craft, and Text notes are all pinnable.
             stackChildren.Add(new Positioned(
                 right: btnRight + boxW + gap, top: btnTop,
@@ -485,7 +508,8 @@ internal sealed class ScribeEditRowState : State<ScribeEditRow>
                     iconColor: Widget.Data.Pinned ? colors.Primary : colors.OnSurfaceVariant,
                     size: btn,
                     onTap: () => Widget.OnTogglePinned(index),
-                    iconScale: 1.15f))); // pin glyph +15%
+                    iconScale: 1.15f, // pin glyph +15%
+                    onSecondaryPress: e => menu.Secondary(e, context))));
         }
 
         Widget row = new Stack(stackChildren);
@@ -499,6 +523,7 @@ internal sealed class ScribeEditRowState : State<ScribeEditRow>
                 Widget.OnDragOver(index);
             },
             onExit: _ => { if (hovered) SetState(() => hovered = false); },
-            child: row);
+            onHover: menu.NotePointer,
+            child: menu.Wrap(row));
     }
 }

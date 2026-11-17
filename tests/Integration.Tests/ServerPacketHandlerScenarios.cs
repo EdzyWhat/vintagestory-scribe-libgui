@@ -91,6 +91,68 @@ public class ServerPacketHandlerScenarios : AtlasScenarioBase
     }
 
     [AtlasScenario(RollbackWorld = true)]
+    public async Task DeleteTask_packet_respecting_the_lock_is_refused_while_another_player_edits()
+    {
+        var holder = await World.JoinPlayer("PktDelHolder");
+        var (lectern, docId, taskId) = await SeedLectern(holder, World.Spawn.Offset(5, 0, 0));
+        var other = await World.JoinPlayer("PktDelOther");
+
+        Mod.OnServerReceivedDeleteTask(other.Player, new ScribeDeleteTaskMessage
+        {
+            DocId = docId.ToByteArray(),
+            TaskId = taskId.ToByteArray(),
+            RespectEditorLock = true,
+        });
+
+        Assert.NotNull(lectern.Document.FindByTaskId(taskId));
+    }
+
+    [AtlasScenario(RollbackWorld = true)]
+    public async Task DeleteTask_packet_without_the_lock_flag_ignores_the_editor_lock()
+    {
+        var holder = await World.JoinPlayer("PktDelHolderB");
+        var (lectern, docId, taskId) = await SeedLectern(holder, World.Spawn.Offset(5, 0, 0));
+        var other = await World.JoinPlayer("PktDelOtherB");
+
+        Mod.OnServerReceivedDeleteTask(other.Player, new ScribeDeleteTaskMessage
+        {
+            DocId = docId.ToByteArray(),
+            TaskId = taskId.ToByteArray(),
+        });
+
+        Assert.Null(lectern.Document.FindByTaskId(taskId));
+    }
+
+    [AtlasScenario(RollbackWorld = true)]
+    public async Task DeleteTask_packet_respecting_the_lock_is_allowed_for_the_holder_and_when_unlocked()
+    {
+        var holder = await World.JoinPlayer("PktDelHolderC");
+        var (lectern, docId, taskId) = await SeedLectern(holder, World.Spawn.Offset(5, 0, 0));
+        Mod.OnServerReceivedDeleteTask(holder.Player, new ScribeDeleteTaskMessage
+        {
+            DocId = docId.ToByteArray(),
+            TaskId = taskId.ToByteArray(),
+            RespectEditorLock = true,
+        });
+        Assert.Null(lectern.Document.FindByTaskId(taskId));
+
+        var other = await World.JoinPlayer("PktDelOtherC");
+        var second = new ScribeDocument();
+        second.AddTask("Second task");
+        Assert.True(lectern.ApplyEdit(holder.Player, ScribeDocumentCodec.Serialize(second)));
+        var secondId = lectern.Document.Blocks[0].TaskId;
+        Mod.OnServerReceivedReleaseLock(holder.Player, new ScribeReleaseLockMessage { DocIdBytes = docId.ToByteArray() });
+
+        Mod.OnServerReceivedDeleteTask(other.Player, new ScribeDeleteTaskMessage
+        {
+            DocId = docId.ToByteArray(),
+            TaskId = secondId.ToByteArray(),
+            RespectEditorLock = true,
+        });
+        Assert.Null(lectern.Document.FindByTaskId(secondId));
+    }
+
+    [AtlasScenario(RollbackWorld = true)]
     public async Task EditPinnedTask_packet_rewrites_the_source_text()
     {
         var player = await World.JoinPlayer("PktEditor");

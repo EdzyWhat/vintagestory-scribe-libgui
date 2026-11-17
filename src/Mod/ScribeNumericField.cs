@@ -277,7 +277,7 @@ internal sealed class ScribeNumericFieldState : State<ScribeNumericField>
         float glyphSize = buttonSize * 0.85f;
         Widget MakeButton(string label, Action<PointerEvent> onTap) =>
             new GestureDetector(
-                onTap: onTap,
+                onTap: e => { if (e.Button == PointerButton.Left) onTap(e); },
                 child: new Container(
                     new BoxStyle
                     {

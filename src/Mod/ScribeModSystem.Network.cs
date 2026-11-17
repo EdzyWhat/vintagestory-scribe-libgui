@@ -86,7 +86,7 @@ public sealed partial class ScribeModSystem
         if (!TryReadDocTask("delete-task", fromPlayer, message.DocId, message.TaskId, out var docId, out var taskId)) return;
         var behavior = ScribePlayerSettings.NormalizeSubtaskBehavior((ScribeSubtaskBehavior)message.SubtaskBehavior);
         Trace("delete-task received from {0}: doc={1} task={2} subtask={3}", fromPlayer.PlayerName, docId, taskId, behavior);
-        DeleteTaskForPlayer(fromPlayer, docId, taskId, behavior);
+        DeleteTaskForPlayer(fromPlayer, docId, taskId, behavior, message.RespectEditorLock);
     }
 
     internal void OnServerReceivedSetTrackerQuantity(IServerPlayer fromPlayer, ScribeSetTrackerQuantityMessage message)

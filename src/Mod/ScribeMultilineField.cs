@@ -83,6 +83,7 @@ public sealed class ScribeMultilineField : StatefulWidget, IFocusable
         Action? onPointerFocus = null,
         Action? onJumpToFirstRow = null,
         Action? onJumpToLastRow = null,
+        Action<PointerEvent>? onSecondaryPress = null,
         Gui.Widgets.Framework.Key? key = null)
         : base(key)
     {
@@ -114,6 +115,7 @@ public sealed class ScribeMultilineField : StatefulWidget, IFocusable
         OnPointerFocus = onPointerFocus;
         OnJumpToFirstRow = onJumpToFirstRow;
         OnJumpToLastRow = onJumpToLastRow;
+        OnSecondaryPress = onSecondaryPress;
     }
 
     public string InitialText { get; }
@@ -175,6 +177,10 @@ public sealed class ScribeMultilineField : StatefulWidget, IFocusable
     public Action? OnJumpToFirstRow { get; }
     /// <summary>Mirror of <see cref="OnJumpToFirstRow"/> for the LAST row, caret at its end (Ctrl+Down / Ctrl+End).</summary>
     public Action? OnJumpToLastRow { get; }
+    /// <summary>A right-button press on the field. The field then neither moves the caret nor changes the
+    /// selection; the owning row opens its context menu. Null on a surface without a row menu (a right-press
+    /// is still ignored).</summary>
+    public Action<PointerEvent>? OnSecondaryPress { get; }
 
     public override State CreateState() => new ScribeMultilineFieldState();
 }
